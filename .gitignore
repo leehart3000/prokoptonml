@@ -4,6 +4,7 @@ Thumbs.db
 
 # --- Editors ---
 *.code-workspace
+.vscode/
 .idea/
 
 # --- Secrets and local environment ---
