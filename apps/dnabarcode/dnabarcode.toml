@@ -1,0 +1,30 @@
+# dnabarcode.org: DNA barcode identification, built on ProkoptonML.
+# Validated against prokopton.ml.config.AppConfig. Any value can be overridden
+# with an environment variable, e.g. PROKOPTON_DATA__PATHS__RAW_DIR=/some/folder
+
+name = "dnabarcode"
+title = "DNA barcoding"
+
+[data.source]
+# MIDORI2 reference databases, GenBank release 273 (CC BY 4.0).
+# Cite: https://doi.org/10.5281/zenodo.22685701 and Leray et al. (2022),
+# Environmental DNA 4: 894-907, https://doi.org/10.1002/edn3.303
+type = "midori2"
+release = "GB273"
+doi = "10.5281/zenodo.22685701"
+licence = "CC-BY-4.0"
+archive_url = "https://zenodo.org/records/22685701/files/MIDORI2_GB273_SINTAX_sp.zip?download=1"
+checksums_url = "https://zenodo.org/records/22685701/files/release_sha256.txt?download=1"
+archive_name = "MIDORI2_GB273_SINTAX_sp.zip"
+member_template = "SINTAX_sp/uniq/MIDORI2_UNIQ_NUC_SP_GB273_{gene}_SINTAX.fasta.gz"
+# CO1 (COI) is the animal barcode; the other mitochondrial genes provide
+# "not COI" examples for the gene classifier.
+genes = [
+  "CO1", "CO2", "CO3", "Cytb", "A6", "A8",
+  "ND1", "ND2", "ND3", "ND4", "ND4L", "ND5", "ND6",
+  "lrRNA", "srRNA",
+]
+
+[data.paths]
+raw_dir = "data/raw/midori2_gb273"
+interim_dir = "data/interim/dnabarcode"

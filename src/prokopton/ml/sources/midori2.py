@@ -26,6 +26,7 @@ __all__ = [
     "Taxon",
     "parse_midori2_records",
     "parse_sintax_header",
+    "record_to_row",
 ]
 
 RANKS: tuple[str, ...] = (
@@ -129,3 +130,21 @@ def parse_midori2_records(records: Iterable[FastaRecord]) -> Iterator[Midori2Rec
             taxonomy=taxonomy,
             sequence=record.sequence.upper(),
         )
+
+
+def record_to_row(record: Midori2Record, gene: str) -> dict[str, str | int | None]:
+    """Flatten a record into a table row, with a name and taxid column per rank."""
+    row: dict[str, str | int | None] = {
+        "record_id": record.record_id,
+        "accession": record.accession,
+        "start": record.start,
+        "end": record.end,
+        "gene": gene,
+        "length": len(record.sequence),
+        "sequence": record.sequence,
+    }
+    for rank in RANKS:
+        taxon = record.taxonomy[rank]
+        row[rank] = taxon.name if taxon else None
+        row[f"{rank}_taxid"] = taxon.taxid if taxon else None
+    return row

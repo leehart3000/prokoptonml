@@ -7,11 +7,13 @@ unaltered.
 
 import gzip
 import hashlib
+import re
 import zipfile
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 __all__ = [
+    "ChecksumManifestError",
     "ChecksumMismatchError",
     "parse_sha256_manifest",
     "read_gzip_lines_from_zip",
@@ -20,7 +22,12 @@ __all__ = [
 ]
 
 _CHUNK_SIZE = 1024 * 1024
-_SHA256_HEX_LENGTH = 64
+# "<64 hex digits><space><space or *><path>", as written by sha256sum
+_MANIFEST_LINE = re.compile(r"^(?P<digest>[0-9a-fA-F]{64}) [ *](?P<path>.+)$")
+
+
+class ChecksumManifestError(ValueError):
+    """Raised when a checksum manifest file is not in the expected format."""
 
 
 class ChecksumMismatchError(ValueError):
@@ -28,23 +35,25 @@ class ChecksumMismatchError(ValueError):
 
 
 def parse_sha256_manifest(lines: Iterable[str]) -> dict[str, str]:
-    """Parse ``sha256sum``-style lines (``<hash>  <path>``) into a dictionary.
+    """Parse ``sha256sum``-style lines into a dictionary of path to checksum.
 
-    Paths are normalised by removing a leading ``./``. Blank lines are ignored.
+    Each line is ``<hash>  <path>`` (text mode) or ``<hash> *<path>`` (binary
+    mode). Paths are normalised by removing a leading ``./``. Blank lines and
+    comment lines starting with ``#`` are ignored.
 
     Raises:
-        ValueError: If a line is not in the expected format.
+        ChecksumManifestError: If a line is not in the expected format.
     """
     manifest: dict[str, str] = {}
     for line_number, raw_line in enumerate(lines, start=1):
         line = raw_line.strip()
-        if not line:
+        if not line or line.startswith("#"):
             continue
-        digest, separator, path = line.partition("  ")
-        if not separator or len(digest) != _SHA256_HEX_LENGTH:
+        match = _MANIFEST_LINE.match(line)
+        if match is None:
             msg = f"Invalid checksum manifest line {line_number}: {line!r}"
-            raise ValueError(msg)
-        manifest[path.removeprefix("./")] = digest.lower()
+            raise ChecksumManifestError(msg)
+        manifest[match["path"].removeprefix("./")] = match["digest"].lower()
     return manifest
 
 

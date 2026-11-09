@@ -19,6 +19,9 @@ gcp-key*.json
 .pixi/*
 !.pixi/config.toml
 
+# --- Data (downloaded and generated; never committed) ---
+/data/
+
 # --- Python ---
 __pycache__/
 *.py[cod]

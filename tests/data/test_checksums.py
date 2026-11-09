@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from prokopton.ml.data.checksums import (
+    ChecksumManifestError,
     ChecksumMismatchError,
     parse_sha256_manifest,
     read_gzip_lines_from_zip,
@@ -36,15 +37,27 @@ def test_parse_manifest_normalises_paths() -> None:
     assert parse_sha256_manifest(lines) == {MEMBER: digest}
 
 
+def test_parse_manifest_skips_comments_and_accepts_binary_marker() -> None:
+    lines = [
+        "# MIDORI2 GB273 distribution checksums\n",
+        "  # indented comment\n",
+        f"{'b' * 64} *./binary/file.zip\n",
+    ]
+
+    assert parse_sha256_manifest(lines) == {"binary/file.zip": "b" * 64}
+
+
 def test_parse_manifest_lowercases_digests() -> None:
     manifest = parse_sha256_manifest([f"{'A' * 64}  file.txt"])
 
     assert manifest == {"file.txt": "a" * 64}
 
 
-@pytest.mark.parametrize("line", ["not-a-checksum", f"{'a' * 63}  file.txt"])
+@pytest.mark.parametrize(
+    "line", ["not-a-checksum", f"{'a' * 63}  file.txt", f"{'g' * 64}  file.txt"]
+)
 def test_parse_manifest_rejects_invalid_lines(line: str) -> None:
-    with pytest.raises(ValueError, match="Invalid checksum manifest line 1"):
+    with pytest.raises(ChecksumManifestError, match="Invalid checksum manifest line 1"):
         parse_sha256_manifest([line])
 
 
