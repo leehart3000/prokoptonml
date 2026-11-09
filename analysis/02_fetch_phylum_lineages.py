@@ -61,7 +61,9 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8", newline="") as out:
         fields = [*rows[0].keys(), "kingdom", "major_group", "lineage"]
-        writer = csv.DictWriter(out, fieldnames=fields, delimiter="\t")
+        writer = csv.DictWriter(
+            out, fieldnames=fields, delimiter="\t", lineterminator="\n"
+        )
         writer.writeheader()
         for row in rows:
             nodes = lineages.get(row["phylum_taxid"], [])
