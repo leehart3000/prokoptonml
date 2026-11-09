@@ -1,0 +1,70 @@
+phylum	phylum_taxid	co1_records	all_records	kingdom	major_group	lineage
+Arthropoda	6656	2442583	3091054	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Ecdysozoa; Panarthropoda; Arthropoda
+Chordata	7711	364116	1613358	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Deuterostomia; Chordata
+Mollusca	6447	176178	304836	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Mollusca
+Annelida	6340	48914	82382	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Annelida
+Ascomycota	4890	5817	74778	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Dikarya; Ascomycota
+Platyhelminthes	6157	35959	61927	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Platyhelminthes
+Streptophyta	35493	4013	48217	Viridiplantae	Viridiplantae	cellular organisms; Eukaryota; Viridiplantae; Streptophyta
+Cnidaria	6073	15099	44808	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Cnidaria
+Nematoda	6231	22769	43109	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Ecdysozoa; Nematoda
+Echinodermata	7586	24767	39036	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Deuterostomia; Echinodermata
+Basidiomycota	5204	2409	35910	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Dikarya; Basidiomycota
+Apicomplexa	5794	6047	25636		Sar	cellular organisms; Eukaryota; Sar; Alveolata; Apicomplexa
+Rhodophyta	2763	15215	21446		Rhodophyta	cellular organisms; Eukaryota; Rhodophyta
+(unknown)		5704	16179			
+Oomycota	4762	6288	13701		Sar	cellular organisms; Eukaryota; Sar; Stramenopiles; Oomycota
+Porifera	6040	5693	8878	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Porifera
+Rotifera	10190	8300	8831	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Gnathifera; Rotifera
+Nemertea	6217	5159	8563	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Nemertea
+Chlorophyta	3041	615	5034	Viridiplantae	Viridiplantae	cellular organisms; Eukaryota; Viridiplantae; Chlorophyta
+Bacillariophyta	2836	1578	3698		Sar	cellular organisms; Eukaryota; Sar; Stramenopiles; Ochrophyta; Bacillariophyta
+Ciliophora	5878	2493	3658		Sar	cellular organisms; Eukaryota; Sar; Alveolata; Ciliophora
+Bryozoa	10205	1660	3612	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Bryozoa
+Acanthocephala	10232	2514	3280	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Acanthocephala
+Tardigrada	42241	2776	2930	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Ecdysozoa; Panarthropoda; Tardigrada
+Onychophora	27563	1521	2473	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Ecdysozoa; Panarthropoda; Onychophora
+Chaetognatha	10229	1093	2087	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Gnathifera; Chaetognatha
+Evosea	2605435	113	1697		Amoebozoa	cellular organisms; Eukaryota; Amoebozoa; Evosea
+Discosea	555280	377	870		Amoebozoa	cellular organisms; Eukaryota; Amoebozoa; Discosea
+Haptophyta	2830	236	780		Haptista	cellular organisms; Eukaryota; Haptista; Haptophyta
+Ctenophora	10197	427	754	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Ctenophora
+Brachiopoda	7568	287	623	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Brachiopoda
+Xenacoelomorpha	1312402	415	606	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Xenacoelomorpha
+Glomeromycota	214504	100	593	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; Glomeromycota
+Nematomorpha	33310	449	544	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Ecdysozoa; Nematomorpha
+Euglenozoa	33682	151	536		Discoba	cellular organisms; Eukaryota; Discoba; Euglenozoa
+Hemichordata	10219	169	525	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Deuterostomia; Hemichordata
+Entomophthoromycota	1264859	35	486	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; Entomophthoromycota
+Mucoromycota	1913637	109	454	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; Mucoromycota
+Gastrotricha	33313	406	434	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Gastrotricha
+Placozoa	10226	11	420	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Placozoa
+Chytridiomycota	4761	60	327	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; chytridiomyceta; Chytridiomycota
+Kinorhyncha	51516	245	312	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Ecdysozoa; Scalidophora; Kinorhyncha
+Heterolobosea	5752	69	197		Discoba	cellular organisms; Eukaryota; Discoba; Heterolobosea
+Priapulida	33467	138	191	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Ecdysozoa; Scalidophora; Priapulida
+Cycliophora	69815	103	161	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Cycliophora
+Dicyemida	10215	137	156	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Mesozoa; Dicyemida
+Cercozoa	136419	47	138		Sar	cellular organisms; Eukaryota; Sar; Rhizaria; Cercozoa
+Foraminifera	29178	101	136		Sar	cellular organisms; Eukaryota; Sar; Rhizaria; Retaria; Foraminifera
+Phoronida	120557	77	129	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Phoronida
+Mortierellomycota	3705878	16	80	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; Mortierellomycota
+Monoblepharomycota	3705299	8	78	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; chytridiomyceta; Monoblepharomycota
+Blastocladiomycota	451459	8	73	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; Blastocladiomycota
+Entoprocta	43120	37	66	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Entoprocta
+Malawimonada	3694374	3	59		Malawimonada	cellular organisms; Eukaryota; Malawimonada
+Aphelidiomycota	2316435	7	50	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; Aphelidiomycota
+Endomyxa	2604748	4	50		Sar	cellular organisms; Eukaryota; Sar; Rhizaria; Endomyxa
+Tubulinea	555369	16	46		Amoebozoa	cellular organisms; Eukaryota; Amoebozoa; Tubulinea
+Kickxellomycota	3704128	9	43	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; Kickxellomycota
+Gnathostomulida	66780	12	41	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Gnathifera; Gnathostomulida
+Telonemia	660925	2	30		Eukaryota incertae sedis	cellular organisms; Eukaryota; Eukaryota incertae sedis; Telonemia
+Prasinodermophyta	2806169	4	29	Viridiplantae	Viridiplantae	cellular organisms; Eukaryota; Viridiplantae; Prasinodermophyta
+Rozellomycota	1031332	2	21	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; Rozellomycota
+Microsporidia	6029	3	18	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; Microsporidia
+Parabasalia	5719	0	18		Metamonada	cellular organisms; Eukaryota; Metamonada; Parabasalia
+Nebulidia	3004449	1	15		Provora	cellular organisms; Eukaryota; Provora; Nebulidia
+Perkinsozoa	2497438	6	15		Sar	cellular organisms; Eukaryota; Sar; Alveolata; Perkinsozoa
+Basidiobolomycota	3705297	0	13	Fungi	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Fungi; Fungi incertae sedis; Basidiobolomycota
+Picozoa	419944	1	13		Eukaryota incertae sedis	cellular organisms; Eukaryota; Eukaryota incertae sedis; Picozoa
+Orthonectida	33209	1	12	Metazoa	Opisthokonta	cellular organisms; Eukaryota; Opisthokonta; Metazoa; Eumetazoa; Bilateria; Protostomia; Spiralia; Lophotrochozoa; Mesozoa; Orthonectida
