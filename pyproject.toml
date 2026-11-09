@@ -1,0 +1,89 @@
+[project]
+name = "prokoptonml"
+version = "0.1.0"
+description = "An end-to-end MLOps platform for building, deploying and monitoring scientific machine learning systems"
+readme = "README.md"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "Lee Hart" }]
+requires-python = ">=3.13,<3.14"
+dependencies = []
+
+[project.urls]
+Homepage = "https://prokoptonml.org"
+Repository = "https://github.com/leehart3000/prokoptonml"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/prokoptonml"]
+
+# --- Pixi: environments and tasks ---
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-64", "osx-arm64", "linux-64"]
+requires-pixi = ">=0.70"
+
+[tool.pixi.dependencies]
+python = "3.13.*"
+
+[tool.pixi.pypi-dependencies]
+prokoptonml = { path = ".", editable = true }
+
+[tool.pixi.feature.dev.dependencies]
+ruff = "*"
+mypy = "*"
+pytest = "*"
+pytest-cov = "*"
+
+[tool.pixi.feature.dev.tasks]
+format = "ruff format ."
+format-check = "ruff format --check ."
+lint = "ruff check ."
+typecheck = "mypy"
+test = "pytest"
+check = { depends-on = ["format-check", "lint", "typecheck", "test"] }
+
+[tool.pixi.environments]
+default = { features = ["dev"], solve-group = "default" }
+prod = { features = [], solve-group = "default" }
+
+# --- Ruff: linting and formatting ---
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort (import sorting)
+    "B",   # flake8-bugbear (likely bugs)
+    "UP",  # pyupgrade (modern syntax)
+    "SIM", # flake8-simplify
+    "RUF", # Ruff-specific rules
+]
+
+# --- Mypy: static type checking ---
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "tests"]
+mypy_path = "src"
+
+# --- Pytest: testing ---
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--cov=prokoptonml",
+    "--cov-report=term-missing",
+]
