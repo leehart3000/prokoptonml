@@ -17,7 +17,6 @@ jobs:
     permissions:
       contents: write # Push the update branch
       pull-requests: write # Open the pull request
-      actions: write # Start the CI workflow on the pull request branch
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,7 +38,6 @@ jobs:
         run: pixi run check
 
       - name: Create pull request
-        id: cpr
         uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -51,13 +49,3 @@ jobs:
           labels: dependencies, pixi
           delete-branch: true
           add-paths: pixi.lock
-
-      # Pull requests opened with the built-in GITHUB_TOKEN do not trigger
-      # other workflows, but manual (workflow_dispatch) runs are allowed, so
-      # start CI on the branch directly. Its result appears on the pull request.
-      - name: Run CI on the pull request branch
-        if: steps.cpr.outputs.pull-request-operation == 'created' || steps.cpr.outputs.pull-request-operation == 'updated'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: update-pixi-lockfile
-        run: gh workflow run ci.yml --repo "${GITHUB_REPOSITORY}" --ref "${BRANCH}"
