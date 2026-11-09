@@ -15,6 +15,15 @@ It covers the full lifecycle:
 The platform is designed to be repeatable: each application is defined by a
 configuration and a small data adapter, and reuses the same pipeline.
 
+## Package
+
+ProkoptonML is published as the `prokopton-ml` package and imported as
+`prokopton.ml`, part of the wider `prokopton` namespace:
+
+```python
+import prokopton.ml
+```
+
 ## Applications
 
 | Application | Domain | Status |

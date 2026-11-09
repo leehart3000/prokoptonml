@@ -1390,5 +1390,5 @@ packages:
   size: 3342183
   timestamp: 1787272852357
 - pypi: .
-  name: prokoptonml
+  name: prokopton-ml
   requires_python: '>=3.13,<3.14'

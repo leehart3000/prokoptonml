@@ -1,9 +1,9 @@
-"""Basic tests for the prokoptonml package."""
+"""Basic tests for the prokopton.ml package."""
 
 from importlib.metadata import version
 
-import prokoptonml
+import prokopton.ml
 
 
 def test_version_matches_package_metadata() -> None:
-    assert prokoptonml.__version__ == version("prokoptonml")
+    assert prokopton.ml.__version__ == version("prokopton-ml")
