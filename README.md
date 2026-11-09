@@ -1,5 +1,7 @@
 # ProkoptonML
 
+[![CI](https://github.com/leehart3000/prokoptonml/actions/workflows/ci.yml/badge.svg)](https://github.com/leehart3000/prokoptonml/actions/workflows/ci.yml)
+
 **ProkoptonML** is an end-to-end MLOps platform for building, deploying and
 monitoring scientific machine learning systems for data-driven bio apps.
 
