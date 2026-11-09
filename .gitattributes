@@ -1,0 +1,12 @@
+# Normalise line endings to LF for all text files
+* text=auto eol=lf
+
+# Pixi lock file: treat as generated, avoid line-by-line merges
+pixi.lock merge=binary linguist-language=YAML linguist-generated=true
+
+# Binary files
+*.parquet binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
