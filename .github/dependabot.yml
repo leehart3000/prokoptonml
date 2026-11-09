@@ -1,0 +1,24 @@
+# Dependabot configuration
+# https://docs.github.com/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+#
+# Keeps the SHA-pinned GitHub Actions in .github/workflows up to date.
+# Python and conda packages are managed by Pixi (pixi.lock), which Dependabot
+# does not support yet, so they are updated by a separate scheduled workflow.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/London
+    # Wait a week after a release before proposing it, so problems with new
+    # releases have time to surface (supply-chain protection)
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
