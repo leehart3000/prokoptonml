@@ -2,9 +2,10 @@
 
 For each gene, the stage checks the file's SHA-256 against the release's
 published checksums, then streams its records into a Parquet file at
-``<interim_dir>/midori2_<release>/gene=<gene>/records.parquet``. A JSON report
-records where the data came from, so every later stage can be traced back to an
-exact, verified input (data lineage).
+``<interim_dir>/midori2_<release>/gene=<gene>/records.parquet``. A JSON report,
+``_ingest_report.json``, records where the data came from, so every later stage
+can be traced back to an exact, verified input (data lineage). Its name starts
+with ``_`` so that dataset readers such as PyArrow and DuckDB skip it.
 """
 
 import logging
@@ -38,7 +39,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-REPORT_NAME = "ingest_report.json"
+REPORT_NAME = "_ingest_report.json"
 CHECKSUMS_NAME = "release_sha256.txt"
 
 MIDORI2_SCHEMA = pa.schema(
