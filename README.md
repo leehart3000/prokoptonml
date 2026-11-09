@@ -26,6 +26,10 @@ ProkoptonML is published as the `prokopton-ml` package and imported as
 import prokopton.ml
 ```
 
+It builds on the [`prokopton`](https://pypi.org/project/prokopton/) core
+package (`prokopton.core`), which provides shared foundations such as
+configuration loading.
+
 ## Applications
 
 | Application | Domain | Status |
@@ -47,7 +51,7 @@ Software Foundation, version 3 only.
 
 This program is distributed in the hope that it will be useful, but WITHOUT
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE. See the [LICENSE](LICENSE) file for details.
+FOR A PARTICULAR PURPOSE. See the [LICENSE](https://github.com/leehart3000/prokoptonml/blob/main/LICENSE) file for details.
 
 SPDX-License-Identifier: `AGPL-3.0-only`
 

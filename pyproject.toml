@@ -7,7 +7,7 @@ license = "AGPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [{ name = "Lee Hart" }]
 requires-python = ">=3.13,<3.14"
-dependencies = []
+dependencies = ["prokopton>=0.1.0a1,<0.2"]
 
 [project.urls]
 Homepage = "https://prokoptonml.org"
@@ -29,6 +29,7 @@ requires-pixi = ">=0.84"
 
 [tool.pixi.dependencies]
 python = "3.13.*"
+pydantic = ">=2.11,<3"
 
 [tool.pixi.pypi-dependencies]
 prokopton-ml = { path = ".", editable = true }
@@ -78,6 +79,7 @@ strict = true
 files = ["src", "tests"]
 mypy_path = "src"
 explicit_package_bases = true
+plugins = ["pydantic.mypy"]
 
 # --- Pytest: testing ---
 
