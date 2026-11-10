@@ -299,6 +299,9 @@ def train_router(
                     with tracker.run(candidate.name, nested=True):
                         metrics = _evaluate(classifier, inputs, samples, rules.threads)
                         metrics["fit_seconds"] = fit_seconds
+                        if hasattr(classifier, "n_iter_"):
+                            # Equal to logistic_max_iter: stopped before converging
+                            metrics["iterations"] = float(classifier.n_iter_)
                         metrics["train_records"] = float(keep.sum())
                         tracker.set_tags({**tags, "model_type": candidate.model})
                         tracker.log_params(
@@ -311,11 +314,17 @@ def train_router(
                         )
                         tracker.log_metrics(metrics)
                     logger.info(
-                        "%s: selection %.4f (known macro-F1 %.4f, novel macro-F1 %.4f)",
+                        "%s: selection %.4f (known macro-F1 %.4f, "
+                        "novel macro-F1 %.4f)%s",
                         candidate.name,
                         metrics["selection_score"],
                         metrics["val_known_macro_f1"],
                         metrics["val_novel_macro_f1"],
+                        (
+                            f" after {metrics['iterations']:.0f} iterations"
+                            if "iterations" in metrics
+                            else ""
+                        ),
                     )
                     if (
                         best is None
