@@ -73,6 +73,7 @@ def make_config(tmp_path: Path, genes: list[str]) -> AppConfig:
                     "splits_dir": str(tmp_path / "splits"),
                     "leakage_dir": str(tmp_path / "leakage"),
                     "samples_dir": str(tmp_path / "samples"),
+                    "models_dir": str(tmp_path / "models"),
                 },
             },
             "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
@@ -158,6 +159,7 @@ processed_dir = "{config.data.paths.processed_dir}"
 splits_dir = "{config.data.paths.splits_dir}"
 leakage_dir = "{config.data.paths.leakage_dir}"
 samples_dir = "{config.data.paths.samples_dir}"
+models_dir = "{config.data.paths.models_dir}"
 
 [validation]
 phylum_reference = "{config.validation.phylum_reference}"
@@ -197,6 +199,7 @@ processed_dir = "{tmp_path / "processed"}"
 splits_dir = "{tmp_path / "splits"}"
 leakage_dir = "{tmp_path / "leakage"}"
 samples_dir = "{tmp_path / "samples"}"
+models_dir = "{tmp_path / "models"}"
 
 [validation]
 phylum_reference = "{tmp_path / "phyla.tsv"}"

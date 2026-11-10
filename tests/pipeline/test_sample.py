@@ -141,6 +141,7 @@ def make_config(tmp_path: Path, **sample_fields: object) -> AppConfig:
                     "splits_dir": str(tmp_path / "splits"),
                     "leakage_dir": str(tmp_path / "leakage"),
                     "samples_dir": str(tmp_path / "samples"),
+                    "models_dir": str(tmp_path / "models"),
                 },
             },
             "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
@@ -251,6 +252,7 @@ processed_dir = "{tmp_path / "processed"}"
 splits_dir = "{tmp_path / "splits"}"
 leakage_dir = "{tmp_path / "leakage"}"
 samples_dir = "{tmp_path / "samples"}"
+models_dir = "{tmp_path / "models"}"
 
 [validation]
 phylum_reference = "{tmp_path / "phyla.tsv"}"
@@ -273,3 +275,17 @@ def test_cli_sample_succeeds(tmp_path: Path) -> None:
 
 def test_cli_sample_reports_missing_data(tmp_path: Path) -> None:
     assert main(["sample", str(write_app_toml(tmp_path))]) == 1
+
+
+def test_sample_writes_in_batches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_inputs(tmp_path, make_rows(), [])
+    config = make_config(tmp_path)
+    whole = pq.read_table(sample(config).splits["train"].output)
+    monkeypatch.setattr("prokopton.ml.pipeline.sample.BATCH_SIZE", 7)
+
+    output = sample(config).splits["train"].output
+
+    assert pq.read_table(output).equals(whole)
+    assert pq.ParquetFile(output).num_row_groups > 1

@@ -227,6 +227,7 @@ def make_config(tmp_path: Path) -> AppConfig:
                     "splits_dir": str(tmp_path / "splits"),
                     "leakage_dir": str(tmp_path / "leakage"),
                     "samples_dir": str(tmp_path / "samples"),
+                    "models_dir": str(tmp_path / "models"),
                 },
             },
             "validation": {"phylum_reference": str(reference)},
@@ -282,6 +283,7 @@ processed_dir = "{tmp_path / "processed"}"
 splits_dir = "{tmp_path / "splits"}"
 leakage_dir = "{tmp_path / "leakage"}"
 samples_dir = "{tmp_path / "samples"}"
+models_dir = "{tmp_path / "models"}"
 
 [validation]
 phylum_reference = "{config.validation.phylum_reference}"

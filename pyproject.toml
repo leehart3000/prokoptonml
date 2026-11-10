@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=2",
     "pandas>=2.2",
     "pyarrow>=19",
+    "mlflow>=3.1,<4",
     "scikit-learn>=1.6",
     "scipy>=1.13",
 ]
@@ -43,6 +44,7 @@ pydantic = ">=2.11,<3"
 numpy = ">=2"
 pandas = ">=2.2"
 pyarrow = ">=19"
+mlflow = ">=3.1,<4"
 scikit-learn = ">=1.6"
 scipy = ">=1.13"
 
@@ -69,6 +71,7 @@ dnabarcode-validate = "prokopton-ml validate apps/dnabarcode/dnabarcode.toml"
 dnabarcode-split = "prokopton-ml split apps/dnabarcode/dnabarcode.toml"
 dnabarcode-leakage = "prokopton-ml leakage apps/dnabarcode/dnabarcode.toml"
 dnabarcode-sample = "prokopton-ml sample apps/dnabarcode/dnabarcode.toml"
+dnabarcode-train = "prokopton-ml train apps/dnabarcode/dnabarcode.toml"
 
 [tool.pixi.environments]
 default = { features = ["dev"], solve-group = "default" }
@@ -99,19 +102,32 @@ select = [
 python_version = "3.13"
 strict = true
 files = ["src", "tests"]
-mypy_path = "src"
+mypy_path = "src:tests"
 explicit_package_bases = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 # These libraries do not ship (complete) type information
-module = ["pandas", "pandas.*", "pyarrow", "pyarrow.*", "scipy", "scipy.*", "sklearn", "sklearn.*"]
+module = [
+    "mlflow",
+    "mlflow.*",
+    "pandas",
+    "pandas.*",
+    "pyarrow",
+    "pyarrow.*",
+    "scipy",
+    "scipy.*",
+    "sklearn",
+    "sklearn.*",
+]
 ignore_missing_imports = true
 
 # --- Pytest: testing ---
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Lets tests import shared helpers, e.g. "from fakes import FakeTracker"
+pythonpath = ["tests"]
 addopts = [
     "--strict-markers",
     "--cov=prokopton.ml",

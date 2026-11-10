@@ -15,6 +15,7 @@ from prokopton.ml.pipeline.ingest import IngestError, ingest
 from prokopton.ml.pipeline.leakage import LeakageStageError, leakage
 from prokopton.ml.pipeline.sample import SampleStageError, sample
 from prokopton.ml.pipeline.split import SplitStageError, split
+from prokopton.ml.pipeline.train import TrainStageError, train
 from prokopton.ml.pipeline.validate import DataValidationError, validate
 
 __all__ = ["ENV_PREFIX", "main"]
@@ -32,6 +33,7 @@ _COMMANDS = {
     "split": "Assign records to training, validation and test sets.",
     "leakage": "List novel-set records with a near-copy in the training set.",
     "sample": "Draw balanced training and validation samples for the router.",
+    "train": "Train router candidates, then track and register the best.",
 }
 
 
@@ -66,6 +68,14 @@ def _run(command: str, config: AppConfig) -> str:
         sample_report = sample(config)
         sizes = {name: r.sampled_records for name, r in sample_report.splits.items()}
         return f"{len(sample_report.labels)} classes; records per split: {sizes}"
+    if command == "train":
+        train_report = train(config)
+        return (
+            f"best {train_report.best_model} k={train_report.best_k}, "
+            f"selection score {train_report.metrics['selection_score']:.4f}; "
+            f"{train_report.registered_model} v{train_report.model_version} "
+            f"@{train_report.alias}"
+        )
     split_report = split(config)
     totals = {
         name: sum(g.records[name] for g in split_report.genes.values())
@@ -94,6 +104,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         SplitStageError,
         LeakageStageError,
         SampleStageError,
+        TrainStageError,
     ) as error:
         logger.error("%s", error)
         return 1
