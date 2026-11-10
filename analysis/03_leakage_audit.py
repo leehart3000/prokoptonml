@@ -10,7 +10,11 @@ the project's own environment is not changed.
 
 Usage:
     pixi run python analysis/03_leakage_audit.py <split_records.parquet> <output_dir> \\
-        [--sample 5000] [--split test_novel] [--threads 4]
+        [--sample 5000] [--split test_novel] [--threads 4] \\
+        [--min-identity 0.97] [--maxaccepts 8] [--maxrejects 64]
+
+The defaults are thorough. Faster settings for "is there any >=99% match?"
+are ``--min-identity 0.99 --maxaccepts 1 --maxrejects 8``.
 
 Example (a quick trial first):
     pixi run python analysis/03_leakage_audit.py \\
@@ -76,7 +80,9 @@ def sample_queries(
     return sample
 
 
-def run_vsearch(queries: Path, database: Path, output: Path, threads: int) -> None:
+def run_vsearch(
+    queries: Path, database: Path, output: Path, args: argparse.Namespace
+) -> None:
     command = [
         *VSEARCH,
         "--usearch_global",
@@ -84,24 +90,24 @@ def run_vsearch(queries: Path, database: Path, output: Path, threads: int) -> No
         "--db",
         str(database),
         "--id",
-        str(MIN_IDENTITY),
+        str(args.min_identity),
         "--maxaccepts",
-        "8",
+        str(args.maxaccepts),
         "--maxrejects",
-        "64",
+        str(args.maxrejects),
         "--userout",
         str(output),
         "--userfields",
         "query+target+id",
         "--threads",
-        str(threads),
+        str(args.threads),
         "--quiet",
     ]
     subprocess.run(command, check=True)
 
 
 def search_training_chunks(
-    path: Path, queries: Path, work: Path, chunk_size: int, threads: int
+    path: Path, queries: Path, work: Path, args: argparse.Namespace
 ) -> dict[str, tuple[float, str]]:
     """Return ``{query label: (best identity, target label)}`` across all chunks."""
     best: dict[str, tuple[float, str]] = {}
@@ -118,7 +124,7 @@ def search_training_chunks(
         with database.open("w", encoding="utf-8") as file:
             file.writelines(f">{name}\n{sequence}\n" for name, sequence in chunk)
         started = time.monotonic()
-        run_vsearch(queries, database, hits, threads)
+        run_vsearch(queries, database, hits, args)
         with hits.open(encoding="utf-8") as file:
             for query, target, identity in csv.reader(file, delimiter="\t"):
                 value = float(identity)
@@ -140,7 +146,7 @@ def search_training_chunks(
         for row in batch.to_pylist():
             if row["split"] == "train":
                 chunk.append((label(row["record_id"]), row["sequence"]))
-                if len(chunk) >= chunk_size:
+                if len(chunk) >= args.chunk_size:
                     flush()
     flush()
     return best
@@ -187,6 +193,9 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=273)
     parser.add_argument("--chunk-size", type=int, default=250_000)
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--min-identity", type=float, default=MIN_IDENTITY)
+    parser.add_argument("--maxaccepts", type=int, default=8)
+    parser.add_argument("--maxrejects", type=int, default=64)
     args = parser.parse_args()
 
     started = time.monotonic()
@@ -200,9 +209,7 @@ def main() -> None:
         )
     print(f"Sampled {len(queries):,} {args.split} sequences", flush=True)
 
-    best = search_training_chunks(
-        args.records, query_fasta, args.output_dir, args.chunk_size, args.threads
-    )
+    best = search_training_chunks(args.records, query_fasta, args.output_dir, args)
     taxonomy = target_taxonomy(args.records, {target for _, target in best.values()})
 
     bands: Counter[str] = Counter()
@@ -232,7 +239,9 @@ def main() -> None:
         "split": args.split,
         "sample": total,
         "seed": args.seed,
-        "min_identity_searched": MIN_IDENTITY,
+        "min_identity_searched": args.min_identity,
+        "maxaccepts": args.maxaccepts,
+        "maxrejects": args.maxrejects,
         "bands": {band: bands[band] for band in (">=99%", "97-99%", "<97% or none")},
         "share_at_least_99": round(bands[">=99%"] / total, 4) if total else None,
         "relation_of_99_matches": dict(relations.most_common()),
