@@ -16,6 +16,7 @@ __all__ = [
     "AppConfig",
     "DataConfig",
     "DataPathsConfig",
+    "LeakageConfig",
     "Midori2SourceConfig",
     "SplitConfig",
     "ValidationConfig",
@@ -67,6 +68,7 @@ class DataPathsConfig(ConfigModel):
     interim_dir: Path
     processed_dir: Path
     splits_dir: Path
+    leakage_dir: Path
 
 
 class ValidationConfig(ConfigModel):
@@ -122,6 +124,45 @@ class SplitConfig(ConfigModel):
         return self
 
 
+DEFAULT_VSEARCH_COMMAND: tuple[str, ...] = (
+    "pixi",
+    "exec",
+    "--channel",
+    "conda-forge",
+    "--channel",
+    "bioconda",
+    "--spec",
+    "vsearch>=2.28,<3",
+    "vsearch",
+)
+"""Runs VSEARCH from bioconda in a temporary environment, without changing the
+project's own environment."""
+
+
+class LeakageConfig(ConfigModel):
+    """How the leakage stage finds near-duplicates of training sequences.
+
+    Records in ``query_splits`` with a match of at least ``min_identity`` in
+    ``reference_split`` are listed, so evaluation can exclude them from
+    novel-species scores. The default VSEARCH settings stop at the first
+    match and give up after a few non-matching candidates, which found about
+    95% of the leaks found by a thorough search in about a third of the time
+    (see ``analysis/README.md``).
+    """
+
+    genes: tuple[str, ...] = ("CO1",)
+    query_splits: tuple[str, ...] = ("val_novel", "test_novel")
+    reference_split: str = "train"
+    min_identity: float = Field(default=0.99, gt=0.0, le=1.0)
+    maxaccepts: int = Field(default=1, ge=1)
+    maxrejects: int = Field(default=8, ge=1)
+    threads: int = Field(default=8, ge=1)
+    chunk_size: int = Field(default=250_000, ge=1)
+    vsearch_command: tuple[str, ...] = Field(
+        default=DEFAULT_VSEARCH_COMMAND, min_length=1
+    )
+
+
 class AppConfig(ConfigModel):
     """Top-level configuration for a ProkoptonML application."""
 
@@ -130,3 +171,4 @@ class AppConfig(ConfigModel):
     data: DataConfig
     validation: ValidationConfig
     split: SplitConfig = Field(default_factory=SplitConfig)
+    leakage: LeakageConfig = Field(default_factory=LeakageConfig)

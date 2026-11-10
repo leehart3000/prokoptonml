@@ -12,6 +12,7 @@ from prokopton.ml.data.checksums import ChecksumManifestError, ChecksumMismatchE
 from prokopton.ml.data.download import DownloadError
 from prokopton.ml.data.taxonomy import ReferenceDataError
 from prokopton.ml.pipeline.ingest import IngestError, ingest
+from prokopton.ml.pipeline.leakage import LeakageStageError, leakage
 from prokopton.ml.pipeline.split import SplitStageError, split
 from prokopton.ml.pipeline.validate import DataValidationError, validate
 
@@ -28,6 +29,7 @@ _COMMANDS = {
     "ingest": "Download, verify and convert an app's source data to Parquet.",
     "validate": "Check data quality, apply rules and write processed data.",
     "split": "Assign records to training, validation and test sets.",
+    "leakage": "List novel-set records with a near-copy in the training set.",
 }
 
 
@@ -54,6 +56,10 @@ def _run(command: str, config: AppConfig) -> str:
         kept = sum(g.kept_records for g in validation_report.genes.values())
         seen = sum(g.input_records for g in validation_report.genes.values())
         return f"kept {kept} of {seen} records"
+    if command == "leakage":
+        leakage_report = leakage(config)
+        found = {g: r.near_duplicates for g, r in leakage_report.genes.items()}
+        return f"near-duplicates: {found}"
     split_report = split(config)
     totals = {
         name: sum(g.records[name] for g in split_report.genes.values())
@@ -80,6 +86,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ReferenceDataError,
         DataValidationError,
         SplitStageError,
+        LeakageStageError,
     ) as error:
         logger.error("%s", error)
         return 1
