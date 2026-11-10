@@ -158,3 +158,23 @@ def test_predict_proba_in_chunks_matches_all_at_once(
     chunked = predict_proba(model, features, threads=3)
 
     np.testing.assert_allclose(chunked, model.predict_proba(features))
+
+
+def test_logistic_regression_is_saved_with_its_rescaling_step() -> None:
+    samples = {
+        "train": make_sample(30, seed=1),
+        "val_known": make_sample(10, seed=2),
+        "val_novel": make_sample(10, seed=3),
+    }
+    tracker = FakeTracker()
+    # Two motifs have the same base composition, so naive Bayes on single
+    # bases (k=1) cannot tell them apart and logistic regression (k=4) wins
+    rules = small_rules(k_values=(1,), ambiguity_thresholds=(0.05,))
+
+    result = train_router(samples, rules, tracker, {})
+
+    assert result.best.model == "logistic"
+    model = tracker.models[0][0]
+    assert [name for name, _ in model.steps] == ["kmers", "scale", "classifier"]
+    query = pd.DataFrame({"sequence": [MOTIFS["Lepidoptera"] * 12]})
+    assert model.predict(query).tolist() == ["Lepidoptera"]
