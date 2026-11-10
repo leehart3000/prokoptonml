@@ -10,7 +10,6 @@ to exactly the data it was trained on.
 Outputs ``<models_dir>/router/_train_report.json``.
 """
 
-import hashlib
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -22,6 +21,7 @@ from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
 from prokopton.ml.config import AppConfig, RouterTrainingConfig
+from prokopton.ml.data.checksums import sha256_of_file
 from prokopton.ml.pipeline.sample import REPORT_NAME as SAMPLE_REPORT_NAME
 from prokopton.ml.training.router import RouterSample, train_router
 from prokopton.ml.training.tracking import MlflowTracker, Tracker
@@ -32,7 +32,6 @@ logger = logging.getLogger(__name__)
 
 REPORT_NAME = "_train_report.json"
 SAMPLE_SPLITS = ("train", "val_known", "val_novel")
-_CHUNK = 1 << 20
 
 
 class TrainStageError(RuntimeError):
@@ -62,14 +61,6 @@ class TrainReport(BaseModel):
     model_version: str
     alias: str
     parent_run_id: str
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(_CHUNK):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _read_sample(path: Path) -> RouterSample:
@@ -127,10 +118,10 @@ def train(
         )
         raise TrainStageError(msg)
 
-    checksums = {name: _sha256(path) for name, path in paths.items()}
+    checksums = {name: sha256_of_file(path) for name, path in paths.items()}
     report_path = sample_root / SAMPLE_REPORT_NAME
     if report_path.exists():
-        checksums["sample_report"] = _sha256(report_path)
+        checksums["sample_report"] = sha256_of_file(report_path)
     tags = {
         "app": config.name,
         "release": config.data.source.release,

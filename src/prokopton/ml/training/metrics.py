@@ -15,7 +15,15 @@ from collections.abc import Sequence
 import numpy as np
 from sklearn.metrics import f1_score
 
-__all__ = ["classification_metrics", "expected_calibration_error"]
+__all__ = [
+    "TOP_K",
+    "classification_metrics",
+    "expected_calibration_error",
+    "metrics_from_ranks",
+    "top_ranks",
+]
+
+TOP_K = 5
 
 
 def expected_calibration_error(
@@ -56,18 +64,60 @@ def classification_metrics(
         raise ValueError(msg)
     if not labels:
         return {"accuracy": 0.0, "top5_accuracy": 0.0, "macro_f1": 0.0, "ece": 0.0}
-    class_array = np.asarray(classes, dtype=object)
-    truth = np.asarray(labels, dtype=object)
-    ranked = np.argsort(-probabilities, axis=1)
-    predicted = class_array[ranked[:, 0]]
-    correct = predicted == truth
-    top5 = (class_array[ranked[:, :5]] == truth[:, None]).any(axis=1)
-    present = sorted(set(truth.tolist()))
+    index = {label: position for position, label in enumerate(classes)}
+    # A label the model lacks gets its own negative number, so it still
+    # counts (with an F1 of 0) in macro-F1
+    for label in labels:
+        index.setdefault(label, -1 - (len(index) - len(classes)))
+    truth = np.array([index[label] for label in labels], dtype=np.int64)
+    return metrics_from_ranks(
+        truth, top_ranks(probabilities), probabilities.max(axis=1)
+    )
+
+
+def top_ranks(probabilities: np.ndarray, top: int = TOP_K) -> np.ndarray:
+    """Return the column numbers of each row's ``top`` most probable classes.
+
+    The first column is the top prediction.
+    """
+    top = min(top, probabilities.shape[1])
+    best = np.argpartition(-probabilities, top - 1, axis=1)[:, :top]
+    order = np.argsort(-np.take_along_axis(probabilities, best, axis=1), axis=1)
+    ranked: np.ndarray = np.take_along_axis(best, order, axis=1)
+    return ranked
+
+
+def metrics_from_ranks(
+    truth: np.ndarray, ranked: np.ndarray, confidence: np.ndarray
+) -> dict[str, float]:
+    """Return the metrics from class numbers rather than probabilities.
+
+    Args:
+        truth: Each record's true class number; negative numbers stand for
+            classes the model lacks.
+        ranked: Each record's most probable class numbers, best first.
+        confidence: Each record's top probability.
+
+    This lets large test sets be predicted in batches, keeping only a few
+    numbers per record.
+    """
+    if truth.size == 0:
+        return {"accuracy": 0.0, "top5_accuracy": 0.0, "macro_f1": 0.0, "ece": 0.0}
+    correct = ranked[:, 0] == truth
+    present = np.unique(truth).tolist()
     return {
         "accuracy": float(correct.mean()),
-        "top5_accuracy": float(top5.mean()),
-        "macro_f1": float(
-            f1_score(truth, predicted, labels=present, average="macro", zero_division=0)
+        "top5_accuracy": float(
+            (ranked[:, :TOP_K] == truth[:, None]).any(axis=1).mean()
         ),
-        "ece": expected_calibration_error(probabilities.max(axis=1), correct),
+        "macro_f1": float(
+            f1_score(
+                truth,
+                ranked[:, 0],
+                labels=present,
+                average="macro",
+                zero_division=0,
+            )
+        ),
+        "ece": expected_calibration_error(confidence, correct),
     }

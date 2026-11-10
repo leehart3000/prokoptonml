@@ -20,6 +20,7 @@ __all__ = [
     "Midori2SourceConfig",
     "MlflowConfig",
     "RouterConfig",
+    "RouterEvaluationConfig",
     "RouterSampleConfig",
     "RouterTrainingConfig",
     "SplitConfig",
@@ -217,12 +218,39 @@ class RouterTrainingConfig(ConfigModel):
     alias: str = Field(default="candidate", min_length=1)
 
 
+class RouterEvaluationConfig(ConfigModel):
+    """How the router model chosen by training is measured on the test sets.
+
+    All of each test split is predicted. Records whose label the model never
+    saw (classes dropped by the sample stage) are counted, not scored. For
+    novel-species records, scores are also given separately for records with
+    and without a near-copy in training (from the leakage stage).
+
+    For the "how short can you go?" chart, a ``fragment_fraction`` share of
+    each split (chosen by a salted hash) is cut to each of
+    ``fragment_lengths`` at a random position, and predicted again.
+    """
+
+    splits: tuple[str, ...] = Field(default=("test_known", "test_novel"), min_length=1)
+    novel_splits: tuple[str, ...] = ("test_novel",)
+    fragment_lengths: tuple[int, ...] = (50, 75, 100, 150, 200, 300, 400, 500)
+    fragment_fraction: float = Field(default=0.10, gt=0.0, le=1.0)
+    ambiguity_edges: tuple[float, ...] = (0.0, 0.01, 0.03, 0.05, 0.10)
+    confidence_thresholds: tuple[float, ...] = (0.5, 0.7, 0.8, 0.9, 0.95, 0.99)
+    calibration_bins: int = Field(default=15, ge=1)
+    batch_size: int = Field(default=20_000, ge=1)
+    threads: int = Field(default=8, ge=1)
+    salt: str = Field(default="router-evaluation", min_length=1)
+    random_state: int = 273
+
+
 class RouterConfig(ConfigModel):
     """Settings for the router: the model that predicts group and order."""
 
     gene: str = "CO1"
     sample: RouterSampleConfig = Field(default_factory=RouterSampleConfig)
     training: RouterTrainingConfig = Field(default_factory=RouterTrainingConfig)
+    evaluation: RouterEvaluationConfig = Field(default_factory=RouterEvaluationConfig)
 
 
 class MlflowConfig(ConfigModel):

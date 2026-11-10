@@ -17,6 +17,7 @@ __all__ = [
     "ChecksumMismatchError",
     "parse_sha256_manifest",
     "read_gzip_lines_from_zip",
+    "sha256_of_file",
     "sha256_of_zip_member",
     "verify_zip_member",
 ]
@@ -55,6 +56,15 @@ def parse_sha256_manifest(lines: Iterable[str]) -> dict[str, str]:
             raise ChecksumManifestError(msg)
         manifest[match["path"].removeprefix("./")] = match["digest"].lower()
     return manifest
+
+
+def sha256_of_file(path: Path) -> str:
+    """Return the SHA-256 hex digest of a file, read in chunks."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(_CHUNK_SIZE):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def sha256_of_zip_member(zip_path: Path, member: str) -> str:
