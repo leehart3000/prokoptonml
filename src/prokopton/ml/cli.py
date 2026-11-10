@@ -13,6 +13,7 @@ from prokopton.ml.data.download import DownloadError
 from prokopton.ml.data.taxonomy import ReferenceDataError
 from prokopton.ml.pipeline.ingest import IngestError, ingest
 from prokopton.ml.pipeline.leakage import LeakageStageError, leakage
+from prokopton.ml.pipeline.sample import SampleStageError, sample
 from prokopton.ml.pipeline.split import SplitStageError, split
 from prokopton.ml.pipeline.validate import DataValidationError, validate
 
@@ -30,6 +31,7 @@ _COMMANDS = {
     "validate": "Check data quality, apply rules and write processed data.",
     "split": "Assign records to training, validation and test sets.",
     "leakage": "List novel-set records with a near-copy in the training set.",
+    "sample": "Draw balanced training and validation samples for the router.",
 }
 
 
@@ -60,6 +62,10 @@ def _run(command: str, config: AppConfig) -> str:
         leakage_report = leakage(config)
         found = {g: r.near_duplicates for g, r in leakage_report.genes.items()}
         return f"near-duplicates: {found}"
+    if command == "sample":
+        sample_report = sample(config)
+        sizes = {name: r.sampled_records for name, r in sample_report.splits.items()}
+        return f"{len(sample_report.labels)} classes; records per split: {sizes}"
     split_report = split(config)
     totals = {
         name: sum(g.records[name] for g in split_report.genes.values())
@@ -87,6 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         DataValidationError,
         SplitStageError,
         LeakageStageError,
+        SampleStageError,
     ) as error:
         logger.error("%s", error)
         return 1

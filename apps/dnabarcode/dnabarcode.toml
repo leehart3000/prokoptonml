@@ -31,6 +31,7 @@ interim_dir = "data/interim/dnabarcode"
 processed_dir = "data/processed/dnabarcode"
 splits_dir = "data/splits/dnabarcode"
 leakage_dir = "data/leakage/dnabarcode"
+samples_dir = "data/samples/dnabarcode"
 
 [validation]
 # Reviewed phylum -> kingdom table (see apps/dnabarcode/reference/README.md)
@@ -72,3 +73,21 @@ maxaccepts = 1
 maxrejects = 8
 threads = 8
 chunk_size = 250000
+
+[router]
+# The router predicts the order for animals, and the group for other eukaryotes
+gene = "CO1"
+
+[router.sample]
+salt = "dnabarcode-sample-v1"
+# At most this many records per class, spread across as many species as possible
+train_cap = 2000
+eval_cap = 200
+# Classes with fewer training records than this are dropped (and reported)
+min_class_records = 20
+# The loosest ambiguity threshold training will try; stricter ones are applied
+# when training
+max_ambiguous_fraction = 0.10
+eval_splits = ["val_known", "val_novel"]
+# Leave out novel-set records that have a near-copy in training
+exclude_near_duplicates = true
