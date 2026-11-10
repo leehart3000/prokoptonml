@@ -195,6 +195,7 @@ def make_config(
                     "processed_dir": str(tmp_path / "processed"),
                     "splits_dir": str(tmp_path / "splits"),
                     "leakage_dir": str(tmp_path / "leakage"),
+                    "samples_dir": str(tmp_path / "samples"),
                 },
             },
             "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
@@ -280,6 +281,7 @@ interim_dir = "{tmp_path / "interim"}"
 processed_dir = "{tmp_path / "processed"}"
 splits_dir = "{tmp_path / "splits"}"
 leakage_dir = "{tmp_path / "leakage"}"
+samples_dir = "{tmp_path / "samples"}"
 
 [validation]
 phylum_reference = "{tmp_path / "phyla.tsv"}"

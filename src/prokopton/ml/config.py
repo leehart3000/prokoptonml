@@ -18,6 +18,8 @@ __all__ = [
     "DataPathsConfig",
     "LeakageConfig",
     "Midori2SourceConfig",
+    "RouterConfig",
+    "RouterSampleConfig",
     "SplitConfig",
     "ValidationConfig",
 ]
@@ -69,6 +71,7 @@ class DataPathsConfig(ConfigModel):
     processed_dir: Path
     splits_dir: Path
     leakage_dir: Path
+    samples_dir: Path
 
 
 class ValidationConfig(ConfigModel):
@@ -163,6 +166,32 @@ class LeakageConfig(ConfigModel):
     )
 
 
+class RouterSampleConfig(ConfigModel):
+    """How the router's training and validation samples are drawn.
+
+    Each class (an animal order, or a group for non-animals) is capped, so a
+    few huge orders do not dominate. Within a class, records are taken from as
+    many different species as possible. ``max_ambiguous_fraction`` should be
+    the loosest value that training will try; stricter thresholds are applied
+    later, when training.
+    """
+
+    salt: str = Field(default="prokopton-sample-v1", min_length=1)
+    train_cap: int = Field(default=2000, ge=1)
+    eval_cap: int = Field(default=200, ge=1)
+    min_class_records: int = Field(default=20, ge=1)
+    max_ambiguous_fraction: float = Field(default=0.10, ge=0.0, le=1.0)
+    eval_splits: tuple[str, ...] = ("val_known", "val_novel")
+    exclude_near_duplicates: bool = True
+
+
+class RouterConfig(ConfigModel):
+    """Settings for the router: the model that predicts group and order."""
+
+    gene: str = "CO1"
+    sample: RouterSampleConfig = Field(default_factory=RouterSampleConfig)
+
+
 class AppConfig(ConfigModel):
     """Top-level configuration for a ProkoptonML application."""
 
@@ -172,3 +201,4 @@ class AppConfig(ConfigModel):
     validation: ValidationConfig
     split: SplitConfig = Field(default_factory=SplitConfig)
     leakage: LeakageConfig = Field(default_factory=LeakageConfig)
+    router: RouterConfig = Field(default_factory=RouterConfig)

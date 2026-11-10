@@ -68,6 +68,7 @@ dnabarcode-ingest = "prokopton-ml ingest apps/dnabarcode/dnabarcode.toml"
 dnabarcode-validate = "prokopton-ml validate apps/dnabarcode/dnabarcode.toml"
 dnabarcode-split = "prokopton-ml split apps/dnabarcode/dnabarcode.toml"
 dnabarcode-leakage = "prokopton-ml leakage apps/dnabarcode/dnabarcode.toml"
+dnabarcode-sample = "prokopton-ml sample apps/dnabarcode/dnabarcode.toml"
 
 [tool.pixi.environments]
 default = { features = ["dev"], solve-group = "default" }
