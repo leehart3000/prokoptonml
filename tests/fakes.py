@@ -20,6 +20,7 @@ class FakeRun:
 class FakeTracker:
     runs: list[FakeRun] = field(default_factory=list)
     models: list[tuple[Any, Any, str, str]] = field(default_factory=list)
+    registry: dict[tuple[str, str], tuple[Any, str]] = field(default_factory=dict)
     _active: list[FakeRun] = field(default_factory=list)
 
     @contextmanager
@@ -55,4 +56,9 @@ class FakeTracker:
         self, model: Any, input_example: Any, registered_name: str, alias: str
     ) -> str:
         self.models.append((model, input_example, registered_name, alias))
-        return str(len(self.models))
+        version = str(len(self.models))
+        self.registry[registered_name, alias] = (model, version)
+        return version
+
+    def load_model(self, registered_name: str, alias: str) -> tuple[Any, str]:
+        return self.registry[registered_name, alias]

@@ -43,6 +43,10 @@ class Tracker(Protocol):
         """Save and register a model, point ``alias`` at it, return its version."""
         ...
 
+    def load_model(self, registered_name: str, alias: str) -> tuple[Any, str]:
+        """Load the model version that ``alias`` points at, and its version."""
+        ...
+
 
 def own_types(model: Any) -> list[str]:
     """Name the ProkoptonML classes in a model or pipeline.
@@ -120,3 +124,13 @@ class MlflowTracker:
             registered_name, alias, version
         )
         return version
+
+    def load_model(self, registered_name: str, alias: str) -> tuple[Any, str]:
+        found = self._mlflow.MlflowClient().get_model_version_by_alias(
+            registered_name, alias
+        )
+        # Load by version, so the model matches the version reported
+        model = self._mlflow.sklearn.load_model(
+            f"models:/{registered_name}/{found.version}"
+        )
+        return model, str(found.version)

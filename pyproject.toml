@@ -72,6 +72,7 @@ dnabarcode-split = "prokopton-ml split apps/dnabarcode/dnabarcode.toml"
 dnabarcode-leakage = "prokopton-ml leakage apps/dnabarcode/dnabarcode.toml"
 dnabarcode-sample = "prokopton-ml sample apps/dnabarcode/dnabarcode.toml"
 dnabarcode-train = "prokopton-ml train apps/dnabarcode/dnabarcode.toml"
+dnabarcode-evaluate = "prokopton-ml evaluate apps/dnabarcode/dnabarcode.toml"
 
 [tool.pixi.environments]
 default = { features = ["dev"], solve-group = "default" }

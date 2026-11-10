@@ -12,6 +12,7 @@ from prokopton.ml.data.checksums import (
     ChecksumMismatchError,
     parse_sha256_manifest,
     read_gzip_lines_from_zip,
+    sha256_of_file,
     sha256_of_zip_member,
     verify_zip_member,
 )
@@ -90,3 +91,10 @@ def test_read_gzip_lines_from_zip(zip_with_gzip_member: tuple[Path, str]) -> Non
     lines = list(read_gzip_lines_from_zip(zip_path, MEMBER))
 
     assert lines == [">seq1\n", "ACGT\n", ">seq2\n", "GGCC\n"]
+
+
+def test_sha256_of_file(tmp_path: Path) -> None:
+    path = tmp_path / "data.bin"
+    path.write_bytes(b"hello\n")
+
+    assert sha256_of_file(path) == hashlib.sha256(b"hello\n").hexdigest()

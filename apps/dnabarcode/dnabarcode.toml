@@ -110,6 +110,18 @@ experiment = "dnabarcode-router"
 registered_model = "dnabarcode-router"
 alias = "candidate"
 
+[router.evaluation]
+splits = ["test_known", "test_novel"]
+# Also scored separately with and without a near-copy in training
+novel_splits = ["test_novel"]
+# "How short can you go?": a share of each split, cut to these lengths
+fragment_lengths = [50, 75, 100, 150, 200, 300, 400, 500]
+fragment_fraction = 0.10
+# Scores are also given for these ranges of ambiguous fraction
+ambiguity_edges = [0.0, 0.01, 0.03, 0.05, 0.10]
+confidence_thresholds = [0.5, 0.7, 0.8, 0.9, 0.95, 0.99]
+threads = 8
+
 [mlflow]
 # Run metadata and the model registry in SQLite; model files in an artifact
 # folder. Both are inside the git-ignored data/ folder.

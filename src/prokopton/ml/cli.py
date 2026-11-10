@@ -11,6 +11,7 @@ from prokopton.ml.config import AppConfig
 from prokopton.ml.data.checksums import ChecksumManifestError, ChecksumMismatchError
 from prokopton.ml.data.download import DownloadError
 from prokopton.ml.data.taxonomy import ReferenceDataError
+from prokopton.ml.pipeline.evaluate import EvaluationStageError, evaluate
 from prokopton.ml.pipeline.ingest import IngestError, ingest
 from prokopton.ml.pipeline.leakage import LeakageStageError, leakage
 from prokopton.ml.pipeline.sample import SampleStageError, sample
@@ -34,6 +35,7 @@ _COMMANDS = {
     "leakage": "List novel-set records with a near-copy in the training set.",
     "sample": "Draw balanced training and validation samples for the router.",
     "train": "Train router candidates, then track and register the best.",
+    "evaluate": "Measure the registered router on the test sets.",
 }
 
 
@@ -76,6 +78,13 @@ def _run(command: str, config: AppConfig) -> str:
             f"{train_report.registered_model} v{train_report.model_version} "
             f"@{train_report.alias}"
         )
+    if command == "evaluate":
+        evaluation = evaluate(config)
+        accuracy = {
+            name: round(scores.metrics["accuracy"], 4)
+            for name, scores in evaluation.splits.items()
+        }
+        return f"v{evaluation.model_version} accuracy: {accuracy}"
     split_report = split(config)
     totals = {
         name: sum(g.records[name] for g in split_report.genes.values())
@@ -105,6 +114,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         LeakageStageError,
         SampleStageError,
         TrainStageError,
+        EvaluationStageError,
     ) as error:
         logger.error("%s", error)
         return 1
