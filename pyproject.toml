@@ -7,7 +7,14 @@ license = "AGPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [{ name = "Lee Hart" }]
 requires-python = ">=3.13,<3.14"
-dependencies = ["prokopton>=0.1.0a1,<0.2", "pandas>=2.2", "pyarrow>=19"]
+dependencies = [
+    "prokopton>=0.1.0a1,<0.2",
+    "numpy>=2",
+    "pandas>=2.2",
+    "pyarrow>=19",
+    "scikit-learn>=1.6",
+    "scipy>=1.13",
+]
 
 [project.scripts]
 prokopton-ml = "prokopton.ml.cli:main"
@@ -33,8 +40,11 @@ requires-pixi = ">=0.84"
 [tool.pixi.dependencies]
 python = "3.13.*"
 pydantic = ">=2.11,<3"
+numpy = ">=2"
 pandas = ">=2.2"
 pyarrow = ">=19"
+scikit-learn = ">=1.6"
+scipy = ">=1.13"
 
 [tool.pixi.pypi-dependencies]
 prokopton-ml = { path = ".", editable = true }
@@ -93,8 +103,8 @@ explicit_package_bases = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-# PyArrow and pandas do not ship type information
-module = ["pandas", "pandas.*", "pyarrow", "pyarrow.*"]
+# These libraries do not ship (complete) type information
+module = ["pandas", "pandas.*", "pyarrow", "pyarrow.*", "scipy", "scipy.*", "sklearn", "sklearn.*"]
 ignore_missing_imports = true
 
 # --- Pytest: testing ---
