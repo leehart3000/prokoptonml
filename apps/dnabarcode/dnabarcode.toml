@@ -30,6 +30,7 @@ raw_dir = "data/raw/midori2_gb273"
 interim_dir = "data/interim/dnabarcode"
 processed_dir = "data/processed/dnabarcode"
 splits_dir = "data/splits/dnabarcode"
+leakage_dir = "data/leakage/dnabarcode"
 
 [validation]
 # Reviewed phylum -> kingdom table (see apps/dnabarcode/reference/README.md)
@@ -57,3 +58,17 @@ test_fraction = 0.10
 novel_species_genes = ["CO1"]
 # Families reported separately, e.g. for planned specialists
 report_families = ["Culicidae"]
+
+[leakage]
+# List novel-set records that have a near-identical (>=99%) training sequence,
+# so evaluation can exclude them from novel-species scores. Settings were chosen
+# with analysis/03_leakage_audit.py (see analysis/README.md): about 95% recall
+# of a thorough search, in about a third of the time.
+genes = ["CO1"]
+query_splits = ["val_novel", "test_novel"]
+reference_split = "train"
+min_identity = 0.99
+maxaccepts = 1
+maxrejects = 8
+threads = 8
+chunk_size = 250000
