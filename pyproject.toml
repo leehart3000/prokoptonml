@@ -56,6 +56,7 @@ check = { depends-on = ["format-check", "lint", "typecheck", "test"] }
 [tool.pixi.tasks]
 dnabarcode-ingest = "prokopton-ml ingest apps/dnabarcode/dnabarcode.toml"
 dnabarcode-validate = "prokopton-ml validate apps/dnabarcode/dnabarcode.toml"
+dnabarcode-split = "prokopton-ml split apps/dnabarcode/dnabarcode.toml"
 
 [tool.pixi.environments]
 default = { features = ["dev"], solve-group = "default" }

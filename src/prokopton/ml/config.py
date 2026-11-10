@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from prokopton.core.config import ConfigModel
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 __all__ = [
     "ALLOWED_URL_SCHEMES",
@@ -17,6 +17,7 @@ __all__ = [
     "DataConfig",
     "DataPathsConfig",
     "Midori2SourceConfig",
+    "SplitConfig",
     "ValidationConfig",
 ]
 
@@ -65,6 +66,7 @@ class DataPathsConfig(ConfigModel):
     raw_dir: Path
     interim_dir: Path
     processed_dir: Path
+    splits_dir: Path
 
 
 class ValidationConfig(ConfigModel):
@@ -93,6 +95,33 @@ class DataConfig(ConfigModel):
     paths: DataPathsConfig
 
 
+class SplitConfig(ConfigModel):
+    """How records are assigned to training, validation and test sets.
+
+    Assignment uses a hash of each record's key (the species name for novel
+    holdouts, the sequence otherwise) mixed with ``salt``, so it is reproducible
+    and stable when data is added. Changing ``salt`` reshuffles every split.
+    """
+
+    salt: str = Field(default="prokopton-v1", min_length=1)
+    novel_val_fraction: float = Field(default=0.05, ge=0.0, le=1.0)
+    novel_test_fraction: float = Field(default=0.05, ge=0.0, le=1.0)
+    val_fraction: float = Field(default=0.10, ge=0.0, le=1.0)
+    test_fraction: float = Field(default=0.10, ge=0.0, le=1.0)
+    novel_species_genes: tuple[str, ...] = ("CO1",)
+    report_families: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _check_fractions(self) -> "SplitConfig":
+        if self.novel_val_fraction + self.novel_test_fraction > 1.0:
+            msg = "novel_val_fraction + novel_test_fraction must not exceed 1"
+            raise ValueError(msg)
+        if self.val_fraction + self.test_fraction >= 1.0:
+            msg = "val_fraction + test_fraction must be below 1 (train needs data)"
+            raise ValueError(msg)
+        return self
+
+
 class AppConfig(ConfigModel):
     """Top-level configuration for a ProkoptonML application."""
 
@@ -100,3 +129,4 @@ class AppConfig(ConfigModel):
     title: str
     data: DataConfig
     validation: ValidationConfig
+    split: SplitConfig = Field(default_factory=SplitConfig)

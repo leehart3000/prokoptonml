@@ -224,6 +224,7 @@ def make_config(tmp_path: Path) -> AppConfig:
                     "raw_dir": str(tmp_path / "raw"),
                     "interim_dir": str(tmp_path / "interim"),
                     "processed_dir": str(tmp_path / "processed"),
+                    "splits_dir": str(tmp_path / "splits"),
                 },
             },
             "validation": {"phylum_reference": str(reference)},
@@ -276,6 +277,7 @@ genes = ["CO1"]
 raw_dir = "{tmp_path / "raw"}"
 interim_dir = "{tmp_path / "interim"}"
 processed_dir = "{tmp_path / "processed"}"
+splits_dir = "{tmp_path / "splits"}"
 
 [validation]
 phylum_reference = "{config.validation.phylum_reference}"
