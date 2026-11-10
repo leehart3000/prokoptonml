@@ -10,9 +10,16 @@ Features for each ``k`` are computed once and shared by every candidate with
 that ``k``. Naive Bayes only needs each class's total k-mer counts, so those
 are added up once per ``k`` and threshold, and each ``alpha`` is applied to
 them directly (much faster than refitting). Predictions are made in chunks
-on several threads. Each candidate is tracked as a nested run; the best is saved as a
-scikit-learn pipeline (``KmerVectorizer`` then the classifier), registered,
-and given the configured alias.
+on several threads.
+
+Logistic regression is given each sequence's features rescaled to unit
+length (a ``Normalizer`` step). The raw features are frequencies that add up
+to 1, so each is tiny (about 1/650), which makes the model slow to learn.
+
+Each candidate is tracked as a nested run; the best is saved as a
+scikit-learn pipeline (``KmerVectorizer``, the ``Normalizer`` for logistic
+regression, then the classifier), registered, and given the configured
+alias.
 """
 
 import logging
@@ -29,6 +36,7 @@ from scipy import sparse
 from sklearn.linear_model import SGDClassifier
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import Normalizer
 
 from prokopton.ml.config import RouterTrainingConfig
 from prokopton.ml.features.kmers import KmerVectorizer
@@ -258,7 +266,7 @@ def train_router(
     search = candidates(rules)
     train = samples["train"]
     labels = np.asarray(train.labels, dtype=object)
-    best: tuple[Candidate, Any, KmerVectorizer, dict[str, float]] | None = None
+    best: tuple[Candidate, list[tuple[str, Any]], dict[str, float]] | None = None
 
     with tracker.run("router-search") as parent_run_id:
         tracker.set_tags({**tags, "stage": "train", "model_role": "router"})
@@ -272,17 +280,24 @@ def train_router(
             logger.info(
                 "Computed k=%d features in %.0f s", k, time.monotonic() - started
             )
-            for (_model, threshold), group in groupby(
+            scaled: dict[str, sparse.csr_matrix] = {}
+            for (model, threshold), group in groupby(
                 k_group, key=lambda c: (c.model, c.max_ambiguous_fraction)
             ):
+                steps: list[tuple[str, Any]] = [("kmers", vectorizer)]
+                inputs = features
+                if model == "logistic":
+                    scaler = Normalizer()
+                    if not scaled:
+                        scaled = {n: scaler.transform(x) for n, x in features.items()}
+                    steps.append(("scale", scaler))
+                    inputs = scaled
                 keep = train.ambiguous_fraction <= threshold
                 for candidate, classifier, fit_seconds in _fitted(
-                    list(group), features["train"], labels, keep, rules
+                    list(group), inputs["train"], labels, keep, rules
                 ):
                     with tracker.run(candidate.name, nested=True):
-                        metrics = _evaluate(
-                            classifier, features, samples, rules.threads
-                        )
+                        metrics = _evaluate(classifier, inputs, samples, rules.threads)
                         metrics["fit_seconds"] = fit_seconds
                         metrics["train_records"] = float(keep.sum())
                         tracker.set_tags({**tags, "model_type": candidate.model})
@@ -304,16 +319,21 @@ def train_router(
                     )
                     if (
                         best is None
-                        or metrics["selection_score"] > best[3]["selection_score"]
+                        or metrics["selection_score"] > best[2]["selection_score"]
                     ):
-                        best = (candidate, classifier, vectorizer, metrics)
-            del features
+                        best = (
+                            candidate,
+                            [*steps, ("classifier", classifier)],
+                            metrics,
+                        )
+            del features, scaled
 
         if best is None:  # pragma: no cover - candidates() is never empty
             msg = "No candidates to train"
             raise ValueError(msg)
-        chosen, classifier, vectorizer, metrics = best
-        pipeline = Pipeline([("kmers", vectorizer), ("classifier", classifier)])
+        chosen, steps, metrics = best
+        pipeline = Pipeline(steps)
+        classifier = steps[-1][1]
         tracker.log_params(
             {
                 "best_model": chosen.model,

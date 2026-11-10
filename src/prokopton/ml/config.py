@@ -195,21 +195,20 @@ class RouterTrainingConfig(ConfigModel):
     Every combination of ``k_values``, ``ambiguity_thresholds`` and
     ``naive_bayes_alphas`` is tried with naive Bayes (fast). Logistic
     regression (slower) is tried for each of ``logistic_k_values`` and
-    ``logistic_alphas``, at ``logistic_ambiguity_threshold``. The best
+    ``logistic_alphas``, at ``logistic_ambiguity_threshold``, on features
+    rescaled to unit length. The best
     candidate is chosen by ``selection_score``: the mean of macro-F1 on the
     known-species and novel-species validation samples.
     """
 
     k_values: tuple[int, ...] = Field(default=(5, 6, 7, 8), min_length=1)
-    ambiguity_thresholds: tuple[float, ...] = Field(
-        default=(0.01, 0.03, 0.05, 0.10), min_length=1
-    )
+    ambiguity_thresholds: tuple[float, ...] = Field(default=(0.03, 0.10), min_length=1)
     naive_bayes_alphas: tuple[float, ...] = Field(
-        default=(0.01, 0.1, 1.0), min_length=1
+        default=(1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2), min_length=1
     )
-    logistic_k_values: tuple[int, ...] = (6, 8)
+    logistic_k_values: tuple[int, ...] = (6,)
     logistic_ambiguity_threshold: float = Field(default=0.03, ge=0.0, le=1.0)
-    logistic_alphas: tuple[float, ...] = (1e-6, 1e-5)
+    logistic_alphas: tuple[float, ...] = (1e-7, 1e-6)
     logistic_max_iter: int = Field(default=15, ge=1)
     threads: int = Field(default=8, ge=1)
     random_state: int = 273
