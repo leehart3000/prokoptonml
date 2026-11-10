@@ -15,3 +15,8 @@ indent_size = 2
 
 [*.md]
 trim_trailing_whitespace = false
+
+# Tab-separated data: trailing tabs are empty columns, so never strip them
+[*.tsv]
+indent_style = tab
+trim_trailing_whitespace = false

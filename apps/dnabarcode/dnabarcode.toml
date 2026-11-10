@@ -28,3 +28,17 @@ genes = [
 [data.paths]
 raw_dir = "data/raw/midori2_gb273"
 interim_dir = "data/interim/dnabarcode"
+processed_dir = "data/processed/dnabarcode"
+
+[validation]
+# Reviewed phylum -> kingdom table (see apps/dnabarcode/reference/README.md)
+phylum_reference = "apps/dnabarcode/reference/phylum_lineages_gb273.tsv"
+min_length = 100
+max_length = 2000
+# 1.0 = keep all: the training stage applies its own (tunable) threshold to the
+# training data only, so test sets still contain realistic, imperfect sequences
+max_ambiguous_fraction = 1.0
+ambiguity_report_thresholds = [0.0, 0.01, 0.05, 0.10]
+# Sequences shorter than this are counted separately in the conflict report
+short_length = 200
+top_shared_examples = 10

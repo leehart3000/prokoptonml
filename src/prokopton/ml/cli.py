@@ -10,7 +10,9 @@ from prokopton.core.config import ConfigError, load_config
 from prokopton.ml.config import AppConfig
 from prokopton.ml.data.checksums import ChecksumManifestError, ChecksumMismatchError
 from prokopton.ml.data.download import DownloadError
+from prokopton.ml.data.taxonomy import ReferenceDataError
 from prokopton.ml.pipeline.ingest import IngestError, ingest
+from prokopton.ml.pipeline.validate import DataValidationError, validate
 
 __all__ = ["ENV_PREFIX", "main"]
 
@@ -31,6 +33,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "ingest", help="Download, verify and convert an app's source data to Parquet."
     )
     ingest_parser.add_argument("config", type=Path, help="Path to the app's TOML file.")
+    validate_parser = commands.add_parser(
+        "validate", help="Check data quality, apply rules and write processed data."
+    )
+    validate_parser.add_argument(
+        "config", type=Path, help="Path to the app's TOML file."
+    )
     return parser
 
 
@@ -42,16 +50,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     try:
         config = load_config(args.config, AppConfig, env_prefix=ENV_PREFIX)
-        report = ingest(config)
+        if args.command == "ingest":
+            ingest_report = ingest(config)
+            total = sum(gene.records for gene in ingest_report.genes.values())
+            logger.info("Done: %d genes, %d records", len(ingest_report.genes), total)
+        else:
+            validation_report = validate(config)
+            kept = sum(g.kept_records for g in validation_report.genes.values())
+            seen = sum(g.input_records for g in validation_report.genes.values())
+            logger.info("Done: kept %d of %d records", kept, seen)
     except (
         ConfigError,
         IngestError,
         DownloadError,
         ChecksumManifestError,
         ChecksumMismatchError,
+        ReferenceDataError,
+        DataValidationError,
     ) as error:
         logger.error("%s", error)
         return 1
-    total = sum(gene.records for gene in report.genes.values())
-    logger.info("Done: %d genes, %d records", len(report.genes), total)
     return 0
