@@ -116,6 +116,25 @@ def test_works_in_a_scikit_learn_pipeline() -> None:
     assert clone(vectorizer).get_params() == {"k": 4, "alphabet": "ACGT"}
 
 
+def test_accepts_a_dataframe_and_uses_its_first_column() -> None:
+    import pandas as pd
+
+    vectorizer = KmerVectorizer(k=2).fit()
+    frame = pd.DataFrame({"sequence": ["ACGT", "AAAA"]})
+
+    matrix = vectorizer.transform(frame)
+
+    assert matrix.shape == (2, 16)
+    assert (matrix != vectorizer.transform(["ACGT", "AAAA"])).nnz == 0
+
+
+def test_uses_32_bit_indices() -> None:
+    matrix = KmerVectorizer(k=6).fit().transform(["ACGT" * 30])
+
+    assert matrix.indices.dtype == np.int32
+    assert matrix.indptr.dtype == np.int32
+
+
 def test_reverse_complement() -> None:
     assert reverse_complement("AACGTN") == "NACGTT"
     assert reverse_complement("acgR") == "YCGT"

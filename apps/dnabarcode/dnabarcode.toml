@@ -32,6 +32,7 @@ processed_dir = "data/processed/dnabarcode"
 splits_dir = "data/splits/dnabarcode"
 leakage_dir = "data/leakage/dnabarcode"
 samples_dir = "data/samples/dnabarcode"
+models_dir = "data/models/dnabarcode"
 
 [validation]
 # Reviewed phylum -> kingdom table (see apps/dnabarcode/reference/README.md)
@@ -91,3 +92,26 @@ max_ambiguous_fraction = 0.10
 eval_splits = ["val_known", "val_novel"]
 # Leave out novel-set records that have a near-copy in training
 exclude_near_duplicates = true
+
+[router.training]
+# Naive Bayes: every combination of these is tried
+k_values = [5, 6, 7, 8]
+ambiguity_thresholds = [0.01, 0.03, 0.05, 0.10]
+naive_bayes_alphas = [0.01, 0.1, 1.0]
+# Logistic regression (slower): a smaller, targeted set
+logistic_k_values = [6, 8]
+logistic_ambiguity_threshold = 0.03
+logistic_alphas = [1e-6, 1e-5]
+logistic_max_iter = 15
+threads = 8
+random_state = 273
+# MLflow experiment and registered model names, and the alias for the best model
+experiment = "dnabarcode-router"
+registered_model = "dnabarcode-router"
+alias = "candidate"
+
+[mlflow]
+# Run metadata and the model registry in SQLite; model files in an artifact
+# folder. Both are inside the git-ignored data/ folder.
+tracking_uri = "sqlite:///data/mlflow/mlflow.db"
+artifact_dir = "data/mlflow/artifacts"

@@ -18,8 +18,10 @@ __all__ = [
     "DataPathsConfig",
     "LeakageConfig",
     "Midori2SourceConfig",
+    "MlflowConfig",
     "RouterConfig",
     "RouterSampleConfig",
+    "RouterTrainingConfig",
     "SplitConfig",
     "ValidationConfig",
 ]
@@ -72,6 +74,7 @@ class DataPathsConfig(ConfigModel):
     splits_dir: Path
     leakage_dir: Path
     samples_dir: Path
+    models_dir: Path
 
 
 class ValidationConfig(ConfigModel):
@@ -185,11 +188,53 @@ class RouterSampleConfig(ConfigModel):
     exclude_near_duplicates: bool = True
 
 
+class RouterTrainingConfig(ConfigModel):
+    """The models and settings the router's training stage compares.
+
+    Every combination of ``k_values``, ``ambiguity_thresholds`` and
+    ``naive_bayes_alphas`` is tried with naive Bayes (fast). Logistic
+    regression (slower) is tried for each of ``logistic_k_values`` and
+    ``logistic_alphas``, at ``logistic_ambiguity_threshold``. The best
+    candidate is chosen by ``selection_score``: the mean of macro-F1 on the
+    known-species and novel-species validation samples.
+    """
+
+    k_values: tuple[int, ...] = Field(default=(5, 6, 7, 8), min_length=1)
+    ambiguity_thresholds: tuple[float, ...] = Field(
+        default=(0.01, 0.03, 0.05, 0.10), min_length=1
+    )
+    naive_bayes_alphas: tuple[float, ...] = Field(
+        default=(0.01, 0.1, 1.0), min_length=1
+    )
+    logistic_k_values: tuple[int, ...] = (6, 8)
+    logistic_ambiguity_threshold: float = Field(default=0.03, ge=0.0, le=1.0)
+    logistic_alphas: tuple[float, ...] = (1e-6, 1e-5)
+    logistic_max_iter: int = Field(default=15, ge=1)
+    threads: int = Field(default=8, ge=1)
+    random_state: int = 273
+    experiment: str = Field(default="router", min_length=1)
+    registered_model: str = Field(default="router", min_length=1)
+    alias: str = Field(default="candidate", min_length=1)
+
+
 class RouterConfig(ConfigModel):
     """Settings for the router: the model that predicts group and order."""
 
     gene: str = "CO1"
     sample: RouterSampleConfig = Field(default_factory=RouterSampleConfig)
+    training: RouterTrainingConfig = Field(default_factory=RouterTrainingConfig)
+
+
+class MlflowConfig(ConfigModel):
+    """Where MLflow keeps experiment runs and model files.
+
+    The default keeps everything in the git-ignored ``data/`` folder: run
+    metadata and the model registry in a SQLite database, and model files in
+    an artifact folder.
+    """
+
+    tracking_uri: str = "sqlite:///data/mlflow/mlflow.db"
+    artifact_dir: Path = Path("data/mlflow/artifacts")
 
 
 class AppConfig(ConfigModel):
@@ -202,3 +247,4 @@ class AppConfig(ConfigModel):
     split: SplitConfig = Field(default_factory=SplitConfig)
     leakage: LeakageConfig = Field(default_factory=LeakageConfig)
     router: RouterConfig = Field(default_factory=RouterConfig)
+    mlflow: MlflowConfig = Field(default_factory=MlflowConfig)

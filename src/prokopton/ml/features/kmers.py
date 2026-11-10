@@ -94,10 +94,15 @@ class KmerVectorizer(TransformerMixin, BaseEstimator):  # type: ignore[misc]
     def transform(self, sequences: Iterable[str]) -> sparse.csr_matrix:
         """Return a sparse matrix of k-mer frequencies, one row per sequence.
 
-        A sequence with no valid k-mers (too short, or all ambiguous) gets a
-        row of zeros.
+        ``sequences`` may be any iterable of strings, or a table (such as a
+        pandas DataFrame, which MLflow passes when serving), in which case its
+        first column is used. A sequence with no valid k-mers (too short, or
+        all ambiguous) gets a row of zeros.
         """
         check_is_fitted(self, "lookup_")
+        columns = getattr(sequences, "columns", None)
+        if columns is not None:
+            sequences = sequences[columns[0]]  # type: ignore[index]
         indptr = [0]
         indices: list[np.ndarray] = []
         data: list[np.ndarray] = []
@@ -110,11 +115,19 @@ class KmerVectorizer(TransformerMixin, BaseEstimator):  # type: ignore[misc]
                 indptr.append(indptr[-1] + unique.size)
             else:
                 indptr.append(indptr[-1])
+        # 32-bit indices halve memory; fine below 2**31 features and values
+        index_type = (
+            np.int32
+            if self.n_features_out_ < 2**31 and indptr[-1] < 2**31
+            else np.int64
+        )
         return sparse.csr_matrix(
             (
                 np.concatenate(data) if data else np.empty(0, dtype=np.float32),
-                np.concatenate(indices) if indices else np.empty(0, dtype=np.int64),
-                np.array(indptr, dtype=np.int64),
+                (np.concatenate(indices) if indices else np.empty(0)).astype(
+                    index_type
+                ),
+                np.array(indptr, dtype=index_type),
             ),
             shape=(len(indptr) - 1, self.n_features_out_),
         )
