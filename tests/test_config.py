@@ -29,6 +29,8 @@ def test_dnabarcode_config_is_valid() -> None:
     assert config.data.source.release == "GB273"
     assert config.data.source.genes[0] == "CO1"
     assert len(config.data.source.genes) == 15
+    assert config.validation.min_length == 100
+    assert config.validation.phylum_reference.is_file()
 
 
 def test_source_config_accepts_valid_fields() -> None:

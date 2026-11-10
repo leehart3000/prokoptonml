@@ -17,6 +17,7 @@ __all__ = [
     "DataConfig",
     "DataPathsConfig",
     "Midori2SourceConfig",
+    "ValidationConfig",
 ]
 
 ALLOWED_URL_SCHEMES: tuple[str, ...] = ("https://", "file://")
@@ -58,10 +59,31 @@ class Midori2SourceConfig(ConfigModel):
 
 
 class DataPathsConfig(ConfigModel):
-    """Local folders for downloaded (raw) and converted (interim) data."""
+    """Local folders for downloaded (raw), converted (interim) and validated
+    (processed) data."""
 
     raw_dir: Path
     interim_dir: Path
+    processed_dir: Path
+
+
+class ValidationConfig(ConfigModel):
+    """Rules for the validation stage.
+
+    ``max_ambiguous_fraction`` defaults to 1.0 (no filtering): the stage only
+    reports how many records exceed each of ``ambiguity_report_thresholds``.
+    The ambiguity threshold is treated as a hyperparameter and applied by the
+    training stage to training data only, so evaluation still uses realistic,
+    imperfect sequences.
+    """
+
+    phylum_reference: Path
+    min_length: int = Field(default=100, ge=1)
+    max_length: int = Field(default=2000, ge=1)
+    max_ambiguous_fraction: float = Field(default=1.0, ge=0.0, le=1.0)
+    ambiguity_report_thresholds: tuple[float, ...] = (0.0, 0.01, 0.05, 0.10)
+    short_length: int = Field(default=200, ge=1)
+    top_shared_examples: int = Field(default=10, ge=0)
 
 
 class DataConfig(ConfigModel):
@@ -77,3 +99,4 @@ class AppConfig(ConfigModel):
     name: str = Field(pattern=r"^[a-z][a-z0-9_-]*$")
     title: str
     data: DataConfig
+    validation: ValidationConfig

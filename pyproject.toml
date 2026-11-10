@@ -7,7 +7,7 @@ license = "AGPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [{ name = "Lee Hart" }]
 requires-python = ">=3.13,<3.14"
-dependencies = ["prokopton>=0.1.0a1,<0.2", "pyarrow>=19"]
+dependencies = ["prokopton>=0.1.0a1,<0.2", "pandas>=2.2", "pyarrow>=19"]
 
 [project.scripts]
 prokopton-ml = "prokopton.ml.cli:main"
@@ -33,6 +33,7 @@ requires-pixi = ">=0.84"
 [tool.pixi.dependencies]
 python = "3.13.*"
 pydantic = ">=2.11,<3"
+pandas = ">=2.2"
 pyarrow = ">=19"
 
 [tool.pixi.pypi-dependencies]
@@ -54,6 +55,7 @@ check = { depends-on = ["format-check", "lint", "typecheck", "test"] }
 
 [tool.pixi.tasks]
 dnabarcode-ingest = "prokopton-ml ingest apps/dnabarcode/dnabarcode.toml"
+dnabarcode-validate = "prokopton-ml validate apps/dnabarcode/dnabarcode.toml"
 
 [tool.pixi.environments]
 default = { features = ["dev"], solve-group = "default" }
@@ -89,8 +91,8 @@ explicit_package_bases = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-# PyArrow does not ship type information
-module = ["pyarrow", "pyarrow.*"]
+# PyArrow and pandas do not ship type information
+module = ["pandas", "pandas.*", "pyarrow", "pyarrow.*"]
 ignore_missing_imports = true
 
 # --- Pytest: testing ---

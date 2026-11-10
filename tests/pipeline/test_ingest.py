@@ -69,8 +69,10 @@ def make_config(tmp_path: Path, genes: list[str]) -> AppConfig:
                 "paths": {
                     "raw_dir": str(tmp_path / "raw"),
                     "interim_dir": str(tmp_path / "interim"),
+                    "processed_dir": str(tmp_path / "processed"),
                 },
             },
+            "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
         }
     )
 
@@ -149,6 +151,10 @@ genes = ["CO1"]
 [data.paths]
 raw_dir = "{config.data.paths.raw_dir}"
 interim_dir = "{config.data.paths.interim_dir}"
+processed_dir = "{config.data.paths.processed_dir}"
+
+[validation]
+phylum_reference = "{config.validation.phylum_reference}"
 """,
         encoding="utf-8",
     )
@@ -181,6 +187,10 @@ genes = ["CO1"]
 [data.paths]
 raw_dir = "{raw_dir}"
 interim_dir = "{tmp_path / "interim"}"
+processed_dir = "{tmp_path / "processed"}"
+
+[validation]
+phylum_reference = "{tmp_path / "phyla.tsv"}"
 """,
         encoding="utf-8",
     )
