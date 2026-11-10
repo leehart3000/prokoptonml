@@ -174,6 +174,9 @@ def test_logistic_regression_is_saved_with_its_rescaling_step() -> None:
     result = train_router(samples, rules, tracker, {})
 
     assert result.best.model == "logistic"
+    logistic_run = next(run for run in tracker.runs if run.name.startswith("logistic"))
+    assert 1 <= logistic_run.metrics["iterations"] <= 20
+    assert "iterations" not in tracker.runs[1].metrics  # naive Bayes
     model = tracker.models[0][0]
     assert [name for name, _ in model.steps] == ["kmers", "scale", "classifier"]
     query = pd.DataFrame({"sequence": [MOTIFS["Lepidoptera"] * 12]})

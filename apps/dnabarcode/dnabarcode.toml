@@ -94,19 +94,24 @@ eval_splits = ["val_known", "val_novel"]
 exclude_near_duplicates = true
 
 [router.training]
+# The search has been narrowed in rounds; every round is kept in MLflow.
+#   Round 1 (v1): NB best at alpha 0.01, the smallest tried; logistic
+#     regression poor on unscaled features.
+#   Round 2 (v2): NB best at k=8, alpha 1e-4 (0.888); logistic regression
+#     on rescaled features best overall at k=6, alpha 1e-7 (0.934), the
+#     smallest tried. The threshold made no real difference in either.
+#   Round 3: NB around its best, adding k=9; logistic regression at k=8
+#     and down to alpha 1e-8.
 # Naive Bayes: every combination of these is tried. The features are
-# frequencies adding up to 1 per sequence, so useful smoothing (alpha) is
-# small: the first run (GB273, v1) scored best at 0.01, the smallest tried,
-# and worse at 0.1 and 1. The threshold made almost no difference
-# (+/-0.001) between 0.01 and 0.10, so two are kept.
-k_values = [5, 6, 7, 8]
-ambiguity_thresholds = [0.03, 0.10]
-naive_bayes_alphas = [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2]
+# frequencies adding up to 1 per sequence, so useful smoothing is small.
+k_values = [7, 8, 9]
+ambiguity_thresholds = [0.10]
+naive_bayes_alphas = [3e-5, 1e-4, 3e-4]
 # Logistic regression (slower): a smaller, targeted set, on features
 # rescaled to unit length
-logistic_k_values = [6]
+logistic_k_values = [6, 8]
 logistic_ambiguity_threshold = 0.03
-logistic_alphas = [1e-7, 1e-6]
+logistic_alphas = [1e-8, 1e-7]
 logistic_max_iter = 15
 threads = 8
 random_state = 273
