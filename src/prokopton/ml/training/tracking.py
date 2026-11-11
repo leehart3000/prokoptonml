@@ -11,7 +11,9 @@ from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 from typing import Any, Protocol
 
-__all__ = ["MlflowTracker", "Tracker", "own_types"]
+from prokopton.ml.config import AppConfig
+
+__all__ = ["MlflowTracker", "Tracker", "mlflow_tracker", "own_types"]
 
 
 class Tracker(Protocol):
@@ -137,3 +139,12 @@ class MlflowTracker:
             f"models:/{registered_name}/{found.version}"
         )
         return model, str(found.version)
+
+
+def mlflow_tracker(config: AppConfig, model: str) -> Tracker:
+    """Make an MLflow tracker for a classifier's experiment."""
+    return MlflowTracker(
+        config.mlflow.tracking_uri,
+        config.mlflow.artifact_dir,
+        config.classifier(model).training.experiment,
+    )

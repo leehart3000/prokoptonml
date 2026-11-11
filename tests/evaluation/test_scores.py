@@ -6,6 +6,7 @@ import pytest
 from prokopton.ml.evaluation.scores import (
     Predictions,
     by_ambiguity,
+    by_group,
     calibration,
     coverage,
     per_class,
@@ -41,6 +42,7 @@ def test_empty_predictions() -> None:
     assert len(Predictions()) == 0
     assert Predictions().metrics()["accuracy"] == 0.0
     assert calibration(Predictions(), 5) == []
+    assert by_group(Predictions()) == []
 
 
 def test_by_ambiguity_groups_records() -> None:
@@ -81,3 +83,21 @@ def test_per_class_scores() -> None:
     assert scores["b"].recall == 0.5
     assert scores["c"].f1 == 1.0
     assert scores["b"].support == 2
+
+
+def test_by_group_scores_each_group_largest_first() -> None:
+    predictions = Predictions()
+    probabilities = np.array([[0.9, 0.1], [0.2, 0.8], [0.6, 0.4], [0.3, 0.7]])
+    predictions.add(
+        np.array([0, 1, 1, 1]),
+        probabilities,
+        np.zeros(4),
+        np.array(["Metazoa", "Metazoa", "Metazoa", "Fungi"], dtype=object),
+    )
+    predictions.add(np.array([0]), np.array([[0.9, 0.1]]), np.zeros(1))
+
+    rows = by_group(predictions)
+
+    assert [(row.group, row.records) for row in rows] == [("Metazoa", 3), ("Fungi", 1)]
+    assert rows[0].accuracy == pytest.approx(2 / 3)
+    assert rows[1].accuracy == 1.0

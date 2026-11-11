@@ -38,7 +38,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import Normalizer, normalize
 
-from prokopton.ml.config import RouterTrainingConfig
+from prokopton.ml.config import ClassifierTrainingConfig
 from prokopton.ml.features.fragments import random_fragments
 from prokopton.ml.features.kmers import KmerVectorizer
 from prokopton.ml.training.metrics import classification_metrics
@@ -99,7 +99,7 @@ class TrainingResult:
     model_version: str
 
 
-def candidates(rules: RouterTrainingConfig) -> list[Candidate]:
+def candidates(rules: ClassifierTrainingConfig) -> list[Candidate]:
     """List every candidate in the configured search, ordered by ``k``."""
     found = [
         Candidate("naive_bayes", k, threshold, alpha)
@@ -166,7 +166,7 @@ def naive_bayes_from_counts(
     return model
 
 
-def _logistic(candidate: Candidate, rules: RouterTrainingConfig) -> SGDClassifier:
+def _logistic(candidate: Candidate, rules: ClassifierTrainingConfig) -> SGDClassifier:
     return SGDClassifier(
         loss="log_loss",
         alpha=candidate.alpha,
@@ -207,7 +207,7 @@ VALIDATION_SETS = (
 
 
 def with_fragments(
-    samples: dict[str, RouterSample], rules: RouterTrainingConfig
+    samples: dict[str, RouterSample], rules: ClassifierTrainingConfig
 ) -> dict[str, RouterSample]:
     """Add random fragments to training, and fragment sets for validation.
 
@@ -244,7 +244,8 @@ def with_fragments(
         ),
     )
     for split in ("val_known", "val_novel"):
-        found[f"{split}_fragments"] = cut(samples[split], 1)
+        if split in samples:
+            found[f"{split}_fragments"] = cut(samples[split], 1)
     return found
 
 
@@ -272,7 +273,7 @@ def _fitted(
     features: sparse.csr_matrix,
     labels: np.ndarray,
     keep: np.ndarray,
-    rules: RouterTrainingConfig,
+    rules: ClassifierTrainingConfig,
 ) -> Iterator[tuple[Candidate, Any, float]]:
     """Fit each candidate in a group sharing k, model and threshold.
 
@@ -301,14 +302,15 @@ def _fitted(
 
 def train_router(
     samples: dict[str, RouterSample],
-    rules: RouterTrainingConfig,
+    rules: ClassifierTrainingConfig,
     tracker: Tracker,
     tags: dict[str, str],
 ) -> TrainingResult:
     """Try every candidate, then save and register the best.
 
     Args:
-        samples: The ``train``, ``val_known`` and ``val_novel`` samples.
+        samples: The ``train`` sample and at least one of ``val_known`` and
+            ``val_novel``.
         rules: The search and naming settings.
         tracker: Where runs, metrics and the model are recorded.
         tags: Descriptive labels (e.g. data lineage) for every run.
@@ -316,9 +318,8 @@ def train_router(
     Raises:
         ValueError: If a sample is missing.
     """
-    missing = {"train", "val_known", "val_novel"} - samples.keys()
-    if missing:
-        msg = f"Missing samples: {sorted(missing)}"
+    if "train" not in samples or not {"val_known", "val_novel"} & samples.keys():
+        msg = "Need a train sample and at least one of val_known and val_novel"
         raise ValueError(msg)
     search = candidates(rules)
     originals = samples["train"].sequences
@@ -328,7 +329,7 @@ def train_router(
     best: tuple[Candidate, list[tuple[str, Any]], dict[str, float]] | None = None
 
     with tracker.run("router-search") as parent_run_id:
-        tracker.set_tags({**tags, "stage": "train", "model_role": "router"})
+        tracker.set_tags({"stage": "train", "model_role": "router", **tags})
         tracker.log_params(
             {
                 "candidates": len(search),
@@ -386,18 +387,22 @@ def train_router(
                             }
                         )
                         tracker.log_metrics(metrics)
+                    scores = ", ".join(
+                        f"{name} {metrics[f'{name}_macro_f1']:.4f}"
+                        for name in ("val_known", "val_novel")
+                        if f"{name}_macro_f1" in metrics
+                    )
+                    passes = (
+                        f" after {metrics['iterations']:.0f} iterations"
+                        if "iterations" in metrics
+                        else ""
+                    )
                     logger.info(
-                        "%s: selection %.4f (known macro-F1 %.4f, "
-                        "novel macro-F1 %.4f)%s",
+                        "%s: selection %.4f (macro-F1: %s)%s",
                         candidate.name,
                         metrics["selection_score"],
-                        metrics["val_known_macro_f1"],
-                        metrics["val_novel_macro_f1"],
-                        (
-                            f" after {metrics['iterations']:.0f} iterations"
-                            if "iterations" in metrics
-                            else ""
-                        ),
+                        scores,
+                        passes,
                     )
                     if (
                         best is None

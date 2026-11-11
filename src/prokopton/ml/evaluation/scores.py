@@ -28,8 +28,10 @@ __all__ = [
     "CalibrationBin",
     "ClassScore",
     "CoveragePoint",
+    "GroupScore",
     "Predictions",
     "by_ambiguity",
+    "by_group",
     "calibration",
     "coverage",
     "fragment",
@@ -45,6 +47,15 @@ class AmbiguityBin(_Row):
     """Scores for records whose ambiguous fraction is in one range."""
 
     bin: str
+    records: int
+    accuracy: float
+    macro_f1: float
+
+
+class GroupScore(_Row):
+    """Scores for records from one group of organisms."""
+
+    group: str
     records: int
     accuracy: float
     macro_f1: float
@@ -85,17 +96,37 @@ class Predictions:
     ranked: list[np.ndarray] = field(default_factory=list)
     confidence: list[np.ndarray] = field(default_factory=list)
     ambiguity: list[np.ndarray] = field(default_factory=list)
+    group: list[np.ndarray] = field(default_factory=list)
 
     def add(
-        self, truth: np.ndarray, probabilities: np.ndarray, ambiguity: np.ndarray
+        self,
+        truth: np.ndarray,
+        probabilities: np.ndarray,
+        ambiguity: np.ndarray,
+        group: np.ndarray | None = None,
     ) -> None:
-        """Add a batch of true class numbers and predicted probabilities."""
+        """Add a batch of true class numbers and predicted probabilities.
+
+        ``group`` optionally names each record's group of organisms.
+        """
         if truth.size == 0:
             return
         self.truth.append(truth.astype(np.int32))
         self.ranked.append(top_ranks(probabilities, TOP_K).astype(np.int32))
         self.confidence.append(probabilities.max(axis=1).astype(np.float64))
         self.ambiguity.append(ambiguity.astype(np.float64))
+        self.group.append(
+            np.full(truth.size, "", dtype=object)
+            if group is None
+            else np.asarray(group, dtype=object)
+        )
+
+    def groups(self) -> np.ndarray:
+        """Each record's group of organisms ("" where not given)."""
+        if not self.group:
+            return np.zeros(0, dtype=object)
+        groups: np.ndarray = np.concatenate(self.group)
+        return groups
 
     def arrays(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Return truth, ranked, confidence and ambiguity as single arrays."""
@@ -151,6 +182,25 @@ def by_ambiguity(
             )
         )
     return rows
+
+
+def by_group(predictions: Predictions) -> list[GroupScore]:
+    """Score records grouped by their group of organisms, largest first."""
+    truth, ranked, confidence, _ = predictions.arrays()
+    groups = predictions.groups()
+    rows = []
+    for name in sorted({str(g) for g in groups if g}):
+        mask = groups == name
+        found = metrics_from_ranks(truth[mask], ranked[mask], confidence[mask])
+        rows.append(
+            GroupScore(
+                group=name,
+                records=int(mask.sum()),
+                accuracy=found["accuracy"],
+                macro_f1=found["macro_f1"],
+            )
+        )
+    return sorted(rows, key=lambda row: -row.records)
 
 
 def calibration(predictions: Predictions, bins: int) -> list[CalibrationBin]:

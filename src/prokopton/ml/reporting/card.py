@@ -1,10 +1,11 @@
-"""Build the router's model card from the pipeline's reports.
+"""Build a classifier's model card from the pipeline's reports.
 
 A model card explains what a model is for, how it was made, how well it
-works and where it does not. This one is generated (never edited by hand)
-from the sample, train, calibration and evaluation reports, so it always
-matches the registered model. Hand-written notes can be included from a
-Markdown file. Two SVG charts are written beside it.
+works and where it does not. Cards are generated (never edited by hand) from
+the sample, train, calibration and evaluation reports, so they always match
+the registered model. The description of the model's task and intended use,
+and any extra limitations, come from the app config; hand-written notes can
+be included from a Markdown file. Two SVG charts are written beside it.
 """
 
 import logging
@@ -19,13 +20,10 @@ from prokopton.ml.pipeline.sample import SampleReport
 from prokopton.ml.pipeline.train import TrainReport
 from prokopton.ml.reporting.charts import Series, line_chart, reliability_chart
 
-__all__ = ["CARD_NAME", "CardError", "CardFiles", "build_router_card"]
+__all__ = ["CardError", "CardFiles", "build_card"]
 
 logger = logging.getLogger(__name__)
 
-CARD_NAME = "router.md"
-FRAGMENTS_CHART = "router-fragments.svg"
-RELIABILITY_CHART = "router-reliability.svg"
 _HARDEST = 10
 _MIN_SUPPORT = 20
 
@@ -65,6 +63,8 @@ class _Reports:
     train: TrainReport
     calibration: CalibrationReport | None
     evaluation: EvaluationReport
+    # Display names of the test sets
+    names: dict[str, str]
 
 
 def _count(number: int, noun: str) -> str:
@@ -84,9 +84,15 @@ def _table(header: list[str], rows: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
-def _read(config: AppConfig) -> _Reports:
+def _main_set(reports: _Reports) -> str:
+    """The test set that best shows real use: clean novel species if any."""
+    splits = reports.evaluation.splits
+    return "test_novel_clean" if "test_novel_clean" in splits else "test_known"
+
+
+def _read(config: AppConfig, model: str) -> _Reports:
     folder = f"midori2_{config.data.source.release.lower()}"
-    router_dir = config.data.paths.models_dir / "router"
+    router_dir = config.data.paths.models_dir / model
     paths = {
         "sample": config.data.paths.samples_dir
         / folder
@@ -100,6 +106,13 @@ def _read(config: AppConfig) -> _Reports:
         msg = f"{', '.join(missing)} not found; run the pipeline first"
         raise CardError(msg)
     calibration_path = router_dir / calibrate.REPORT_NAME
+    evaluation = EvaluationReport.model_validate_json(
+        paths["evaluation"].read_text("utf-8")
+    )
+    names = dict(_SET_NAMES)
+    if not any(name.startswith("test_novel") for name in evaluation.splits):
+        # Without held-out species, "known species" would be misleading
+        names["test_known"] = "Test set"
     reports = _Reports(
         sample=SampleReport.model_validate_json(paths["sample"].read_text("utf-8")),
         train=TrainReport.model_validate_json(paths["train"].read_text("utf-8")),
@@ -108,9 +121,8 @@ def _read(config: AppConfig) -> _Reports:
             if calibration_path.exists()
             else None
         ),
-        evaluation=EvaluationReport.model_validate_json(
-            paths["evaluation"].read_text("utf-8")
-        ),
+        evaluation=evaluation,
+        names=names,
     )
     expected = reports.train.model_version
     if reports.calibration is not None:
@@ -147,7 +159,7 @@ def _fragments_chart(reports: _Reports, min_length: int) -> str:
     marker = float(lengths.index(min_length)) if min_length in lengths else None
     series = [
         Series(
-            _SET_NAMES[name],
+            reports.names[name],
             [p.metrics["accuracy"] for p in _fragment_points(fragments[name])],
         )
         for name in names
@@ -165,22 +177,26 @@ def _fragments_chart(reports: _Reports, min_length: int) -> str:
 
 
 def _reliability_chart(reports: _Reports) -> str:
-    bins = reports.evaluation.splits["test_novel_clean"].calibration
+    main = _main_set(reports)
+    bins = reports.evaluation.splits[main].calibration
     return reliability_chart(
-        "Reliability: novel species (clean), whole sequences",
+        f"Reliability: {reports.names[main].lower()}, whole sequences",
         [b.mean_confidence for b in bins],
         [b.accuracy for b in bins],
         [b.records for b in bins],
     )
 
 
-def _training_data(config: AppConfig) -> str:
+def _training_data(config: AppConfig, model: str) -> str:
     source = config.data.source
+    genes = config.classifier(model).genes
+    covered = ", ".join(genes) if len(genes) <= 3 else f"{len(genes)} genes"
     link = f"[doi:{source.doi}](https://doi.org/{source.doi})"
-    return f"MIDORI2 {source.release} ({config.router.gene}), {link}, {source.licence}"
+    return f"MIDORI2 {source.release} ({covered}), {link}, {source.licence}"
 
 
-def _model_section(config: AppConfig, reports: _Reports) -> str:
+def _model_section(config: AppConfig, model_name: str, reports: _Reports) -> str:
+    card = config.classifier(model_name).card
     train_report = reports.train
     evaluation = reports.evaluation
     kind = {"logistic": "Logistic regression", "naive_bayes": "Naive Bayes"}
@@ -189,8 +205,8 @@ def _model_section(config: AppConfig, reports: _Reports) -> str:
     rows = [
         ["Registered model", f"`{evaluation.registered_model}`"],
         ["Version", f"{evaluation.model_version} (alias `@{evaluation.alias}`)"],
-        ["Task", "Predict the broad group (for animals, the order) of a COI barcode"],
-        ["Input", "A DNA sequence (A, C, G, T; ambiguous bases allowed)"],
+        ["Task", card.task],
+        ["Input", card.input],
         ["Output", f"One of {len(reports.sample.labels)} labels, with a confidence"],
         [
             "Model",
@@ -212,27 +228,20 @@ def _model_section(config: AppConfig, reports: _Reports) -> str:
         ],
         [
             "Training data",
-            _training_data(config),
+            _training_data(config, model_name),
         ],
         ["Built with", f"prokopton-ml {evaluation.prokopton_ml_version}"],
     ]
     return "## Model\n\n" + _table(["", ""], rows)
 
 
-def _use_section(config: AppConfig) -> str:
-    serving = config.router.serving
-    return f"""## Intended use
-
-The router is the first step of identification: it
-decides which broad group (or, for animals, which order) a COI barcode most
-likely belongs to, so a specialist model can identify it further. It is
-meant for COI sequences of at least {serving.min_length} bases; shorter
-sequences are declined, and sequences under {serving.short_length} bases are
-shown with a note that accuracy is lower.
-
-It is not meant for identifying species on its own, for other genes or
-markers, for mixed samples, or for decisions with legal, medical or
-regulatory consequences without expert review."""
+def _use_section(config: AppConfig, model: str) -> str:
+    classifier = config.classifier(model)
+    serving = classifier.serving
+    text = classifier.card.intended_use.strip().format(
+        min_length=serving.min_length, short_length=serving.short_length
+    )
+    return f"## Intended use\n\n{text}" if text else ""
 
 
 def _data_section(reports: _Reports) -> str:
@@ -247,15 +256,24 @@ def _data_section(reports: _Reports) -> str:
         for name, split in sample_report.splits.items()
     ]
     rules = sample_report.rules
-    return (
-        "## Data\n\n"
+    novel = any(name.startswith("test_novel") for name in reports.evaluation.splits)
+    splitting = (
         "Records were split by species: *known* species appear in training, "
         "while *novel* species are held out entirely, so their scores show how "
         "the model handles species it has never seen. Novel-species records "
         "with a near-copy (99% identity or more) in training were found with "
-        "VSEARCH; *clean* records have none, and are the honest measure.\n\n"
+        "VSEARCH; *clean* records have none, and are the honest measure."
+        if novel
+        else "Records were split into training, validation and test sets; "
+        "identical sequences always fall in the same set."
+    )
+    spread = "species" if rules.diversity == "species" else "orders"
+    return (
+        "## Data\n\n"
+        f"{splitting}\n\n"
         f"Training samples were capped at {rules.train_cap:,} records per class "
-        f"(validation: {rules.eval_cap:,}), keeping as many species as possible. "
+        f"(validation: {rules.eval_cap:,}), spread across as many {spread} as "
+        "possible. "
         f"Classes with under {rules.min_class_records} records were left out "
         f"({len(sample_report.dropped_classes):,} of them), and "
         f"{sample_report.excluded_near_duplicates:,} validation records with a "
@@ -332,7 +350,7 @@ def _results_section(reports: _Reports) -> str:
     evaluation = reports.evaluation
     rows = [
         [
-            _SET_NAMES.get(name, name),
+            reports.names.get(name, name),
             f"{scores.records:,}",
             _pct(scores.metrics["accuracy"]),
             _pct(scores.metrics["top5_accuracy"]),
@@ -367,7 +385,7 @@ def _results_section(reports: _Reports) -> str:
     )
 
 
-def _fragments_section(reports: _Reports) -> str:
+def _fragments_section(reports: _Reports, chart: str) -> str:
     fragments = reports.evaluation.fragments
     names = [n for n in ("test_known", "test_novel_clean") if n in fragments]
     points = {name: _fragment_points(fragments[name]) for name in names}
@@ -380,18 +398,19 @@ def _fragments_section(reports: _Reports) -> str:
         rows.append(row)
     header = ["Length"]
     for name in names:
-        header += [f"{_SET_NAMES[name]}: accuracy", "confidence"]
+        header += [f"{reports.names[name]}: accuracy", "confidence"]
     fraction = reports.evaluation.rules.fragment_fraction
     return (
         "## How short can you go?\n\n"
         f"A random {_pct(fraction, 0)} of each test set was cut to each length "
         "at a random position, and predicted again.\n\n"
-        f"![Accuracy by sequence length]({FRAGMENTS_CHART})\n\n" + _table(header, rows)
+        f"![Accuracy by sequence length]({chart})\n\n" + _table(header, rows)
     )
 
 
-def _reliability_section(reports: _Reports) -> str:
-    novel = reports.evaluation.splits["test_novel_clean"]
+def _reliability_section(reports: _Reports, chart: str) -> str:
+    main = _main_set(reports)
+    novel = reports.evaluation.splits[main]
     rows = [
         [_pct(point.threshold, 0), _pct(point.coverage), _pct(point.accuracy)]
         for point in novel.coverage
@@ -400,9 +419,9 @@ def _reliability_section(reports: _Reports) -> str:
         "## Can the confidence be trusted?\n\n"
         "Each point is a group of predictions with similar confidence; on the "
         "diagonal, confidence matches how often the model is right.\n\n"
-        f"![Reliability chart]({RELIABILITY_CHART})\n\n"
-        "Accepting only predictions at or above a confidence threshold (novel "
-        "species, clean):\n\n"
+        f"![Reliability chart]({chart})\n\n"
+        "Accepting only predictions at or above a confidence threshold "
+        f"({reports.names[main].lower()}):\n\n"
         + _table(["Threshold", "Share accepted", "Accuracy of those"], rows)
     )
 
@@ -423,7 +442,7 @@ def _ambiguity_section(reports: _Reports) -> str:
         rows.append(row)
     header = ["Ambiguous share"]
     for name in names:
-        header += [f"{_SET_NAMES[name]}: records", "accuracy"]
+        header += [f"{reports.names[name]}: records", "accuracy"]
     return (
         "## Ambiguous bases\n\n"
         "Scores by the share of a sequence's bases that are ambiguous (such as "
@@ -432,7 +451,8 @@ def _ambiguity_section(reports: _Reports) -> str:
 
 
 def _hardest_section(reports: _Reports) -> str:
-    scores = reports.evaluation.per_class.get("test_novel_clean", {})
+    main = _main_set(reports)
+    scores = reports.evaluation.per_class.get(main, {})
     candidates = [
         (label, score)
         for label, score in scores.items()
@@ -451,7 +471,7 @@ def _hardest_section(reports: _Reports) -> str:
     ]
     return (
         "## Hardest classes\n\n"
-        f"The {_HARDEST} classes with the lowest F1 on novel species (clean), "
+        f"The {_HARDEST} classes with the lowest F1 on {reports.names[main].lower()}, "
         f"among those with at least {_MIN_SUPPORT} test records. *Precision*: "
         "of the records predicted as this class, the share that were; "
         "*recall*: of this class's records, the share found.\n\n"
@@ -459,32 +479,89 @@ def _hardest_section(reports: _Reports) -> str:
     )
 
 
-def _limitations_section(config: AppConfig, reports: _Reports) -> str:
-    serving = config.router.serving
-    known = {
-        p.length: p for p in reports.evaluation.fragments.get("test_novel_clean", [])
-    }
-    shortest = known.get(serving.min_length)
+def _limitations_section(config: AppConfig, model: str, reports: _Reports) -> str:
+    classifier = config.classifier(model)
+    serving = classifier.serving
+    main = _main_set(reports)
+    lengths = {p.length: p for p in reports.evaluation.fragments.get(main, [])}
+    shortest = lengths.get(serving.min_length)
     at_minimum = (
         f" (at {serving.min_length} bases, {_pct(shortest.metrics['accuracy'], 0)} "
-        "accurate for novel species)"
+        f"accurate for {reports.names[main].lower()})"
         if shortest
         else ""
     )
-    return f"""## Limitations
+    items = [
+        f"**Short sequences** are much less accurate{at_minimum}; below "
+        f"{serving.min_length} bases they are declined.",
+        "**Rare classes** have few reference records, so their scores vary "
+        "more (see *Hardest classes*). Classes too rare to train on are never "
+        "predicted.",
+        "**The reference data reflects what has been sequenced**: GenBank "
+        "holds far more records for some groups and regions than others, and "
+        "some records are misidentified.",
+        *classifier.card.limitations,
+        "**Confidence** is calibrated on validation data like the test data; "
+        "on sequences unlike the reference data (contaminated, chimeric, or "
+        "from a poorly sampled group) it may be too high.",
+    ]
+    return "## Limitations\n\n" + "\n".join(f"- {item}" for item in items)
 
-- **Short sequences** are much less accurate{at_minimum}; below
-  {serving.min_length} bases, confidence is also too high, so they are declined.
-- **Rare groups** have few reference records, so their scores vary more
-  (see *Hardest classes*). Groups too rare to train on are never predicted.
-- **The reference data reflects what has been sequenced**: GenBank holds far
-  more records for some groups and regions than others, and some records
-  are misidentified.
-- **Only COI** sequences are supported; other markers give meaningless
-  results.
-- **Confidence** is calibrated on validation data like the test data; on
-  sequences unlike the reference data (contaminated, chimeric, or from a
-  poorly sampled group) it may be too high."""
+
+def _groups_section(reports: _Reports) -> str:
+    splits = reports.evaluation.splits
+    names = [n for n in ("test_known", "test_novel_clean") if n in splits]
+    if not any(splits[name].by_group for name in names):
+        return ""
+    rows = [
+        [
+            reports.names[name],
+            group.group,
+            f"{group.records:,}",
+            _pct(group.accuracy),
+            f"{group.macro_f1:.3f}",
+        ]
+        for name in names
+        for group in splits[name].by_group
+    ]
+    return (
+        "## By group of organisms\n\n"
+        "Scores for each broad group, to show the model works across them "
+        "rather than relying on the groups each class is most common in.\n\n"
+        + _table(["Test set", "Group", "Records", "Accuracy", "Macro-F1"], rows)
+    )
+
+
+def _orientation_section(reports: _Reports) -> str:
+    fragments = reports.evaluation.fragments
+    names = [
+        name
+        for name, points in fragments.items()
+        if any(p.forward_strand_share is not None for p in points)
+    ]
+    if not names:
+        return ""
+    points = {name: _fragment_points(fragments[name]) for name in names}
+    rows = []
+    for index, point in enumerate(points[names[0]]):
+        row = [str(point.length) if point.length else "Whole"]
+        for name in names:
+            share = points[name][index].forward_strand_share
+            row.append(_pct(share) if share is not None else "n/a")
+        rows.append(row)
+    return (
+        "## Which strand?\n\n"
+        "A sequence may be given as either strand. Each test fragment was also "
+        "predicted as its reverse complement (the other strand); this is how "
+        "often the original strand got the more confident prediction, so "
+        "choosing the more confident strand finds the right one.\n\n"
+        + _table(["Length", *[reports.names[name] for name in names]], rows)
+    )
+
+
+def _first_records_sha(evaluation: EvaluationReport) -> str:
+    keys = sorted(k for k in evaluation.data_sha256 if k.startswith("records"))
+    return evaluation.data_sha256[keys[0]] if keys else ""
 
 
 def _provenance_section(reports: _Reports) -> str:
@@ -492,7 +569,7 @@ def _provenance_section(reports: _Reports) -> str:
     rows = [
         ["Training run", f"`{reports.train.parent_run_id}`"],
         ["Evaluation run", f"`{evaluation.run_id}`"],
-        ["Test data SHA-256", f"`{evaluation.data_sha256.get('records', '')[:16]}…`"],
+        ["Test data SHA-256", f"`{_first_records_sha(evaluation)[:16]}…`"],
         ["Training sample SHA-256", f"`{reports.train.sample_sha256['train'][:16]}…`"],
         ["Evaluated", evaluation.finished_at.strftime("%Y-%m-%d %H:%M UTC")],
     ]
@@ -501,38 +578,45 @@ def _provenance_section(reports: _Reports) -> str:
     return "## Provenance\n\n" + _table(["", ""], rows)
 
 
-def build_router_card(config: AppConfig) -> CardFiles:
-    """Write the router's model card and its two charts.
+def build_card(config: AppConfig, model: str = "router") -> CardFiles:
+    """Write a classifier's model card and its two charts.
+
+    The files are named after the model: ``<model>.md``,
+    ``<model>-fragments.svg`` and ``<model>-reliability.svg``.
 
     Raises:
         CardError: If a report is missing, or the reports describe different
             model versions.
     """
-    reports = _read(config)
-    card = config.router.card
+    classifier = config.classifier(model)
+    reports = _read(config, model)
+    card = classifier.card
     card.output_dir.mkdir(parents=True, exist_ok=True)
-    fragments_chart = card.output_dir / FRAGMENTS_CHART
-    reliability_path = card.output_dir / RELIABILITY_CHART
+    fragments_chart = card.output_dir / f"{model}-fragments.svg"
+    reliability_path = card.output_dir / f"{model}-reliability.svg"
     fragments_chart.write_text(
-        _fragments_chart(reports, config.router.serving.min_length), "utf-8"
+        _fragments_chart(reports, classifier.serving.min_length), "utf-8"
     )
     reliability_path.write_text(_reliability_chart(reports), "utf-8")
 
     sections = [
-        f"# {config.title}: router model card",
+        f"# {config.title}: {card.title}",
         "<!-- Generated by `prokopton-ml card` from the pipeline's reports. "
-        "Do not edit by hand; edit the notes file or the code instead. -->",
-        _model_section(config, reports),
-        _use_section(config),
+        "Do not edit by hand; edit the app config, the notes file or the code "
+        "instead. -->",
+        _model_section(config, model, reports),
+        _use_section(config, model),
         _data_section(reports),
         _training_section(reports),
         _calibration_section(reports),
         _results_section(reports),
-        _fragments_section(reports),
-        _reliability_section(reports),
+        _groups_section(reports),
+        _fragments_section(reports, fragments_chart.name),
+        _orientation_section(reports),
+        _reliability_section(reports, reliability_path.name),
         _ambiguity_section(reports),
         _hardest_section(reports),
-        _limitations_section(config, reports),
+        _limitations_section(config, model, reports),
     ]
     if card.notes is not None:
         if not card.notes.exists():
@@ -541,8 +625,9 @@ def build_router_card(config: AppConfig) -> CardFiles:
         notes = card.notes.read_text("utf-8").strip()
         sections.append(f"## Development notes\n\n{notes}")
     sections.append(_provenance_section(reports))
-    output = card.output_dir / CARD_NAME
-    output.write_text("\n\n".join(sections) + "\n", "utf-8")
+    output = card.output_dir / f"{model}.md"
+    text = "\n\n".join(section for section in sections if section)
+    output.write_text(text + "\n", "utf-8")
     logger.info("Wrote %s, %s and %s", output, fragments_chart, reliability_path)
     return CardFiles(
         card=output,

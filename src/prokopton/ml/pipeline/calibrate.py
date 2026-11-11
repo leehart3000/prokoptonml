@@ -13,13 +13,14 @@ Outputs ``<models_dir>/router/_calibration_report.json``.
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
+from functools import partial
 
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.config import AppConfig, RouterCalibrationConfig
+from prokopton.ml.config import AppConfig, ClassifierCalibrationConfig
 from prokopton.ml.features.fragments import random_fragments
 from prokopton.ml.pipeline.train import read_sample
 from prokopton.ml.training.calibration import (
@@ -29,7 +30,7 @@ from prokopton.ml.training.calibration import (
 )
 from prokopton.ml.training.metrics import metrics_from_ranks, top_ranks
 from prokopton.ml.training.router import predict_proba
-from prokopton.ml.training.tracking import MlflowTracker, Tracker
+from prokopton.ml.training.tracking import Tracker, mlflow_tracker
 
 __all__ = ["REPORT_NAME", "CalibrationReport", "CalibrationStageError", "calibrate"]
 
@@ -49,10 +50,11 @@ class CalibrationReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     app: str
+    model: str = "router"
     release: str
     gene: str
     prokopton_ml_version: str
-    rules: RouterCalibrationConfig
+    rules: ClassifierCalibrationConfig
     started_at: datetime
     finished_at: datetime
     registered_model: str
@@ -66,14 +68,6 @@ class CalibrationReport(BaseModel):
     before: dict[str, dict[str, float]]
     after: dict[str, dict[str, float]]
     run_id: str
-
-
-def _mlflow_tracker(config: AppConfig) -> Tracker:
-    return MlflowTracker(
-        config.mlflow.tracking_uri,
-        config.mlflow.artifact_dir,
-        config.router.training.experiment,
-    )
 
 
 def _scores(
@@ -91,35 +85,42 @@ def _scores(
 
 def calibrate(
     config: AppConfig,
-    tracker_factory: Callable[[AppConfig], Tracker] = _mlflow_tracker,
+    tracker_factory: Callable[[AppConfig], Tracker] | None = None,
+    *,
+    model: str = "router",
 ) -> CalibrationReport:
     """Fit the length-aware temperature, register the result, write a report.
+
+    ``model`` says which classifier to calibrate (``router`` or ``marker``).
 
     Raises:
         CalibrationStageError: If the validation samples are missing.
     """
     started_at = datetime.now(UTC)
-    rules = config.router.calibration
-    training = config.router.training
+    classifier = config.classifier(model)
+    rules = classifier.calibration
+    training = classifier.training
+    make_tracker = tracker_factory or partial(mlflow_tracker, model=model)
     folder = f"midori2_{config.data.source.release.lower()}"
-    sample_root = config.data.paths.samples_dir / folder / "router"
-    paths = {name: sample_root / f"{name}.parquet" for name in _SPLITS}
+    sample_root = config.data.paths.samples_dir / folder / model
+    splits = [s for s in _SPLITS if s in classifier.sample.eval_splits]
+    paths = {name: sample_root / f"{name}.parquet" for name in splits}
     missing = [str(path) for path in paths.values() if not path.exists()]
     if missing:
         msg = f"{', '.join(missing)} not found; run the sample stage first"
         raise CalibrationStageError(msg)
 
-    tracker = tracker_factory(config)
-    model, base_version = tracker.load_model(training.registered_model, training.alias)
-    if isinstance(model, LengthCalibratedClassifier):
-        model = model.model
+    tracker = make_tracker(config)
+    loaded, base_version = tracker.load_model(training.registered_model, training.alias)
+    if isinstance(loaded, LengthCalibratedClassifier):
+        loaded = loaded.model
     logger.info("Calibrating %s version %s", training.registered_model, base_version)
 
     rng = np.random.default_rng(rules.random_state)
     sequences: list[str] = []
     labels: list[str] = []
     sets: list[str] = []
-    for split in _SPLITS:
+    for split in splits:
         sample = read_sample(paths[split])
         pieces = random_fragments(
             sample.sequences, rules.fragment_min_length, rules.fragment_max_length, rng
@@ -128,7 +129,7 @@ def calibrate(
             sequences += chosen
             labels += sample.labels
             sets += [name] * len(chosen)
-    index = {str(label): i for i, label in enumerate(model.classes_)}
+    index = {str(label): i for i, label in enumerate(loaded.classes_)}
     known = np.array([label in index for label in labels])
     truth = np.array(
         [index[label] for label in labels if label in index], dtype=np.int64
@@ -136,7 +137,7 @@ def calibrate(
     sequences = [s for s, keep in zip(sequences, known, strict=True) if keep]
     set_names = np.array(sets, dtype=object)[known]
 
-    raw = predict_proba(model, sequences, rules.threads, "predict_log_proba")
+    raw = predict_proba(loaded, sequences, rules.threads, "predict_log_proba")
     lengths = [len(sequence) for sequence in sequences]
     a, b, nll_before, nll_after = fit_length_temperature(raw, truth, lengths)
     scaled = scaled_log_probabilities(raw, np.log(np.maximum(lengths, 1)), a, b)
@@ -153,16 +154,16 @@ def calibrate(
             after[name]["accuracy"],
         )
 
-    calibrated = LengthCalibratedClassifier(model, a, b)
+    calibrated = LengthCalibratedClassifier(loaded, a, b)
     with tracker.run("router-calibration") as run_id:
         tracker.set_tags(
             {
                 "app": config.name,
                 "release": config.data.source.release,
-                "gene": config.router.gene,
+                "gene": ",".join(classifier.genes),
                 "prokopton_ml_version": __version__,
                 "stage": "calibrate",
-                "model_role": "router",
+                "model_role": model,
                 "base_model_version": base_version,
             }
         )
@@ -196,8 +197,9 @@ def calibrate(
 
     report = CalibrationReport(
         app=config.name,
+        model=model,
         release=config.data.source.release,
-        gene=config.router.gene,
+        gene=",".join(classifier.genes),
         prokopton_ml_version=__version__,
         rules=rules,
         started_at=started_at,
@@ -214,7 +216,7 @@ def calibrate(
         after=after,
         run_id=run_id,
     )
-    output = config.data.paths.models_dir / "router" / REPORT_NAME
+    output = config.data.paths.models_dir / model / REPORT_NAME
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     logger.info("Wrote %s", output)

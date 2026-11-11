@@ -14,19 +14,20 @@ from pydantic import Field, field_validator, model_validator
 __all__ = [
     "ALLOWED_URL_SCHEMES",
     "AppConfig",
+    "ClassifierCalibrationConfig",
+    "ClassifierCardConfig",
+    "ClassifierConfig",
+    "ClassifierEvaluationConfig",
+    "ClassifierSampleConfig",
+    "ClassifierServingConfig",
+    "ClassifierTrainingConfig",
     "DataConfig",
     "DataPathsConfig",
     "LeakageConfig",
     "Midori2SourceConfig",
     "MlflowConfig",
-    "RouterCalibrationConfig",
-    "RouterCardConfig",
-    "RouterConfig",
-    "RouterEvaluationConfig",
-    "RouterSampleConfig",
-    "RouterServingConfig",
-    "RouterTrainingConfig",
     "SplitConfig",
+    "UnknownClassifierError",
     "ValidationConfig",
 ]
 
@@ -173,17 +174,21 @@ class LeakageConfig(ConfigModel):
     )
 
 
-class RouterSampleConfig(ConfigModel):
-    """How the router's training and validation samples are drawn.
+class ClassifierSampleConfig(ConfigModel):
+    """How a classifier's training and validation samples are drawn.
 
-    Each class (an animal order, or a group for non-animals) is capped, so a
-    few huge orders do not dominate. Within a class, records are taken from as
-    many different species as possible. ``max_ambiguous_fraction`` should be
-    the loosest value that training will try; stricter thresholds are applied
-    later, when training.
+    Each class (for the router, an animal order or a group for non-animals;
+    for the marker classifier, a gene) is capped, so a few huge classes do
+    not dominate. Within a class, records are taken from as many different
+    species (or orders, with ``diversity = "order"``) as possible.
+    ``max_ambiguous_fraction`` should be the loosest value that training will
+    try; stricter thresholds are applied later, when training.
     """
 
     salt: str = Field(default="prokopton-sample-v1", min_length=1)
+    # Spread each class's records across as many species, or as many orders
+    # (for a gene-wide class, so no one group dominates), as possible
+    diversity: Literal["species", "order"] = "species"
     train_cap: int = Field(default=2000, ge=1)
     eval_cap: int = Field(default=200, ge=1)
     min_class_records: int = Field(default=20, ge=1)
@@ -192,8 +197,8 @@ class RouterSampleConfig(ConfigModel):
     exclude_near_duplicates: bool = True
 
 
-class RouterTrainingConfig(ConfigModel):
-    """The models and settings the router's training stage compares.
+class ClassifierTrainingConfig(ConfigModel):
+    """The models and settings a classifier's training stage compares.
 
     Every combination of ``k_values``, ``ambiguity_thresholds`` and
     ``naive_bayes_alphas`` is tried with naive Bayes (fast). Logistic
@@ -230,7 +235,7 @@ class RouterTrainingConfig(ConfigModel):
     alias: str = Field(default="candidate", min_length=1)
 
     @model_validator(mode="after")
-    def _check_fragment_lengths(self) -> "RouterTrainingConfig":
+    def _check_fragment_lengths(self) -> "ClassifierTrainingConfig":
         if self.fragment_min_length > self.fragment_max_length:
             msg = (
                 f"fragment_min_length ({self.fragment_min_length}) is above "
@@ -240,8 +245,8 @@ class RouterTrainingConfig(ConfigModel):
         return self
 
 
-class RouterCalibrationConfig(ConfigModel):
-    """How the trained router's confidence is calibrated.
+class ClassifierCalibrationConfig(ConfigModel):
+    """How a trained classifier's confidence is calibrated.
 
     A length-aware temperature (see ``prokopton.ml.training.calibration``)
     is fitted on the validation samples: their whole sequences, plus one
@@ -257,7 +262,7 @@ class RouterCalibrationConfig(ConfigModel):
     random_state: int = 274
 
     @model_validator(mode="after")
-    def _check_fragment_lengths(self) -> "RouterCalibrationConfig":
+    def _check_fragment_lengths(self) -> "ClassifierCalibrationConfig":
         if self.fragment_min_length > self.fragment_max_length:
             msg = (
                 f"fragment_min_length ({self.fragment_min_length}) is above "
@@ -267,8 +272,8 @@ class RouterCalibrationConfig(ConfigModel):
         return self
 
 
-class RouterEvaluationConfig(ConfigModel):
-    """How the router model chosen by training is measured on the test sets.
+class ClassifierEvaluationConfig(ConfigModel):
+    """How the model chosen by training is measured on the test sets.
 
     All of each test split is predicted. Records whose label the model never
     saw (classes dropped by the sample stage) are counted, not scored. For
@@ -289,12 +294,15 @@ class RouterEvaluationConfig(ConfigModel):
     calibration_bins: int = Field(default=15, ge=1)
     batch_size: int = Field(default=20_000, ge=1)
     threads: int = Field(default=8, ge=1)
+    # Also check, on the fragment records, that the right strand is the
+    # more confident one (forward against reverse complement)
+    orientation: bool = False
     salt: str = Field(default="router-evaluation", min_length=1)
     random_state: int = 273
 
 
-class RouterServingConfig(ConfigModel):
-    """How the router's predictions are presented to users.
+class ClassifierServingConfig(ConfigModel):
+    """How a classifier's predictions are presented to users.
 
     Sequences shorter than ``min_length`` bases are declined; up to
     ``short_length`` they are routed with a note that accuracy is lower.
@@ -308,7 +316,7 @@ class RouterServingConfig(ConfigModel):
     confident_threshold: float = Field(default=0.9, gt=0.0, le=1.0)
 
     @model_validator(mode="after")
-    def _check_lengths(self) -> "RouterServingConfig":
+    def _check_lengths(self) -> "ClassifierServingConfig":
         if self.min_length > self.short_length:
             msg = (
                 f"min_length ({self.min_length}) is above "
@@ -318,29 +326,44 @@ class RouterServingConfig(ConfigModel):
         return self
 
 
-class RouterCardConfig(ConfigModel):
-    """Where the router's model card is written, and its hand-written notes.
+class ClassifierCardConfig(ConfigModel):
+    """The model card's place, and the parts of it written by hand.
 
+    ``title``, ``task`` and ``intended_use`` describe the model;
+    ``limitations`` are added to those the card works out from the results.
     ``notes`` (optional) is a Markdown file included as the card's
     "Development notes" section.
     """
 
     output_dir: Path = Path("model-cards")
     notes: Path | None = None
+    title: str = "Model card"
+    task: str = ""
+    input: str = "A DNA sequence (A, C, G, T; ambiguous bases allowed)"
+    intended_use: str = ""
+    limitations: tuple[str, ...] = ()
 
 
-class RouterConfig(ConfigModel):
-    """Settings for the router: the model that predicts group and order."""
+class ClassifierConfig(ConfigModel):
+    """Settings for one classifier, such as the router or the marker classifier.
 
-    gene: str = "CO1"
-    sample: RouterSampleConfig = Field(default_factory=RouterSampleConfig)
-    training: RouterTrainingConfig = Field(default_factory=RouterTrainingConfig)
-    calibration: RouterCalibrationConfig = Field(
-        default_factory=RouterCalibrationConfig
+    ``label`` says what is predicted: ``group_order`` (the order for animals,
+    the group otherwise) or ``gene`` (which of ``genes`` a sequence comes
+    from). Records are drawn from the splits of each of ``genes``.
+    """
+
+    label: Literal["group_order", "gene"] = "group_order"
+    genes: tuple[str, ...] = Field(default=("CO1",), min_length=1)
+    sample: ClassifierSampleConfig = Field(default_factory=ClassifierSampleConfig)
+    training: ClassifierTrainingConfig = Field(default_factory=ClassifierTrainingConfig)
+    calibration: ClassifierCalibrationConfig = Field(
+        default_factory=ClassifierCalibrationConfig
     )
-    evaluation: RouterEvaluationConfig = Field(default_factory=RouterEvaluationConfig)
-    serving: RouterServingConfig = Field(default_factory=RouterServingConfig)
-    card: RouterCardConfig = Field(default_factory=RouterCardConfig)
+    evaluation: ClassifierEvaluationConfig = Field(
+        default_factory=ClassifierEvaluationConfig
+    )
+    serving: ClassifierServingConfig = Field(default_factory=ClassifierServingConfig)
+    card: ClassifierCardConfig = Field(default_factory=ClassifierCardConfig)
 
 
 class MlflowConfig(ConfigModel):
@@ -355,6 +378,10 @@ class MlflowConfig(ConfigModel):
     artifact_dir: Path = Path("data/mlflow/artifacts")
 
 
+class UnknownClassifierError(ValueError):
+    """Raised when an app has no classifier of the name asked for."""
+
+
 class AppConfig(ConfigModel):
     """Top-level configuration for a ProkoptonML application."""
 
@@ -364,5 +391,18 @@ class AppConfig(ConfigModel):
     validation: ValidationConfig
     split: SplitConfig = Field(default_factory=SplitConfig)
     leakage: LeakageConfig = Field(default_factory=LeakageConfig)
-    router: RouterConfig = Field(default_factory=RouterConfig)
+    router: ClassifierConfig = Field(default_factory=ClassifierConfig)
+    marker: ClassifierConfig | None = None
     mlflow: MlflowConfig = Field(default_factory=MlflowConfig)
+
+    def classifier(self, name: str) -> ClassifierConfig:
+        """Return a classifier's settings by name (``router`` or ``marker``).
+
+        Raises:
+            UnknownClassifierError: If the app has no classifier of that name.
+        """
+        found = {"router": self.router, "marker": self.marker}.get(name)
+        if found is None:
+            msg = f"This app has no {name!r} classifier configured"
+            raise UnknownClassifierError(msg)
+        return found

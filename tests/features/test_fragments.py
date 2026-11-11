@@ -2,7 +2,11 @@
 
 import numpy as np
 
-from prokopton.ml.features.fragments import fragment, random_fragments
+from prokopton.ml.features.fragments import (
+    fragment,
+    random_fragments,
+    reverse_complement,
+)
 
 
 def test_fragment_cuts_a_piece_of_the_right_length() -> None:
@@ -42,3 +46,13 @@ def test_random_fragments_are_repeatable_with_a_seed() -> None:
     second = random_fragments(sequences, 5, 50, np.random.default_rng(4))
 
     assert first == second
+
+
+def test_reverse_complement() -> None:
+    assert reverse_complement("AACGT") == "ACGTT"
+    # Ambiguity codes are complemented; U is read as T
+    assert reverse_complement("RYN") == "NRY"
+    assert reverse_complement("acgu") == "acgt"
+    assert (
+        reverse_complement(reverse_complement("ACGTRYKMBVDHSWN")) == "ACGTRYKMBVDHSWN"
+    )

@@ -17,8 +17,8 @@ archive_url = "https://zenodo.org/records/22685701/files/MIDORI2_GB273_SINTAX_sp
 checksums_url = "https://zenodo.org/records/22685701/files/release_sha256.txt?download=1"
 archive_name = "MIDORI2_GB273_SINTAX_sp.zip"
 member_template = "SINTAX_sp/uniq/MIDORI2_UNIQ_NUC_SP_GB273_{gene}_SINTAX.fasta.gz"
-# CO1 (COI) is the animal barcode; the other mitochondrial genes provide
-# "not COI" examples for the gene classifier.
+# CO1 (COI) is the animal barcode; all 15 mitochondrial genes train the marker
+# classifier, which checks which gene a sequence is from.
 genes = [
   "CO1", "CO2", "CO3", "Cytb", "A6", "A8",
   "ND1", "ND2", "ND3", "ND4", "ND4L", "ND5", "ND6",
@@ -77,7 +77,8 @@ chunk_size = 250000
 
 [router]
 # The router predicts the order for animals, and the group for other eukaryotes
-gene = "CO1"
+label = "group_order"
+genes = ["CO1"]
 
 [router.sample]
 salt = "dnabarcode-sample-v1"
@@ -165,6 +166,110 @@ confident_threshold = 0.9
 [router.card]
 output_dir = "apps/dnabarcode/model-cards"
 notes = "apps/dnabarcode/model-cards/router-notes.md"
+title = "router model card"
+task = "Predict the broad group (for animals, the order) of a COI barcode"
+# {min_length} and {short_length} are filled in from [router.serving]
+intended_use = """
+The router is the first step of identification: it decides which broad
+group (or, for animals, which order) a COI barcode most likely belongs to,
+so a specialist model can identify it further. It is meant for COI sequences
+of at least {min_length} bases; shorter sequences are declined, and
+sequences under {short_length} bases are shown with a note that accuracy is
+lower.
+
+It is not meant for identifying species on its own, for other genes or
+markers, for random stretches of a genome, for mixed samples, or for
+decisions with legal, medical or regulatory consequences without expert
+review.
+"""
+limitations = [
+  "**Only COI** sequences are supported; the marker classifier checks this first.",
+]
+
+# The marker classifier: which of the 15 mitochondrial genes a sequence is
+# from. It runs first, and also finds which strand a sequence was given as
+# (by comparing confidence on both strands).
+[marker]
+label = "gene"
+genes = [
+  "CO1", "CO2", "CO3", "Cytb", "A6", "A8",
+  "ND1", "ND2", "ND3", "ND4", "ND4L", "ND5", "ND6",
+  "lrRNA", "srRNA",
+]
+
+[marker.sample]
+salt = "dnabarcode-marker-sample-v1"
+# Spread each gene's records across as many orders as possible, so no group
+# of organisms dominates any gene (CO1 is mostly insects, Cytb mostly
+# vertebrates): the model must learn the genes, not the organisms
+diversity = "order"
+train_cap = 20000
+eval_cap = 2000
+min_class_records = 20
+max_ambiguous_fraction = 0.10
+# Held-out species exist for CO1 only, so validation uses known species
+eval_splits = ["val_known"]
+exclude_near_duplicates = false
+
+[marker.training]
+k_values = [6, 8]
+ambiguity_thresholds = [0.10]
+naive_bayes_alphas = [1e-4, 1e-3]
+logistic_k_values = [6]
+logistic_ambiguity_threshold = 0.10
+logistic_alphas = [1e-7, 1e-6]
+logistic_max_iter = 15
+fragments_per_record = 1
+fragment_min_length = 75
+fragment_max_length = 600
+threads = 8
+random_state = 273
+experiment = "dnabarcode-marker"
+registered_model = "dnabarcode-marker"
+alias = "candidate"
+
+[marker.calibration]
+fragment_min_length = 75
+fragment_max_length = 600
+threads = 8
+
+[marker.evaluation]
+splits = ["test_known"]
+novel_splits = []
+fragment_lengths = [50, 75, 100, 150, 200, 300, 400, 500]
+fragment_fraction = 0.05
+ambiguity_edges = [0.0, 0.01, 0.03, 0.05, 0.10]
+confidence_thresholds = [0.5, 0.7, 0.8, 0.9, 0.95, 0.99]
+# Also measure how often the right strand is the more confident one
+orientation = true
+threads = 8
+
+[marker.serving]
+min_length = 100
+short_length = 300
+confident_threshold = 0.9
+
+[marker.card]
+output_dir = "apps/dnabarcode/model-cards"
+notes = "apps/dnabarcode/model-cards/marker-notes.md"
+title = "marker classifier model card"
+task = "Predict which of 15 mitochondrial genes a sequence is from"
+intended_use = """
+The marker classifier is the first check on every sequence: it predicts
+which of the 15 mitochondrial genes the sequence comes from, and (by
+comparing its confidence on both strands) which strand it was given as. If
+the sequence is not COI, the site says which gene it looks like instead of
+identifying it with the wrong model. Sequences of at least {min_length}
+bases are accepted.
+
+It cannot reject sequences from other genomes or markers (such as plant
+rbcL, fungal ITS or bacterial 16S): it always picks the most similar of the
+15 genes, so it is used together with a similarity check.
+"""
+limitations = [
+  "**Only the 15 mitochondrial genes** are known; any other sequence is matched to the most similar of them, usually with low confidence.",
+  "**Groups of organisms** are unevenly represented in some genes; see *By group of organisms*.",
+]
 
 [mlflow]
 # Run metadata and the model registry in SQLite; model files in an artifact
