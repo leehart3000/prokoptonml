@@ -38,13 +38,18 @@ These notes are written by hand and included in the generated card.
   fungal records. Balancing groups did not: fungi stayed at about 60%
   accurate, and animals fell from 99.5% to 98.3%. Naive Bayes was dropped
   from the search (0.870 against 0.915 for logistic regression in v1).
-- **v5 onwards:** records are spread across orders again (as in v1), with
-  the reverse class kept.
+- **v5-v6:** records spread across orders again (as in v1), with the
+  reverse class kept. 97.9% accurate overall (animals 98.9%, animal CO1
+  99.8%), and the right strand is the more confident one for 99.6% of whole
+  sequences (93% at 100 bases). Accuracy is slightly lower than v2's mostly
+  because some records are predicted as *reverse*. On the site, the strand
+  is chosen by the best gene and that gene is reported, so a *reverse* top
+  answer never reaches users; the scores above are therefore cautious.
 
 ### Fungi
 
-Fungal sequences remain the weak point (about 60% accurate in v1-v4), and
-more fungal training data did not help. A likely reason is biology rather
+Fungal sequences remain the weak point (about 58-62% accurate in every
+version), and more fungal training data did not help. A likely reason is biology rather
 than sampling: fungal mitochondrial genes such as *cox1* (CO1), *cob*
 (Cytb), *nad5* (ND5) and the large ribosomal RNA often contain many
 introns, which can make up much of a record. A model that counts k-mers

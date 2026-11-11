@@ -34,7 +34,7 @@ review.
 
 Records were split by species: *known* species appear in training, while *novel* species are held out entirely, so their scores show how the model handles species it has never seen. Novel-species records with a near-copy (99% identity or more) in training were found with VSEARCH; *clean* records have none, and are the honest measure.
 
-Training samples were capped at 2,000 records per class (validation: 200), spread across as many species as possible. Classes with under 20 records were left out (119 of them), and 66,593 validation records with a near-copy in training were removed.
+Training samples were capped at 2,000 records per class (validation: 200), spread across as many species as possible. Classes with under 20 records were left out (119 of them). 66,593 validation records with a near-copy in training were removed.
 
 | Sample | Records | Classes | Species per class |
 |---|---|---|---|
