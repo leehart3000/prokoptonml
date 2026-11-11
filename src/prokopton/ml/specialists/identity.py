@@ -17,7 +17,9 @@ needed.
 
 Free end gaps mean unrelated sequences can "align" over a few bases at
 their ends, with high identity, so identity must always be read together
-with ``coverage``.
+with ``coverage`` and ``aligned``. Coverage is measured on whichever
+sequence lies more completely inside the alignment: a 658-base barcode
+inside a 1,500-base CO1 gene is fully covered, whichever is the query.
 """
 
 from dataclasses import dataclass
@@ -43,7 +45,8 @@ class Alignment:
     aligned: int
     """Aligned positions counted: matches, mismatches and internal gaps."""
     coverage: float
-    """Share of the query's bases inside the aligned region (0-1)."""
+    """Share of the query's or the reference's bases inside the aligned
+    region, whichever is larger (0-1): 1.0 means one lies wholly inside it."""
 
 
 def _codes(sequence: str) -> np.ndarray:
@@ -85,7 +88,7 @@ def align(query: str, reference: str) -> Alignment:
         i, j = n, end_row
     else:
         i, j = end_column, m
-    query_end = i
+    query_end, reference_end = i, j
     matches = mismatches = gaps = 0
     while i > 0 and j > 0:
         move = moves[i, j]
@@ -106,5 +109,5 @@ def align(query: str, reference: str) -> Alignment:
     return Alignment(
         identity=matches / aligned if aligned else 0.0,
         aligned=aligned,
-        coverage=(query_end - i) / n,
+        coverage=max((query_end - i) / n, (reference_end - j) / m),
     )

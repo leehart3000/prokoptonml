@@ -19,6 +19,7 @@ from prokopton.ml.pipeline.reference import (
     first_per_key,
     reference_path,
 )
+from prokopton.ml.specialists.identify import NEIGHBOURS_NAME
 
 
 def test_first_per_key_keeps_the_lowest_priorities_up_to_each_cap() -> None:
@@ -35,11 +36,15 @@ def test_first_per_key_keeps_the_lowest_priorities_up_to_each_cap() -> None:
     )
 
 
+rng = np.random.default_rng(11)
+
+
 def records() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
 
     def add(count: int, order: str, family: str, species: str, **fields: Any) -> None:
         for _ in range(count):
+            sequence = fields.get("sequence") or "".join(rng.choice(list("ACGT"), 200))
             rows.append(
                 {
                     "record_id": f"r{len(rows)}",
@@ -50,7 +55,7 @@ def records() -> list[dict[str, Any]]:
                     "species": species,
                     "species_named": fields.get("named", True),
                     "ambiguous_fraction": fields.get("ambiguous", 0.0),
-                    "sequence": "ACGT" * 30,
+                    "sequence": sequence,
                 }
             )
 
@@ -63,6 +68,7 @@ def records() -> list[dict[str, Any]]:
     add(10, "Lepidoptera", "Noctuidae", "Spodoptera frugiperda")  # not Diptera
     add(4, "Diptera", "Culicidae", "Aedes aegypti", split="test_known")
     add(2, "Diptera", "Culicidae", "Aedes vexans", ambiguous=0.5)
+    add(3, "Diptera", "Culicidae", "Anopheles gambiae", sequence="ACGT" * 50)
     return rows
 
 
@@ -113,17 +119,21 @@ def test_reference_keeps_capped_targets_and_background(tmp_path: Path) -> None:
     by_species = Counter(row["species"] for row in rows)
     assert by_species == {
         "Aedes aegypti": 20,
-        "Anopheles gambiae": 3,
+        "Anopheles gambiae": 4,
         "Culex sp. BIOUG1": 2,
         "Chaoborus flavicans": 20,
         "Chaoborus crystallinus": 5,
         "Musca domestica": 100,
     }
     assert {row["role"] for row in rows if row["family"] == "Culicidae"} == {"target"}
-    assert (report.target_records, report.target_named_species) == (25, 2)
+    assert (report.target_records, report.target_named_species) == (26, 2)
     assert report.target_placeholder_records == 2
     assert (report.background_records, report.close_relative_records) == (125, 25)
     assert report.background_families == 2
+    # Three copies of one sequence: one kept, two skipped
+    assert report.duplicates_skipped == 2
+    assert report.species_with_neighbours == 0
+    assert (reference_path(config, "culicidae").parent / NEIGHBOURS_NAME).exists()
     saved = json.loads(
         (reference_path(config, "culicidae").parent / REPORT_NAME).read_text()
     )
@@ -155,6 +165,17 @@ def test_reference_requires_split_data(tmp_path: Path) -> None:
 
     with pytest.raises(ReferenceStageError, match="run the split stage first"):
         build_reference(config, "culicidae")
+
+
+def test_reference_needs_target_records(tmp_path: Path) -> None:
+    write_records(tmp_path)
+    data = config_dict(tmp_path)
+    data["specialists"]["culicidae"]["target"] = "Simuliidae"
+    config = AppConfig.model_validate(data)
+
+    with pytest.raises(ReferenceStageError, match="No training records"):
+        build_reference(config, "culicidae")
+    assert not reference_path(config, "culicidae").exists()
 
 
 def write_app_toml(tmp_path: Path) -> Path:

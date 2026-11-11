@@ -61,15 +61,22 @@ def sample_sets(
     return chosen
 
 
+NAMED = ("species", "complex", "species_group")
+"""Outcomes that name species with confidence."""
+
+
 def correct(found: Identification, row: dict[str, Any], set_name: str) -> bool:
     if set_name == "background":
         return found.outcome == "not_member"
-    if found.outcome == "species":
+    if found.outcome in ("species", "closest_species"):
         return found.label == row["species"]
     if found.outcome in ("complex", "species_group"):
         return row["species"] in found.species
-    if found.outcome in ("genus", "unidentified_specimen"):
+    if found.outcome == "genus":
         return found.label == row["genus"]
+    if found.outcome == "genus_label_only":
+        # No genus on the record means the answer was at family level
+        return found.label in (None, row["genus"])
     return found.outcome == "family"
 
 
@@ -101,6 +108,14 @@ def main() -> None:
         each = seconds / len(rows) * 1000
         print(f"\n## {set_name}: {len(rows)} records, {each:.0f} ms each")
         print(f"Right (at the level given): {right / len(rows):.1%}")
+        if set_name != "background":
+            wrongly_named = sum(
+                f.outcome in NAMED and not correct(f, row, set_name)
+                for f, row in zip(found, rows, strict=True)
+            )
+            print(
+                f"Wrong species named with confidence: {wrongly_named / len(rows):.1%}"
+            )
         for outcome, count in outcomes.most_common():
             print(f"  {outcome:22} {count:5}  ({count / len(rows):.1%})")
         wrong = [

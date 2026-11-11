@@ -419,9 +419,20 @@ class SpecialistConfig(ConfigModel):
     to ``per_species`` records per species; other background families are
     capped at ``background_per_family``.
 
-    A query is compared with the reference by k-mer similarity; the
-    ``candidates`` most similar are aligned, and the outcome follows from
-    their percent identity (see ``prokopton.ml.specialists.identify``).
+    Identical sequences of the same species are kept once. A query is
+    compared with the reference by k-mer similarity; the ``candidates`` most
+    similar are aligned (at most ``candidates_per_species`` from any one
+    species, so many copies of one species cannot crowd out the others),
+    and the outcome follows from their percent identity (see
+    ``prokopton.ml.specialists.identify``). A match counts only if it covers
+    ``min_coverage`` of the query or the reference and aligns at least
+    ``min_aligned`` bases. Species within ``group_margin`` of the best match
+    are reported together.
+
+    For ``neighbour_references`` records of each named species, the
+    reference stage also finds the nearest *other* named species (its
+    barcode gap). A query no closer to a species than that species'
+    nearest neighbour is reported as a closest match, not a species.
     """
 
     gene: str = "CO1"
@@ -435,12 +446,15 @@ class SpecialistConfig(ConfigModel):
     max_ambiguous_fraction: float = Field(default=0.10, ge=0.0, le=1.0)
     salt: str = Field(default="prokopton-specialist-v1", min_length=1)
     k: int = Field(default=8, ge=1)
-    candidates: int = Field(default=20, ge=1)
+    candidates: int = Field(default=30, ge=1)
+    candidates_per_species: int = Field(default=3, ge=1)
     min_coverage: float = Field(default=0.8, gt=0.0, le=1.0)
+    min_aligned: int = Field(default=100, ge=1)
+    neighbour_references: int = Field(default=3, ge=1)
     member_identity: float = Field(default=0.90, gt=0.0, le=1.0)
     genus_identity: float = Field(default=0.95, gt=0.0, le=1.0)
     species_identity: float = Field(default=0.98, gt=0.0, le=1.0)
-    tie_margin: float = Field(default=0.002, ge=0.0, le=0.1)
+    group_margin: float = Field(default=0.01, ge=0.0, le=0.1)
     complexes: tuple[ComplexConfig, ...] = ()
 
     @model_validator(mode="after")
