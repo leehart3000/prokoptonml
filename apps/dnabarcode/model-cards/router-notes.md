@@ -17,7 +17,11 @@ every round is kept in MLflow. Scores are the mean macro-F1 on validation.
    (k = 8, alpha 1e-8). Gains were shrinking (+0.015, then +0.006 for the
    last step in alpha), so the search stopped.
 4. **Training on random fragments.** See below. Candidates were then chosen
-   on validation fragments as well as whole sequences.
+   on validation fragments as well as whole sequences, so this round's
+   scores (the mean over four validation sets) cannot be compared with
+   earlier rounds'. Logistic regression at k = 8 won again, now at
+   alpha 1e-7 (0.891, against 0.888 for alpha 1e-8 and 0.857 for the best
+   naive Bayes).
 
 The ambiguity threshold for training records (0.01 to 0.10) made no real
 difference in any round (about ±0.001).
@@ -40,14 +44,16 @@ length-aware temperature fixed that. The fitted length term was close to
 zero: a single temperature (about 0.75) suits every length from 75 to 600
 bases.
 
-### Validation and test scores differ
+### Validation and test scores
 
-Macro-F1 on novel species is lower on the test set than on validation. The
-validation samples were balanced (capped per class) and left out records
-with over 10% ambiguous bases; the test sets keep the natural mix, where
-rare classes have few records and noisier scores. Choosing the best of many
-candidates also makes the validation score slightly optimistic. The test
-scores are the ones to rely on.
+For v3, macro-F1 on novel species was much lower on the test set (0.855)
+than on validation (0.920). For v5 the two nearly match (0.891 against
+0.897). Two differences remain worth knowing: the validation samples were
+balanced (capped per class) and left out records with over 10% ambiguous
+bases, while the test sets keep the natural mix, where rare classes have
+few records and noisier scores; and choosing the best of many candidates
+makes the validation score slightly optimistic. The test scores are the
+ones to rely on.
 
 ### Future work
 

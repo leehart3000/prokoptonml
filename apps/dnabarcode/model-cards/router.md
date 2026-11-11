@@ -8,7 +8,7 @@
 |---|---|
 | Registered model | `dnabarcode-router` |
 | Version | 5 (alias `@candidate`) |
-| Task | Predict the group or insect order of a COI barcode sequence |
+| Task | Predict the broad group (for animals, the order) of a COI barcode |
 | Input | A DNA sequence (A, C, G, T; ambiguous bases allowed) |
 | Output | One of 455 labels, with a confidence |
 | Model | Logistic regression on 8-mer frequencies, rescaled to unit length, alpha 1e-07 |
@@ -19,7 +19,7 @@
 ## Intended use
 
 The router is the first step of identification: it
-decides which broad group (or, for insects, which order) a COI barcode most
+decides which broad group (or, for animals, which order) a COI barcode most
 likely belongs to, so a specialist model can identify it further. It is
 meant for COI sequences of at least 100 bases; shorter
 sequences are declined, and sequences under 300 bases are
@@ -43,7 +43,7 @@ Training samples were capped at 2,000 records per class (validation: 200), keepi
 
 ## Training
 
-3 candidate models were compared on the validation samples (never the test sets), and the best was chosen by the mean macro-F1 across them. Each training record also gave 1 random fragment of 75-600 bases, so the model learns short inputs too. Every candidate is recorded in MLflow (run `e4e39c7edae04d90b726f23116c8ea47`).
+In the final round of the search, 3 candidate models were compared on the validation samples (never the test sets), and the best was chosen by the mean macro-F1 across them (earlier rounds are described in the development notes). Each training record also gave 1 random fragment of 75-600 bases, so the model learns short inputs too. Every candidate is recorded in MLflow (run `e4e39c7edae04d90b726f23116c8ea47`).
 
 | Validation set | Accuracy | Macro-F1 |
 |---|---|---|
@@ -54,7 +54,7 @@ Training samples were capped at 2,000 records per class (validation: 200), keepi
 
 ## Calibration
 
-Confidence was corrected with a temperature that depends on length, T = exp(-0.2810 + -0.0091 * ln(length)), fitted on the validation samples (whole sequences and new random fragments). It changes only confidence, never the prediction. *ECE* (expected calibration error) is the average gap between confidence and accuracy; 0 is perfect.
+Confidence was corrected with a temperature that depends on length, T = exp(-0.2810 - 0.0091 * ln(length)), fitted on the validation samples (whole sequences and new random fragments). It changes only confidence, never the prediction. *ECE* (expected calibration error) is the average gap between confidence and accuracy; 0 is perfect.
 
 | Validation set | Accuracy | Mean confidence | ECE |
 |---|---|---|---|
@@ -177,7 +177,11 @@ every round is kept in MLflow. Scores are the mean macro-F1 on validation.
    (k = 8, alpha 1e-8). Gains were shrinking (+0.015, then +0.006 for the
    last step in alpha), so the search stopped.
 4. **Training on random fragments.** See below. Candidates were then chosen
-   on validation fragments as well as whole sequences.
+   on validation fragments as well as whole sequences, so this round's
+   scores (the mean over four validation sets) cannot be compared with
+   earlier rounds'. Logistic regression at k = 8 won again, now at
+   alpha 1e-7 (0.891, against 0.888 for alpha 1e-8 and 0.857 for the best
+   naive Bayes).
 
 The ambiguity threshold for training records (0.01 to 0.10) made no real
 difference in any round (about ±0.001).
@@ -200,14 +204,16 @@ length-aware temperature fixed that. The fitted length term was close to
 zero: a single temperature (about 0.75) suits every length from 75 to 600
 bases.
 
-### Validation and test scores differ
+### Validation and test scores
 
-Macro-F1 on novel species is lower on the test set than on validation. The
-validation samples were balanced (capped per class) and left out records
-with over 10% ambiguous bases; the test sets keep the natural mix, where
-rare classes have few records and noisier scores. Choosing the best of many
-candidates also makes the validation score slightly optimistic. The test
-scores are the ones to rely on.
+For v3, macro-F1 on novel species was much lower on the test set (0.855)
+than on validation (0.920). For v5 the two nearly match (0.891 against
+0.897). Two differences remain worth knowing: the validation samples were
+balanced (capped per class) and left out records with over 10% ambiguous
+bases, while the test sets keep the natural mix, where rare classes have
+few records and noisier scores; and choosing the best of many candidates
+makes the validation score slightly optimistic. The test scores are the
+ones to rely on.
 
 ### Future work
 

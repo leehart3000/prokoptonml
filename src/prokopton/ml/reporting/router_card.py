@@ -189,7 +189,7 @@ def _model_section(config: AppConfig, reports: _Reports) -> str:
     rows = [
         ["Registered model", f"`{evaluation.registered_model}`"],
         ["Version", f"{evaluation.model_version} (alias `@{evaluation.alias}`)"],
-        ["Task", "Predict the group or insect order of a COI barcode sequence"],
+        ["Task", "Predict the broad group (for animals, the order) of a COI barcode"],
         ["Input", "A DNA sequence (A, C, G, T; ambiguous bases allowed)"],
         ["Output", f"One of {len(reports.sample.labels)} labels, with a confidence"],
         [
@@ -224,7 +224,7 @@ def _use_section(config: AppConfig) -> str:
     return f"""## Intended use
 
 The router is the first step of identification: it
-decides which broad group (or, for insects, which order) a COI barcode most
+decides which broad group (or, for animals, which order) a COI barcode most
 likely belongs to, so a specialist model can identify it further. It is
 meant for COI sequences of at least {serving.min_length} bases; shorter
 sequences are declined, and sequences under {serving.short_length} bases are
@@ -289,10 +289,12 @@ def _training_section(reports: _Reports) -> str:
     )
     return (
         "## Training\n\n"
+        "In the final round of the search, "
         f"{_count(train_report.candidates_tried, 'candidate model')} were "
         "compared on the "
         "validation samples (never the test sets), and the best was chosen by "
-        "the mean macro-F1 across them. "
+        "the mean macro-F1 across them (earlier rounds are described in the "
+        "development notes). "
         f"{fragments}Every candidate is recorded in MLflow (run "
         f"`{train_report.parent_run_id}`).\n\n"
         + _table(["Validation set", "Accuracy", "Macro-F1"], rows)
@@ -316,7 +318,8 @@ def _calibration_section(reports: _Reports) -> str:
     return (
         "## Calibration\n\n"
         "Confidence was corrected with a temperature that depends on length, "
-        f"T = exp({calibration.a:.4f} + {calibration.b:.4f} * ln(length)), "
+        f"T = exp({calibration.a:.4f} {'-' if calibration.b < 0 else '+'} "
+        f"{abs(calibration.b):.4f} * ln(length)), "
         "fitted on the validation samples (whole sequences and new random "
         "fragments). It changes only confidence, never the prediction. "
         "*ECE* (expected calibration error) is the average gap between "
