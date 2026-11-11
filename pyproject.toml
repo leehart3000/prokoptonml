@@ -80,6 +80,7 @@ dnabarcode-marker-train = "prokopton-ml train apps/dnabarcode/dnabarcode.toml --
 dnabarcode-marker-calibrate = "prokopton-ml calibrate apps/dnabarcode/dnabarcode.toml --model marker"
 dnabarcode-marker-evaluate = "prokopton-ml evaluate apps/dnabarcode/dnabarcode.toml --model marker"
 dnabarcode-marker-card = "prokopton-ml card apps/dnabarcode/dnabarcode.toml --model marker"
+dnabarcode-culicidae-reference = "prokopton-ml reference apps/dnabarcode/dnabarcode.toml --specialist culicidae"
 
 [tool.pixi.environments]
 default = { features = ["dev"], solve-group = "default" }

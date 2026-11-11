@@ -15,6 +15,7 @@ from prokopton.ml.pipeline.calibrate import CalibrationStageError, calibrate
 from prokopton.ml.pipeline.evaluate import EvaluationStageError, evaluate
 from prokopton.ml.pipeline.ingest import IngestError, ingest
 from prokopton.ml.pipeline.leakage import LeakageStageError, leakage
+from prokopton.ml.pipeline.reference import ReferenceStageError, build_reference
 from prokopton.ml.pipeline.sample import SampleStageError, sample
 from prokopton.ml.pipeline.split import SplitStageError, split
 from prokopton.ml.pipeline.train import TrainStageError, train
@@ -40,6 +41,7 @@ _COMMANDS = {
     "calibrate": "Calibrate a registered classifier's confidence by length.",
     "evaluate": "Measure a registered classifier on the test sets.",
     "card": "Write a classifier's model card from the pipeline's reports.",
+    "reference": "Build a specialist's reference set from the training split.",
 }
 _CLASSIFIER_COMMANDS = {"sample", "train", "calibrate", "evaluate", "card"}
 
@@ -60,11 +62,26 @@ def _build_parser() -> argparse.ArgumentParser:
                 default="router",
                 help="Which classifier to work on (default: router).",
             )
+        if name == "reference":
+            command.add_argument(
+                "--specialist",
+                required=True,
+                help="Which specialist (as named in the app's config).",
+            )
     return parser
 
 
-def _run(command: str, config: AppConfig, model: str = "router") -> str:
+def _run(
+    command: str, config: AppConfig, model: str = "router", specialist: str = ""
+) -> str:
     """Run one pipeline stage and return a one-line summary."""
+    if command == "reference":
+        reference = build_reference(config, specialist)
+        return (
+            f"{reference.target_records} target records "
+            f"({reference.target_named_species} named species), "
+            f"{reference.background_records} background records"
+        )
     if command == "ingest":
         ingest_report = ingest(config)
         total = sum(gene.records for gene in ingest_report.genes.values())
@@ -122,7 +139,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     try:
         config = load_config(args.config, AppConfig, env_prefix=ENV_PREFIX)
-        summary = _run(args.command, config, getattr(args, "model", "router"))
+        summary = _run(
+            args.command,
+            config,
+            getattr(args, "model", "router"),
+            getattr(args, "specialist", ""),
+        )
     except (
         ConfigError,
         IngestError,
@@ -139,6 +161,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         CalibrationStageError,
         CardError,
         UnknownClassifierError,
+        ReferenceStageError,
     ) as error:
         logger.error("%s", error)
         return 1

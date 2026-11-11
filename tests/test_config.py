@@ -12,6 +12,8 @@ from prokopton.ml.config import (
     ClassifierServingConfig,
     ClassifierTrainingConfig,
     Midori2SourceConfig,
+    SpecialistConfig,
+    UnknownClassifierError,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -96,3 +98,18 @@ def test_calibration_fragment_lengths_must_be_in_order() -> None:
 def test_serving_lengths_must_be_in_order() -> None:
     with pytest.raises(ValidationError, match="min_length"):
         ClassifierServingConfig(min_length=400, short_length=300)
+
+
+def test_specialist_identities_must_be_in_order() -> None:
+    with pytest.raises(ValidationError, match="member_identity <= genus_identity"):
+        SpecialistConfig(target="Culicidae", background="Diptera", genus_identity=0.99)
+
+
+def test_unknown_specialist(tmp_path: Path) -> None:
+    config = load_config(
+        REPO_ROOT / "apps" / "dnabarcode" / "dnabarcode.toml", AppConfig
+    )
+
+    assert config.specialist("culicidae").target == "Culicidae"
+    with pytest.raises(UnknownClassifierError, match="sharks"):
+        config.specialist("sharks")

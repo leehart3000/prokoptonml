@@ -285,6 +285,42 @@ limitations = [
   "**Groups of organisms** are unevenly represented in some genes; see *By group of organisms*.",
 ]
 
+# Specialists identify species within one group, by comparing sequences with
+# a reference set (nearest neighbours, then alignment for percent identity)
+[specialists.culicidae]
+gene = "CO1"
+target_rank = "family"
+target = "Culicidae"
+# Other flies are the background, so the specialist can tell a sequence is
+# not a mosquito. The closest relatives of mosquitoes (phantom, meniscus and
+# frog-biting midges) are kept species by species
+background_rank = "order"
+background = "Diptera"
+close_relatives = ["Chaoboridae", "Dixidae", "Corethrellidae"]
+per_species = 20
+background_per_family = 100
+max_ambiguous_fraction = 0.10
+salt = "dnabarcode-culicidae-v1"
+k = 8
+candidates = 20
+# A match must cover this share of the query to count
+min_coverage = 0.8
+# Starting thresholds (percent identity); tuned on validation data later
+member_identity = 0.90
+genus_identity = 0.95
+species_identity = 0.98
+tie_margin = 0.002
+
+[[specialists.culicidae.complexes]]
+name = "Anopheles gambiae complex"
+members = [
+  "Anopheles gambiae", "Anopheles coluzzii", "Anopheles arabiensis",
+  "Anopheles melas", "Anopheles merus", "Anopheles quadriannulatus",
+  "Anopheles amharicus", "Anopheles bwambae", "Anopheles fontenillei",
+]
+resolve = "Confirm with a nuclear assay: an IGS PCR (separates An. arabiensis, An. melas and An. gambiae/coluzzii), a SINE200 PCR (An. gambiae against An. coluzzii), or a multilocus amplicon panel such as ANOSPP."
+reference = "Boddé et al. (2022), eLife 11:e78775; Santolamazza et al. (2008), Malaria Journal 7:163"
+
 [mlflow]
 # Run metadata and the model registry in SQLite; model files in an artifact
 # folder. Both are inside the git-ignored data/ folder.

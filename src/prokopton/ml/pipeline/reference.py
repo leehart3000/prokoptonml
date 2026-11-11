@@ -1,0 +1,262 @@
+"""Reference stage: build a specialist's reference set.
+
+A specialist identifies sequences by comparing them with reference
+sequences, so its "training" is choosing those references well. From the
+training split of the specialist's gene (never validation or test), it
+keeps:
+
+- **target** records (for example, family Culicidae): up to ``per_species``
+  per species, including placeholder names such as "Aedes sp. BIOUG...",
+  which are reported as unidentified specimens rather than species;
+- **background** records from the wider group (for example, order Diptera),
+  so the specialist can tell when a sequence is not in its group: up to
+  ``per_species`` per species for close relatives, and up to
+  ``background_per_family`` per family otherwise.
+
+Within each species or family, records are chosen by a salted hash, so the
+choice is reproducible. The data is streamed twice (to choose, then to
+write). Outputs ``<models_dir>/specialists/<name>/reference.parquet`` and
+``_reference_report.json``.
+"""
+
+import logging
+from array import array
+from collections import Counter
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
+from pydantic import BaseModel, ConfigDict
+
+from prokopton.ml import __version__
+from prokopton.ml.config import AppConfig, SpecialistConfig
+from prokopton.ml.pipeline.split import hash_fraction
+
+__all__ = [
+    "REFERENCE_NAME",
+    "REFERENCE_SCHEMA",
+    "REPORT_NAME",
+    "ReferenceReport",
+    "ReferenceStageError",
+    "build_reference",
+    "first_per_key",
+    "reference_path",
+]
+
+logger = logging.getLogger(__name__)
+
+REFERENCE_NAME = "reference.parquet"
+REPORT_NAME = "_reference_report.json"
+BATCH_SIZE = 100_000
+_COLUMNS = [
+    "record_id",
+    "split",
+    "order",
+    "family",
+    "genus",
+    "species",
+    "species_named",
+    "ambiguous_fraction",
+    "sequence",
+]
+REFERENCE_SCHEMA = pa.schema(
+    [
+        ("record_id", pa.string()),
+        ("role", pa.string()),
+        ("order", pa.string()),
+        ("family", pa.string()),
+        ("genus", pa.string()),
+        ("species", pa.string()),
+        ("species_named", pa.bool_()),
+        ("sequence", pa.string()),
+    ]
+)
+
+
+class ReferenceStageError(RuntimeError):
+    """Raised when the reference stage cannot run."""
+
+
+class ReferenceReport(BaseModel):
+    """Provenance and contents of a specialist's reference set."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    app: str
+    specialist: str
+    release: str
+    gene: str
+    prokopton_ml_version: str
+    rules: SpecialistConfig
+    started_at: datetime
+    finished_at: datetime
+    target_records: int
+    target_species: int
+    target_named_species: int
+    target_placeholder_records: int
+    background_records: int
+    background_families: int
+    close_relative_records: int
+    output: str
+
+
+def reference_path(config: AppConfig, name: str) -> Path:
+    """Where a specialist's reference set is written."""
+    return config.data.paths.models_dir / "specialists" / name / REFERENCE_NAME
+
+
+def first_per_key(
+    keys: np.ndarray, priority: np.ndarray, caps: np.ndarray
+) -> np.ndarray:
+    """Choose, within each key, the records with the lowest priority numbers.
+
+    Args:
+        keys: A key id for each record (such as its species).
+        priority: Tie-breaking number for each record (lower is chosen first).
+        caps: The most records to keep for each record's key.
+
+    Returns:
+        A boolean mask of the chosen records.
+    """
+    count = keys.size
+    if count == 0:
+        return np.zeros(0, dtype=bool)
+    order = np.lexsort((priority, keys))
+    sorted_keys = keys[order]
+    new_key = np.ones(count, dtype=bool)
+    new_key[1:] = sorted_keys[1:] != sorted_keys[:-1]
+    start = np.maximum.accumulate(np.where(new_key, np.arange(count), 0))
+    chosen = np.zeros(count, dtype=bool)
+    chosen[order[(np.arange(count) - start) < caps[order]]] = True
+    return chosen
+
+
+def _role(row: dict[str, Any], rules: SpecialistConfig) -> str | None:
+    if row[rules.target_rank] == rules.target:
+        return "target"
+    if row[rules.background_rank] == rules.background:
+        return "background"
+    return None
+
+
+def _rows(path: Path, rules: SpecialistConfig) -> Iterator[dict[str, Any]]:
+    """Yield the training rows that can be references, with their role."""
+    for batch in pq.ParquetFile(path).iter_batches(
+        batch_size=BATCH_SIZE, columns=_COLUMNS
+    ):
+        for row in batch.to_pylist():
+            if row["split"] != "train":
+                continue
+            if row["ambiguous_fraction"] > rules.max_ambiguous_fraction:
+                continue
+            role = _role(row, rules)
+            if role is not None:
+                row["role"] = role
+                yield row
+
+
+def build_reference(config: AppConfig, name: str) -> ReferenceReport:
+    """Choose and write a specialist's reference set.
+
+    Raises:
+        ReferenceStageError: If the split data is missing.
+    """
+    started_at = datetime.now(UTC)
+    rules = config.specialist(name)
+    folder = f"midori2_{config.data.source.release.lower()}"
+    path = (
+        config.data.paths.splits_dir / folder / f"gene={rules.gene}" / "records.parquet"
+    )
+    if not path.exists():
+        msg = f"{path} not found; run the split stage first"
+        raise ReferenceStageError(msg)
+
+    # Pass 1: give each record a key (species, or family for most of the
+    # background) and that key's cap
+    key_ids: dict[tuple[str, str], int] = {}
+    keys = array("q")
+    caps = array("q")
+    priority = array("d")
+    for row in _rows(path, rules):
+        by_species = row["role"] == "target" or row["family"] in rules.close_relatives
+        key = (
+            ("species", row["species"] or "")
+            if by_species
+            else ("family", row["family"] or "")
+        )
+        keys.append(key_ids.setdefault(key, len(key_ids)))
+        caps.append(rules.per_species if by_species else rules.background_per_family)
+        priority.append(hash_fraction(row["record_id"], rules.salt))
+    chosen = first_per_key(
+        np.frombuffer(keys, dtype=np.int64),
+        np.frombuffer(priority, dtype=np.float64),
+        np.frombuffer(caps, dtype=np.int64),
+    )
+
+    # Pass 2: write the chosen rows
+    output = reference_path(config, name)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    partial = output.with_name(f"{output.name}.part")
+    counts: Counter[str] = Counter()
+    target_species: set[str] = set()
+    named_species: set[str] = set()
+    families: set[str] = set()
+    with pq.ParquetWriter(partial, REFERENCE_SCHEMA, compression="zstd") as writer:
+        rows: list[dict[str, Any]] = []
+        for position, row in enumerate(_rows(path, rules)):
+            if not chosen[position]:
+                continue
+            rows.append({column: row[column] for column in REFERENCE_SCHEMA.names})
+            if row["role"] == "target":
+                counts["target"] += 1
+                target_species.add(row["species"] or "")
+                if row["species_named"]:
+                    named_species.add(row["species"])
+                else:
+                    counts["placeholder"] += 1
+            else:
+                counts["background"] += 1
+                families.add(row["family"] or "")
+                if row["family"] in rules.close_relatives:
+                    counts["close"] += 1
+            if len(rows) >= BATCH_SIZE:
+                writer.write_table(pa.Table.from_pylist(rows, schema=REFERENCE_SCHEMA))
+                rows.clear()
+        writer.write_table(pa.Table.from_pylist(rows, schema=REFERENCE_SCHEMA))
+    partial.replace(output)
+
+    report = ReferenceReport(
+        app=config.name,
+        specialist=name,
+        release=config.data.source.release,
+        gene=rules.gene,
+        prokopton_ml_version=__version__,
+        rules=rules,
+        started_at=started_at,
+        finished_at=datetime.now(UTC),
+        target_records=counts["target"],
+        target_species=len(target_species),
+        target_named_species=len(named_species),
+        target_placeholder_records=counts["placeholder"],
+        background_records=counts["background"],
+        background_families=len(families),
+        close_relative_records=counts["close"],
+        output=str(output),
+    )
+    report_path = output.parent / REPORT_NAME
+    report_path.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    logger.info(
+        "Reference for %s: %d target records (%d named species), %d background "
+        "records in %d families -> %s",
+        name,
+        report.target_records,
+        report.target_named_species,
+        report.background_records,
+        report.background_families,
+        output,
+    )
+    return report
