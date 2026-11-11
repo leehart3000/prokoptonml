@@ -100,19 +100,31 @@ exclude_near_duplicates = true
 #   Round 2 (v2): NB best at k=8, alpha 1e-4 (0.888); logistic regression
 #     on rescaled features best overall at k=6, alpha 1e-7 (0.934), the
 #     smallest tried. The threshold made no real difference in either.
-#   Round 3: NB around its best, adding k=9; logistic regression at k=8
-#     and down to alpha 1e-8.
+#   Round 3 (v3): logistic regression best at k=8, alpha 1e-8 (0.949); NB
+#     best at k=9, alpha 3e-5 (0.901). Gains were shrinking, so the search
+#     stopped there. Test accuracy was 98.6% (known) and 96.7% (clean
+#     novel), but on fragments under 300 bases v3 was much less accurate
+#     and overconfident (100 bases: 41%, calibration error 0.21).
+#   Round 4: v3's best settings, trained with random fragments (below), and
+#     chosen on fragments as well as whole sequences. The NB baseline is at
+#     k=8 (sharing features) and the threshold is 0.10 (keeping every
+#     sampled record), so the doubled training data fits in memory.
 # Naive Bayes: every combination of these is tried. The features are
 # frequencies adding up to 1 per sequence, so useful smoothing is small.
-k_values = [7, 8, 9]
+k_values = [8]
 ambiguity_thresholds = [0.10]
-naive_bayes_alphas = [3e-5, 1e-4, 3e-4]
+naive_bayes_alphas = [1e-4]
 # Logistic regression (slower): a smaller, targeted set, on features
 # rescaled to unit length
-logistic_k_values = [6, 8]
-logistic_ambiguity_threshold = 0.03
+logistic_k_values = [8]
+logistic_ambiguity_threshold = 0.10
 logistic_alphas = [1e-8, 1e-7]
 logistic_max_iter = 15
+# Each training record also gives one random fragment of 75-600 bases;
+# validation samples get one each too
+fragments_per_record = 1
+fragment_min_length = 75
+fragment_max_length = 600
 threads = 8
 random_state = 273
 # MLflow experiment and registered model names, and the alias for the best model

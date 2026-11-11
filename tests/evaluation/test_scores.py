@@ -8,7 +8,6 @@ from prokopton.ml.evaluation.scores import (
     by_ambiguity,
     calibration,
     coverage,
-    fragment,
     per_class,
 )
 
@@ -42,18 +41,6 @@ def test_empty_predictions() -> None:
     assert len(Predictions()) == 0
     assert Predictions().metrics()["accuracy"] == 0.0
     assert calibration(Predictions(), 5) == []
-
-
-def test_fragment_cuts_a_piece_of_the_right_length() -> None:
-    rng = np.random.default_rng(1)
-
-    piece = fragment("ACGTACGTAC", 4, rng)
-
-    assert piece is not None
-    assert len(piece) == 4
-    assert piece in "ACGTACGTAC"
-    assert fragment("ACG", 4, rng) is None
-    assert fragment("ACGT", 4, rng) == "ACGT"
 
 
 def test_by_ambiguity_groups_records() -> None:

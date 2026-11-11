@@ -196,9 +196,16 @@ class RouterTrainingConfig(ConfigModel):
     ``naive_bayes_alphas`` is tried with naive Bayes (fast). Logistic
     regression (slower) is tried for each of ``logistic_k_values`` and
     ``logistic_alphas``, at ``logistic_ambiguity_threshold``, on features
-    rescaled to unit length. The best
-    candidate is chosen by ``selection_score``: the mean of macro-F1 on the
-    known-species and novel-species validation samples.
+    rescaled to unit length.
+
+    With ``fragments_per_record`` above 0, training also gets that many
+    random fragments of each record, of lengths from ``fragment_min_length``
+    to ``fragment_max_length``, so the model learns short inputs too. Each
+    validation sample then gets one such fragment per record as well.
+
+    The best candidate is chosen by ``selection_score``: the mean of macro-F1
+    on the known-species and novel-species validation samples (and their
+    fragments, if any).
     """
 
     k_values: tuple[int, ...] = Field(default=(5, 6, 7, 8), min_length=1)
@@ -210,11 +217,24 @@ class RouterTrainingConfig(ConfigModel):
     logistic_ambiguity_threshold: float = Field(default=0.03, ge=0.0, le=1.0)
     logistic_alphas: tuple[float, ...] = (1e-7, 1e-6)
     logistic_max_iter: int = Field(default=15, ge=1)
+    fragments_per_record: int = Field(default=0, ge=0)
+    fragment_min_length: int = Field(default=75, ge=1)
+    fragment_max_length: int = Field(default=600, ge=1)
     threads: int = Field(default=8, ge=1)
     random_state: int = 273
     experiment: str = Field(default="router", min_length=1)
     registered_model: str = Field(default="router", min_length=1)
     alias: str = Field(default="candidate", min_length=1)
+
+    @model_validator(mode="after")
+    def _check_fragment_lengths(self) -> "RouterTrainingConfig":
+        if self.fragment_min_length > self.fragment_max_length:
+            msg = (
+                f"fragment_min_length ({self.fragment_min_length}) is above "
+                f"fragment_max_length ({self.fragment_max_length})"
+            )
+            raise ValueError(msg)
+        return self
 
 
 class RouterEvaluationConfig(ConfigModel):
