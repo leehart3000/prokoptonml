@@ -277,3 +277,39 @@ def test_evaluate_marker_by_gene_group_and_strand(tmp_path: Path) -> None:
     assert 0.0 <= whole.forward_strand_share <= 1.0
     assert short.forward_strand_share is not None
     assert (tmp_path / "models" / "marker" / REPORT_NAME).exists()
+
+
+def test_strand_check_ignores_the_reverse_class(tmp_path: Path) -> None:
+    write_data(tmp_path)
+    sequences = [m * 10 for m in MOTIFS.values()]
+    reverse = [
+        "".join({"A": "T", "C": "G", "G": "C", "T": "A"}[b] for b in s[::-1])
+        for s in sequences
+    ]
+    model = Pipeline(
+        [("kmers", KmerVectorizer(k=3)), ("classifier", MultinomialNB(fit_prior=False))]
+    ).fit(sequences + reverse, ["CO1", "CO1", "reverse", "reverse"])
+    tracker = FakeTracker()
+    tracker.log_model(model, None, "test-marker", "candidate")
+    settings = config_dict(tmp_path)
+    settings["marker"] = {
+        "label": "gene",
+        "genes": ["CO1"],
+        "training": {"registered_model": "test-marker", "reverse_label": "reverse"},
+        "evaluation": {
+            "splits": ["test_known"],
+            "novel_splits": [],
+            "fragment_lengths": [],
+            "fragment_fraction": 1.0,
+            "orientation": True,
+            "threads": 1,
+        },
+    }
+
+    report = evaluate(
+        AppConfig.model_validate(settings), lambda _c: tracker, model="marker"
+    )
+
+    # The other strand is confidently "reverse", so CO1 wins on the original
+    (whole,) = report.fragments["test_known"]
+    assert whole.forward_strand_share == 1.0

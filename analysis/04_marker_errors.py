@@ -100,9 +100,11 @@ def main() -> None:
 
     forward = predict_proba(model, sequences, 8)
     reverse = predict_proba(model, [reverse_complement(s) for s in sequences], 8)
+    # Compare the best real class on each strand, not a "reverse" class
+    real = classes != (training.reverse_label or "")
     predicted = classes[forward.argmax(axis=1)]
-    reverse_predicted = classes[reverse.argmax(axis=1)]
-    reverse_wins = reverse.max(axis=1) > forward.max(axis=1)
+    reverse_predicted = classes[real][reverse[:, real].argmax(axis=1)]
+    reverse_wins = reverse[:, real].max(axis=1) > forward[:, real].max(axis=1)
     correct = predicted == genes
 
     out = [f"# Marker classifier errors (dnabarcode-marker v{version})", ""]
@@ -149,7 +151,9 @@ def main() -> None:
                 gene,
                 f"{reverse_wins[mask].mean():.1%}",
                 f"{same.sum() / max(wins.sum(), 1):.0%}",
-                f"{np.median(reverse.max(axis=1)[wins]):.2f}" if wins.any() else "",
+                f"{np.median(reverse[:, real].max(axis=1)[wins]):.2f}"
+                if wins.any()
+                else "",
             ]
         )
     out += [

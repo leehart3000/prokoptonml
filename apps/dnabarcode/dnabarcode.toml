@@ -203,10 +203,12 @@ genes = [
 
 [marker.sample]
 salt = "dnabarcode-marker-sample-v1"
-# Spread each gene's records across as many orders as possible, so no group
-# of organisms dominates any gene (CO1 is mostly insects, Cytb mostly
-# vertebrates): the model must learn the genes, not the organisms
-diversity = "order"
+# Each gene's records take turns between groups of organisms (Metazoa,
+# Fungi, Viridiplantae, Other eukaryotes), then between orders within each,
+# so the model must learn the genes, not the organisms. v2 spread records
+# across orders only; animals have far more orders, so other groups were
+# scarce, and fungi were only 62% accurate (see analysis/04)
+diversity = "group_order"
 train_cap = 20000
 eval_cap = 2000
 min_class_records = 20
@@ -216,16 +218,23 @@ eval_splits = ["val_known"]
 exclude_near_duplicates = false
 
 [marker.training]
-k_values = [6, 8]
+# v2: logistic regression (0.915) beat naive Bayes (0.870 at best), so naive
+# Bayes is left out, and the training data (doubled by the reverse class
+# below) fits in memory
+k_values = []
+naive_bayes_alphas = []
 ambiguity_thresholds = [0.10]
-naive_bayes_alphas = [1e-4, 1e-3]
 logistic_k_values = [6]
 logistic_ambiguity_threshold = 0.10
-logistic_alphas = [1e-7, 1e-6]
+logistic_alphas = [1e-6, 1e-5]
 logistic_max_iter = 15
 fragments_per_record = 1
 fragment_min_length = 75
 fragment_max_length = 600
+# Every training record's other strand is added as a "reverse" class: in v2
+# the other strand was more confident for 2% of animal and 34% of fungal
+# records, mostly mistaken for another gene (see analysis/04)
+reverse_label = "reverse"
 threads = 8
 random_state = 273
 experiment = "dnabarcode-marker"
