@@ -19,6 +19,7 @@ __all__ = [
     "LeakageConfig",
     "Midori2SourceConfig",
     "MlflowConfig",
+    "RouterCalibrationConfig",
     "RouterConfig",
     "RouterEvaluationConfig",
     "RouterSampleConfig",
@@ -237,6 +238,33 @@ class RouterTrainingConfig(ConfigModel):
         return self
 
 
+class RouterCalibrationConfig(ConfigModel):
+    """How the trained router's confidence is calibrated.
+
+    A length-aware temperature (see ``prokopton.ml.training.calibration``)
+    is fitted on the validation samples: their whole sequences, plus one
+    random fragment of ``fragment_min_length`` to ``fragment_max_length``
+    bases per record. The calibrated model is registered as a new version
+    and given the training alias.
+    """
+
+    fragment_min_length: int = Field(default=75, ge=1)
+    fragment_max_length: int = Field(default=600, ge=1)
+    threads: int = Field(default=8, ge=1)
+    # Differs from training's, so these fragments are new ones
+    random_state: int = 274
+
+    @model_validator(mode="after")
+    def _check_fragment_lengths(self) -> "RouterCalibrationConfig":
+        if self.fragment_min_length > self.fragment_max_length:
+            msg = (
+                f"fragment_min_length ({self.fragment_min_length}) is above "
+                f"fragment_max_length ({self.fragment_max_length})"
+            )
+            raise ValueError(msg)
+        return self
+
+
 class RouterEvaluationConfig(ConfigModel):
     """How the router model chosen by training is measured on the test sets.
 
@@ -269,6 +297,9 @@ class RouterConfig(ConfigModel):
     gene: str = "CO1"
     sample: RouterSampleConfig = Field(default_factory=RouterSampleConfig)
     training: RouterTrainingConfig = Field(default_factory=RouterTrainingConfig)
+    calibration: RouterCalibrationConfig = Field(
+        default_factory=RouterCalibrationConfig
+    )
     evaluation: RouterEvaluationConfig = Field(default_factory=RouterEvaluationConfig)
 
 

@@ -30,6 +30,7 @@ def test_perfect_predictions() -> None:
         "top5_accuracy": 1.0,
         "macro_f1": 1.0,
         "ece": 0.0,
+        "mean_confidence": 1.0,
     }
 
 

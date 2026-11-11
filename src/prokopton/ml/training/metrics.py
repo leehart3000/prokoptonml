@@ -63,7 +63,13 @@ def classification_metrics(
         )
         raise ValueError(msg)
     if not labels:
-        return {"accuracy": 0.0, "top5_accuracy": 0.0, "macro_f1": 0.0, "ece": 0.0}
+        return {
+            "accuracy": 0.0,
+            "top5_accuracy": 0.0,
+            "macro_f1": 0.0,
+            "ece": 0.0,
+            "mean_confidence": 0.0,
+        }
     index = {label: position for position, label in enumerate(classes)}
     # A label the model lacks gets its own negative number, so it still
     # counts (with an F1 of 0) in macro-F1
@@ -102,7 +108,13 @@ def metrics_from_ranks(
     numbers per record.
     """
     if truth.size == 0:
-        return {"accuracy": 0.0, "top5_accuracy": 0.0, "macro_f1": 0.0, "ece": 0.0}
+        return {
+            "accuracy": 0.0,
+            "top5_accuracy": 0.0,
+            "macro_f1": 0.0,
+            "ece": 0.0,
+            "mean_confidence": 0.0,
+        }
     correct = ranked[:, 0] == truth
     present = np.unique(truth).tolist()
     return {
@@ -120,4 +132,6 @@ def metrics_from_ranks(
             )
         ),
         "ece": expected_calibration_error(confidence, correct),
+        # Above accuracy: overconfident; below: underconfident
+        "mean_confidence": float(confidence.mean()),
     }
