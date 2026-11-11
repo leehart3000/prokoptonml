@@ -153,6 +153,19 @@ ambiguity_edges = [0.0, 0.01, 0.03, 0.05, 0.10]
 confidence_thresholds = [0.5, 0.7, 0.8, 0.9, 0.95, 0.99]
 threads = 8
 
+[router.serving]
+# From v5's evaluation: at 100 bases, 65% accurate on novel species with
+# calibrated confidence; below that, confidence is too high. Under 300 bases
+# accuracy is noticeably lower, so users are told. At 0.9 confidence, 94% of
+# novel-species predictions are accepted, and 99.7% of those are right.
+min_length = 100
+short_length = 300
+confident_threshold = 0.9
+
+[router.card]
+output_dir = "apps/dnabarcode/model-cards"
+notes = "apps/dnabarcode/model-cards/router-notes.md"
+
 [mlflow]
 # Run metadata and the model registry in SQLite; model files in an artifact
 # folder. Both are inside the git-ignored data/ folder.
