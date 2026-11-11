@@ -21,11 +21,13 @@ __all__ = [
     "ClassifierSampleConfig",
     "ClassifierServingConfig",
     "ClassifierTrainingConfig",
+    "ComplexConfig",
     "DataConfig",
     "DataPathsConfig",
     "LeakageConfig",
     "Midori2SourceConfig",
     "MlflowConfig",
+    "SpecialistConfig",
     "SplitConfig",
     "UnknownClassifierError",
     "ValidationConfig",
@@ -392,6 +394,63 @@ class MlflowConfig(ConfigModel):
     artifact_dir: Path = Path("data/mlflow/artifacts")
 
 
+class ComplexConfig(ConfigModel):
+    """A group of species that one marker cannot tell apart.
+
+    When a specialist's best matches include members of a complex, it names
+    the complex, and says how members can be told apart (``resolve``), with
+    a source for that advice.
+    """
+
+    name: str = Field(min_length=1)
+    members: tuple[str, ...] = Field(min_length=2)
+    resolve: str = Field(min_length=1)
+    reference: str = ""
+
+
+class SpecialistConfig(ConfigModel):
+    """A specialist: species-level identification within one group.
+
+    The reference set is drawn from the training split of ``gene``: records
+    whose ``target_rank`` is ``target`` (up to ``per_species`` per species),
+    and a background of other records whose ``background_rank`` is
+    ``background``, so the specialist can tell when a sequence is not in its
+    group. Close relatives (``close_relatives``, by family) are kept with up
+    to ``per_species`` records per species; other background families are
+    capped at ``background_per_family``.
+
+    A query is compared with the reference by k-mer similarity; the
+    ``candidates`` most similar are aligned, and the outcome follows from
+    their percent identity (see ``prokopton.ml.specialists.identify``).
+    """
+
+    gene: str = "CO1"
+    target_rank: Literal["order", "family", "genus"] = "family"
+    target: str = Field(min_length=1)
+    background_rank: Literal["order", "family"] = "order"
+    background: str = Field(min_length=1)
+    close_relatives: tuple[str, ...] = ()
+    per_species: int = Field(default=20, ge=1)
+    background_per_family: int = Field(default=100, ge=1)
+    max_ambiguous_fraction: float = Field(default=0.10, ge=0.0, le=1.0)
+    salt: str = Field(default="prokopton-specialist-v1", min_length=1)
+    k: int = Field(default=8, ge=1)
+    candidates: int = Field(default=20, ge=1)
+    min_coverage: float = Field(default=0.8, gt=0.0, le=1.0)
+    member_identity: float = Field(default=0.90, gt=0.0, le=1.0)
+    genus_identity: float = Field(default=0.95, gt=0.0, le=1.0)
+    species_identity: float = Field(default=0.98, gt=0.0, le=1.0)
+    tie_margin: float = Field(default=0.002, ge=0.0, le=0.1)
+    complexes: tuple[ComplexConfig, ...] = ()
+
+    @model_validator(mode="after")
+    def _check_identities(self) -> "SpecialistConfig":
+        if not self.member_identity <= self.genus_identity <= self.species_identity:
+            msg = "Need member_identity <= genus_identity <= species_identity"
+            raise ValueError(msg)
+        return self
+
+
 class UnknownClassifierError(ValueError):
     """Raised when an app has no classifier of the name asked for."""
 
@@ -407,6 +466,7 @@ class AppConfig(ConfigModel):
     leakage: LeakageConfig = Field(default_factory=LeakageConfig)
     router: ClassifierConfig = Field(default_factory=ClassifierConfig)
     marker: ClassifierConfig | None = None
+    specialists: dict[str, SpecialistConfig] = Field(default_factory=dict)
     mlflow: MlflowConfig = Field(default_factory=MlflowConfig)
 
     def classifier(self, name: str) -> ClassifierConfig:
@@ -420,3 +480,14 @@ class AppConfig(ConfigModel):
             msg = f"This app has no {name!r} classifier configured"
             raise UnknownClassifierError(msg)
         return found
+
+    def specialist(self, name: str) -> SpecialistConfig:
+        """Return a specialist's settings by name.
+
+        Raises:
+            UnknownClassifierError: If the app has no specialist of that name.
+        """
+        if name not in self.specialists:
+            msg = f"This app has no {name!r} specialist configured"
+            raise UnknownClassifierError(msg)
+        return self.specialists[name]
