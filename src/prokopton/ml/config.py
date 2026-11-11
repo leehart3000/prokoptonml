@@ -330,7 +330,9 @@ class ClassifierCardConfig(ConfigModel):
     """The model card's place, and the parts of it written by hand.
 
     ``title``, ``task`` and ``intended_use`` describe the model;
-    ``limitations`` are added to those the card works out from the results.
+    ``training_note`` is added to the training section (for example, to say
+    that earlier search rounds are in the notes); ``limitations`` are added
+    to those the card works out from the results.
     ``notes`` (optional) is a Markdown file included as the card's
     "Development notes" section.
     """
@@ -341,6 +343,7 @@ class ClassifierCardConfig(ConfigModel):
     task: str = ""
     input: str = "A DNA sequence (A, C, G, T; ambiguous bases allowed)"
     intended_use: str = ""
+    training_note: str = ""
     limitations: tuple[str, ...] = ()
 
 

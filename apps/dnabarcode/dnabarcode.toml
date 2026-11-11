@@ -182,8 +182,12 @@ markers, for random stretches of a genome, for mixed samples, or for
 decisions with legal, medical or regulatory consequences without expert
 review.
 """
+training_note = """
+This was the final round of the search; earlier rounds are described in the
+development notes.
+"""
 limitations = [
-  "**Only COI** sequences are supported; the marker classifier checks this first.",
+  "**Only COI** sequences are supported for now (the marker classifier checks this first); plant rbcL, fungal ITS and bacterial 16S are planned.",
 ]
 
 # The marker classifier: which of the 15 mitochondrial genes a sequence is
@@ -262,9 +266,10 @@ the sequence is not COI, the site says which gene it looks like instead of
 identifying it with the wrong model. Sequences of at least {min_length}
 bases are accepted.
 
-It cannot reject sequences from other genomes or markers (such as plant
-rbcL, fungal ITS or bacterial 16S): it always picks the most similar of the
-15 genes, so it is used together with a similarity check.
+It cannot yet reject sequences from other genomes or markers (such as plant
+rbcL, fungal ITS or bacterial 16S, which are planned): it always picks the
+most similar of the 15 genes, so it is used together with a similarity
+check.
 """
 limitations = [
   "**Only the 15 mitochondrial genes** are known; any other sequence is matched to the most similar of them, usually with low confidence.",

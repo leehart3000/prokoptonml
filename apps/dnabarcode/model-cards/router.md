@@ -44,7 +44,8 @@ Training samples were capped at 2,000 records per class (validation: 200), sprea
 
 ## Training
 
-In the final round of the search, 3 candidate models were compared on the validation samples (never the test sets), and the best was chosen by the mean macro-F1 across them (earlier rounds are described in the development notes). Each training record also gave 1 random fragment of 75-600 bases, so the model learns short inputs too. Every candidate is recorded in MLflow (run `e4e39c7edae04d90b726f23116c8ea47`).
+3 candidate models were compared on the validation samples (never the test sets), and the best was chosen by the mean macro-F1 across them. This was the final round of the search; earlier rounds are described in the
+development notes. Each training record also gave 1 random fragment of 75-600 bases, so the model learns short inputs too. Every candidate is recorded in MLflow (run `e4e39c7edae04d90b726f23116c8ea47`).
 
 | Validation set | Accuracy | Macro-F1 |
 |---|---|---|
@@ -144,10 +145,10 @@ The 10 classes with the lowest F1 on novel species (clean), among those with at 
 
 ## Limitations
 
-- **Short sequences** are much less accurate (at 100 bases, 65% accurate for novel species (clean)); below 100 bases they are declined.
+- **Short sequences** are much less accurate (at 100 bases, 65% accurate on novel species (clean)); below 100 bases they are declined.
 - **Rare classes** have few reference records, so their scores vary more (see *Hardest classes*). Classes too rare to train on are never predicted.
 - **The reference data reflects what has been sequenced**: GenBank holds far more records for some groups and regions than others, and some records are misidentified.
-- **Only COI** sequences are supported; the marker classifier checks this first.
+- **Only COI** sequences are supported for now (the marker classifier checks this first); plant rbcL, fungal ITS and bacterial 16S are planned.
 - **Confidence** is calibrated on validation data like the test data; on sequences unlike the reference data (contaminated, chimeric, or from a poorly sampled group) it may be too high.
 
 ## Development notes
