@@ -417,12 +417,13 @@ class SpecialistEvaluationConfig(ConfigModel):
     dominate. Each record is aligned once; every combination of the
     ``*_grid`` values is then scored on the validation sets.
 
-    The chosen combination is the one with the highest *known species
-    named exactly* minus *held-out species wrongly named* (both averaged
-    over species), among those that wrongly name known species at most
-    ``max_known_wrong`` of the time and let in background records at most
-    ``max_background_admitted`` of the time. It is then measured once on
-    the test sets.
+    Combinations are ranked by, in order: letting in background records
+    at most ``max_background_admitted`` of the time; wrongly naming known
+    species at most ``max_known_wrong`` of the time (averaged over
+    species); the objective, *known species named exactly* minus
+    *held-out species wrongly named* (both averaged over species); and,
+    to break ties, the most held-out species right. The best is measured
+    once on the test sets. If it misses a limit, the report says which.
     """
 
     per_species: int = Field(default=3, ge=1)

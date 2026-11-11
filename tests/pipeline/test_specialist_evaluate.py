@@ -144,8 +144,11 @@ def prepared(
     return config
 
 
-def test_tunes_on_validation_and_scores_the_test_sets(tmp_path: Path) -> None:
+def test_tunes_on_validation_and_scores_the_test_sets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = prepared(tmp_path)
+    monkeypatch.setattr(specialist_evaluate, "EXAMPLES", 1)
     tracker = FakeTracker()
 
     report = evaluate_specialist(config, "culicidae", lambda _: tracker)
@@ -182,6 +185,10 @@ def test_tunes_on_validation_and_scores_the_test_sets(tmp_path: Path) -> None:
     assert run.metrics["test_known.exact"] == 1.0
     assert "sha256.neighbours" in run.tags
     assert run.params["grid_points"] == 45
+    # Two leaky records are wrong, but only one example is kept
+    [leaky] = report.wrong["test_novel_leaky"]
+    assert leaky.best_species == "Culex pipiens"
+    assert report.wrong["test_known"] == []
 
 
 def test_parallel_workers_give_the_same_answers(
@@ -208,7 +215,16 @@ def test_reports_when_no_thresholds_meet_the_constraints(
     report = evaluate_specialist(config, "culicidae", lambda _: FakeTracker())
 
     assert not report.constraints_met
-    assert "No thresholds met the constraints" in caplog.text
+    assert (report.background_ok, report.known_ok) == (True, False)
+    assert "No thresholds met every constraint" in caplog.text
+    wrong = report.wrong["val_known"][0]
+    assert (wrong.species, wrong.outcome, wrong.best_species) == (
+        "Aedes mislabelled",
+        "species",
+        "Aedes aegypti",
+    )
+    # No reference of its own species was among the candidates
+    assert wrong.own_species_identity is None
 
 
 def test_needs_its_inputs(tmp_path: Path) -> None:
@@ -255,26 +271,52 @@ def test_scores_are_averaged_per_record_and_per_species() -> None:
     assert score_set([], []).right_by_species == 0.0
 
 
-def test_chooses_the_best_anyway_when_no_thresholds_meet_the_constraints(
+def test_choosing_puts_the_background_first_then_known_species(
     tmp_path: Path,
 ) -> None:
     rules = AppConfig.model_validate(config_dict(tmp_path)).specialist("culicidae")
     bad = score_set([answer("species", "Aedes x")], [row("Aedes aegypti")])
+    good = score_set([answer("species", "Aedes aegypti")], [row("Aedes aegypti")])
+    kept_out = score_set([answer("not_member", None)], [row("M", role="background")])
+    let_in = score_set([answer("family", "Culicidae")], [row("M", role="background")])
+    novel_right = score_set([answer("genus", "Aedes")], [row("Aedes novus")])
+    novel_left_out = score_set([answer("not_member", None)], [row("Aedes novus")])
     first = Thresholds(species_identity=0.98, group_margin=0.01, member_identity=0.9)
-    second = first.model_copy(update={"species_identity": 0.99})
-    good_known = score_set([answer("species", "Aedes aegypti")], [row("Aedes aegypti")])
+    second, third, fourth = (
+        first.model_copy(update={"species_identity": value})
+        for value in (0.985, 0.99, 0.995)
+    )
     scored: list[tuple[Thresholds, dict[str, SetScore]]] = [
-        (first, {"val_known": bad}),
-        (second, {"val_known": bad, "val_novel": bad}),
+        # The best objective, but lets in the background
+        (first, {"val_known": good, "val_background": let_in}),
+        # Keeps out the background, but names a known species wrongly
+        (second, {"val_known": bad, "val_background": kept_out}),
+        # Ties with the next on the objective, but gets fewer novel right
+        (
+            third,
+            {
+                "val_known": good,
+                "val_background": kept_out,
+                "val_novel": novel_left_out,
+            },
+        ),
+        (
+            fourth,
+            {"val_known": good, "val_background": kept_out, "val_novel": novel_right},
+        ),
     ]
 
-    grid, chosen, met = _choose(rules, scored)
+    grid, point = _choose(rules, scored)
 
-    assert not met
-    assert chosen == first  # objective 0 - 0 beats 0 - 1
-    assert [point.eligible for point in grid] == [False, False]
-    _, chosen, met = _choose(rules, [(second, {"val_known": good_known})])
-    assert (chosen, met) == (second, True)
+    assert point.thresholds == fourth
+    assert [(p.background_ok, p.known_ok) for p in grid] == [
+        (False, True),
+        (True, False),
+        (True, True),
+        (True, True),
+    ]
+    _, point = _choose(rules, scored[:2])
+    assert point.thresholds == second
 
 
 def write_app_toml(tmp_path: Path) -> Path:
