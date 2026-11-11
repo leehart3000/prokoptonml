@@ -74,6 +74,7 @@ dnabarcode-sample = "prokopton-ml sample apps/dnabarcode/dnabarcode.toml"
 dnabarcode-train = "prokopton-ml train apps/dnabarcode/dnabarcode.toml"
 dnabarcode-calibrate = "prokopton-ml calibrate apps/dnabarcode/dnabarcode.toml"
 dnabarcode-evaluate = "prokopton-ml evaluate apps/dnabarcode/dnabarcode.toml"
+dnabarcode-card = "prokopton-ml card apps/dnabarcode/dnabarcode.toml"
 
 [tool.pixi.environments]
 default = { features = ["dev"], solve-group = "default" }

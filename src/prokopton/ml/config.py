@@ -20,9 +20,11 @@ __all__ = [
     "Midori2SourceConfig",
     "MlflowConfig",
     "RouterCalibrationConfig",
+    "RouterCardConfig",
     "RouterConfig",
     "RouterEvaluationConfig",
     "RouterSampleConfig",
+    "RouterServingConfig",
     "RouterTrainingConfig",
     "SplitConfig",
     "ValidationConfig",
@@ -291,6 +293,42 @@ class RouterEvaluationConfig(ConfigModel):
     random_state: int = 273
 
 
+class RouterServingConfig(ConfigModel):
+    """How the router's predictions are presented to users.
+
+    Sequences shorter than ``min_length`` bases are declined; up to
+    ``short_length`` they are routed with a note that accuracy is lower.
+    Predictions at or above ``confident_threshold`` are shown as confident.
+    These come from the evaluation's "how short can you go?" and coverage
+    tables, and are repeated in the model card.
+    """
+
+    min_length: int = Field(default=100, ge=1)
+    short_length: int = Field(default=300, ge=1)
+    confident_threshold: float = Field(default=0.9, gt=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _check_lengths(self) -> "RouterServingConfig":
+        if self.min_length > self.short_length:
+            msg = (
+                f"min_length ({self.min_length}) is above "
+                f"short_length ({self.short_length})"
+            )
+            raise ValueError(msg)
+        return self
+
+
+class RouterCardConfig(ConfigModel):
+    """Where the router's model card is written, and its hand-written notes.
+
+    ``notes`` (optional) is a Markdown file included as the card's
+    "Development notes" section.
+    """
+
+    output_dir: Path = Path("model-cards")
+    notes: Path | None = None
+
+
 class RouterConfig(ConfigModel):
     """Settings for the router: the model that predicts group and order."""
 
@@ -301,6 +339,8 @@ class RouterConfig(ConfigModel):
         default_factory=RouterCalibrationConfig
     )
     evaluation: RouterEvaluationConfig = Field(default_factory=RouterEvaluationConfig)
+    serving: RouterServingConfig = Field(default_factory=RouterServingConfig)
+    card: RouterCardConfig = Field(default_factory=RouterCardConfig)
 
 
 class MlflowConfig(ConfigModel):

@@ -6,7 +6,13 @@ import pytest
 from prokopton.core.config import ConfigError, load_config
 from pydantic import ValidationError
 
-from prokopton.ml.config import AppConfig, Midori2SourceConfig, RouterTrainingConfig
+from prokopton.ml.config import (
+    AppConfig,
+    Midori2SourceConfig,
+    RouterCalibrationConfig,
+    RouterServingConfig,
+    RouterTrainingConfig,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -80,3 +86,13 @@ def test_invalid_app_name_is_rejected(tmp_path: Path) -> None:
 def test_fragment_lengths_must_be_in_order() -> None:
     with pytest.raises(ValidationError, match="fragment_min_length"):
         RouterTrainingConfig(fragment_min_length=300, fragment_max_length=100)
+
+
+def test_calibration_fragment_lengths_must_be_in_order() -> None:
+    with pytest.raises(ValidationError, match="fragment_min_length"):
+        RouterCalibrationConfig(fragment_min_length=300, fragment_max_length=100)
+
+
+def test_serving_lengths_must_be_in_order() -> None:
+    with pytest.raises(ValidationError, match="min_length"):
+        RouterServingConfig(min_length=400, short_length=300)

@@ -19,6 +19,7 @@ from prokopton.ml.pipeline.sample import SampleStageError, sample
 from prokopton.ml.pipeline.split import SplitStageError, split
 from prokopton.ml.pipeline.train import TrainStageError, train
 from prokopton.ml.pipeline.validate import DataValidationError, validate
+from prokopton.ml.reporting.router_card import CardError, build_router_card
 
 __all__ = ["ENV_PREFIX", "main"]
 
@@ -38,6 +39,7 @@ _COMMANDS = {
     "train": "Train router candidates, then track and register the best.",
     "calibrate": "Calibrate the registered router's confidence by length.",
     "evaluate": "Measure the registered router on the test sets.",
+    "card": "Write the router's model card from the pipeline's reports.",
 }
 
 
@@ -86,6 +88,9 @@ def _run(command: str, config: AppConfig) -> str:
             f"v{calibration.base_version} calibrated as v{calibration.model_version}; "
             f"NLL {calibration.nll_before:.4f} -> {calibration.nll_after:.4f}"
         )
+    if command == "card":
+        files = build_router_card(config)
+        return f"model card for v{files.model_version} written to {files.card}"
     if command == "evaluate":
         evaluation = evaluate(config)
         accuracy = {
@@ -124,6 +129,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         TrainStageError,
         EvaluationStageError,
         CalibrationStageError,
+        CardError,
     ) as error:
         logger.error("%s", error)
         return 1
