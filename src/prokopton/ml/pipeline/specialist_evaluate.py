@@ -19,8 +19,11 @@ with a species name are used, since the right answer must be known.
 Each record is aligned once (in parallel processes). The thresholds in the
 grid are then all tried on the saved matches of the validation sets, and
 chosen by the rule in ``SpecialistEvaluationConfig``. The test sets are
-scored once, with the chosen thresholds. The run is recorded in MLflow.
-Outputs ``<models_dir>/specialists/<name>/_evaluation_report.json``.
+scored once, with the chosen thresholds. Wrong answers with the chosen
+thresholds are listed (up to ``EXAMPLES`` per set), with the closest
+reference of the record's own species, to help find their causes. The run
+is recorded in MLflow. Outputs
+``<models_dir>/specialists/<name>/_evaluation_report.json``.
 """
 
 import heapq
@@ -50,6 +53,7 @@ from prokopton.ml.specialists.identify import (
 from prokopton.ml.training.tracking import Tracker, specialist_tracker
 
 __all__ = [
+    "EXAMPLES",
     "NAMED",
     "REPORT_NAME",
     "GridPoint",
@@ -57,6 +61,7 @@ __all__ = [
     "SpecialistEvaluationError",
     "SpecialistEvaluationReport",
     "Thresholds",
+    "WrongAnswer",
     "evaluate_specialist",
     "is_right",
     "score_set",
@@ -66,6 +71,8 @@ logger = logging.getLogger(__name__)
 
 REPORT_NAME = "_evaluation_report.json"
 BATCH_SIZE = 100_000
+EXAMPLES = 40
+"""Wrong answers listed per set."""
 CHUNK = 32
 """Queries sent to a worker process at a time."""
 PROGRESS_EVERY = 25
@@ -122,9 +129,25 @@ class GridPoint(_Report):
     """The validation scores for one combination of thresholds."""
 
     thresholds: Thresholds
-    eligible: bool
+    background_ok: bool
+    known_ok: bool
     objective: float
     sets: dict[str, SetScore]
+
+
+class WrongAnswer(_Report):
+    """A wrong answer, with what is needed to find its cause."""
+
+    record_id: str
+    species: str | None
+    outcome: str
+    label: str | None
+    identity: float
+    best_record_id: str | None
+    best_species: str | None
+    own_species_identity: float | None
+    """The closest aligned reference of the record's own species, if any
+    was among the candidates."""
 
 
 class SpecialistEvaluationReport(_Report):
@@ -141,9 +164,12 @@ class SpecialistEvaluationReport(_Report):
     starting: Thresholds
     chosen: Thresholds
     constraints_met: bool
+    background_ok: bool
+    known_ok: bool
     grid: list[GridPoint]
     validation: dict[str, SetScore]
     test: dict[str, SetScore]
+    wrong: dict[str, list[WrongAnswer]]
     output: str
 
 
@@ -347,9 +373,17 @@ def _empty() -> SetScore:
 
 def _choose(
     rules: SpecialistConfig, scored: list[tuple[Thresholds, dict[str, SetScore]]]
-) -> tuple[list[GridPoint], Thresholds, bool]:
+) -> tuple[list[GridPoint], GridPoint]:
+    """Score the grid and choose (see ``SpecialistEvaluationConfig``).
+
+    Keeping out the background comes first, then the limit on wrongly
+    named known species, then the objective; ties go to the thresholds
+    that get the most held-out species right (usually the lowest
+    membership threshold that still keeps out the background).
+    """
     settings = rules.evaluation
     grid = []
+    novel_right = []
     for thresholds, scores in scored:
         known = scores.get("val_known", _empty())
         novel = scores.get("val_novel", _empty())
@@ -357,15 +391,62 @@ def _choose(
         grid.append(
             GridPoint(
                 thresholds=thresholds,
-                eligible=known.wrongly_named_by_species <= settings.max_known_wrong
-                and background.wrongly_named <= settings.max_background_admitted,
+                background_ok=background.wrongly_named
+                <= settings.max_background_admitted,
+                known_ok=known.wrongly_named_by_species <= settings.max_known_wrong,
                 objective=known.exact_by_species - novel.wrongly_named_by_species,
                 sets=scores,
             )
         )
-    eligible = [point for point in grid if point.eligible]
-    best = max(eligible or grid, key=lambda point: point.objective)
-    return grid, best.thresholds, bool(eligible)
+        novel_right.append(novel.right_by_species)
+    best = max(
+        range(len(grid)),
+        key=lambda n: (
+            grid[n].background_ok,
+            grid[n].known_ok,
+            grid[n].objective,
+            novel_right[n],
+        ),
+    )
+    return grid, grid[best]
+
+
+def _wrong(
+    rules: SpecialistConfig,
+    specialist: Specialist,
+    sets: dict[str, list[dict[str, Any]]],
+    matches: dict[str, list[list[Match]]],
+) -> dict[str, list[WrongAnswer]]:
+    """List wrong answers with the chosen thresholds, per set."""
+    found: dict[str, list[WrongAnswer]] = {}
+    for name, rows in sets.items():
+        listed: list[WrongAnswer] = []
+        for row, aligned in zip(rows, matches[name], strict=True):
+            answer = specialist.decide(aligned, rules)
+            if is_right(answer, row):
+                continue
+            own = [
+                m.identity
+                for m in aligned
+                if row["role"] == "target" and m.reference.species == row["species"]
+            ]
+            best = answer.matches[0].reference if answer.matches else None
+            listed.append(
+                WrongAnswer(
+                    record_id=row["record_id"],
+                    species=row["species"],
+                    outcome=answer.outcome,
+                    label=answer.label,
+                    identity=answer.identity,
+                    best_record_id=best.record_id if best else None,
+                    best_species=best.species if best else None,
+                    own_species_identity=max(own) if own else None,
+                )
+            )
+            if len(listed) == EXAMPLES:
+                break
+        found[name] = listed
+    return found
 
 
 def evaluate_specialist(
@@ -436,9 +517,16 @@ def evaluate_specialist(
         (thresholds, _score(specialist, _with(rules, thresholds), validation, matches))
         for thresholds in _grid(rules)
     ]
-    grid, chosen, constraints_met = _choose(rules, scored)
+    grid, point = _choose(rules, scored)
+    chosen = point.thresholds
+    constraints_met = point.background_ok and point.known_ok
     if not constraints_met:
-        logger.warning("No thresholds met the constraints; chose the best anyway")
+        logger.warning(
+            "No thresholds met every constraint (background kept out: %s; "
+            "known species limit met: %s); chose the best anyway",
+            point.background_ok,
+            point.known_ok,
+        )
     tuned = _with(rules, chosen)
     starting = Thresholds(
         species_identity=rules.species_identity,
@@ -458,9 +546,12 @@ def evaluate_specialist(
         starting=starting,
         chosen=chosen,
         constraints_met=constraints_met,
+        background_ok=point.background_ok,
+        known_ok=point.known_ok,
         grid=grid,
         validation=_score(specialist, tuned, validation, matches),
         test=_score(specialist, tuned, testing, matches),
+        wrong=_wrong(tuned, specialist, sets, matches),
         output=str(output),
     )
 
