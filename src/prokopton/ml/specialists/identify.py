@@ -150,6 +150,7 @@ class Specialist:
             self.vectorizer.transform([r.sequence for r in self.references])
         ).T.tocsr()
         self._keys = [_key(r) for r in self.references]
+        self._numbers = {r.record_id: n for n, r in enumerate(self.references)}
 
     @classmethod
     def from_parquet(cls, path: Path, rules: SpecialistConfig) -> "Specialist":
@@ -244,13 +245,15 @@ class Specialist:
             )
         return matches
 
-    def _usable(self, matches: Sequence[Match]) -> list[Match]:
+    def _usable(
+        self, matches: Sequence[Match], rules: SpecialistConfig | None = None
+    ) -> list[Match]:
+        rules = rules or self.rules
         return sorted(
             (
                 m
                 for m in matches
-                if m.coverage >= self.rules.min_coverage
-                and m.aligned >= self.rules.min_aligned
+                if m.coverage >= rules.min_coverage and m.aligned >= rules.min_aligned
             ),
             key=lambda m: -m.identity,
         )
@@ -261,11 +264,41 @@ class Specialist:
 
     def identify_many(self, sequences: Sequence[str]) -> list[Identification]:
         """Identify several sequences; the k-mer step is done in batches."""
+        return [self.decide(matches) for matches in self.match_many(sequences)]
+
+    def match_many(self, sequences: Sequence[str]) -> list[list[Match]]:
+        """Align each query to its candidates, before any decision.
+
+        Matches can be decided many times with different rules (see
+        ``decide``), which is how thresholds are tuned without realigning.
+        """
         return [
-            self.decide(self._align(sequence, numbers))
+            self._align(sequence, numbers)
             for sequence, numbers in zip(
                 sequences, self.candidates(sequences), strict=True
             )
+        ]
+
+    def compact(self, matches: Sequence[Match]) -> list[tuple[int, float, float, int]]:
+        """Matches as (reference number, identity, coverage, aligned) tuples.
+
+        Small to send between processes; ``expand`` turns them back.
+        """
+        return [
+            (self._numbers[m.reference.record_id], m.identity, m.coverage, m.aligned)
+            for m in matches
+        ]
+
+    def expand(self, compact: Sequence[tuple[int, float, float, int]]) -> list[Match]:
+        """Turn ``compact`` tuples back into matches."""
+        return [
+            Match(
+                reference=self.references[number],
+                identity=identity,
+                coverage=coverage,
+                aligned=aligned,
+            )
+            for number, identity, coverage, aligned in compact
         ]
 
     def find_neighbours(self, candidates: int = 5) -> dict[str, Neighbour]:
@@ -312,13 +345,15 @@ class Specialist:
                 )
         return dict(sorted(found.items()))
 
-    def _complex_of(self, species: str) -> ComplexConfig | None:
-        return next((c for c in self.rules.complexes if species in c.members), None)
+    def decide(
+        self, matches: Sequence[Match], rules: SpecialistConfig | None = None
+    ) -> Identification:
+        """Turn aligned matches into an outcome (see the module docstring).
 
-    def decide(self, matches: Sequence[Match]) -> Identification:
-        """Turn aligned matches into an outcome (see the module docstring)."""
-        rules = self.rules
-        usable = self._usable(matches)
+        ``rules`` overrides the specialist's own thresholds, for tuning.
+        """
+        rules = rules or self.rules
+        usable = self._usable(matches, rules)
         if not usable:
             return Identification(
                 outcome="not_member",
@@ -368,8 +403,8 @@ class Specialist:
                 or top.identity < rules.species_identity
                 or best.identity - top.identity > rules.group_margin
             ):
-                return self._genus_label_only(best, shown)
-            return self._named(top, named, unnamed, shown)
+                return _genus_label_only(best, shown, rules)
+            return self._named(top, named, unnamed, shown, rules)
         genera = sorted(
             {
                 m.reference.genus
@@ -405,33 +440,14 @@ class Specialist:
             ),
         )
 
-    def _genus_label_only(
-        self, best: Match, shown: tuple[Match, ...]
-    ) -> Identification:
-        level = best.reference.genus or self.rules.target
-        rank = "genus" if best.reference.genus else "family"
-        return Identification(
-            outcome="genus_label_only",
-            label=best.reference.genus,
-            identity=best.identity,
-            matches=shown,
-            notes=(
-                f"The closest match is a reference record labelled only to "
-                f"{rank} ({best.reference.species or level}, "
-                f"{best.reference.record_id}), {best.identity:.1%} identical. "
-                f"Our reference data has no species name for it; the organism "
-                f"may still belong to a named {level} species.",
-            ),
-        )
-
     def _named(
         self,
         top: Match,
         named: Mapping[str, Match],
         unnamed: Match | None,
         shown: tuple[Match, ...],
+        rules: SpecialistConfig,
     ) -> Identification:
-        rules = self.rules
         floor = max(rules.species_identity, top.identity - rules.group_margin)
         close = sorted(name for name, m in named.items() if m.identity >= floor)
         notes = []
@@ -441,7 +457,7 @@ class Specialist:
                 f"({unnamed.reference.species}) matches slightly better "
                 f"({unnamed.identity:.1%})."
             )
-        group = self._complex_of(close[0])
+        group = _complex_of(close[0], rules)
         if group is not None and all(name in group.members for name in close):
             notes.append(
                 f"Members of the {group.name} cannot be told apart by this "
@@ -497,6 +513,30 @@ class Specialist:
             matches=shown,
             notes=tuple(notes),
         )
+
+
+def _genus_label_only(
+    best: Match, shown: tuple[Match, ...], rules: SpecialistConfig
+) -> Identification:
+    level = best.reference.genus or rules.target
+    rank = "genus" if best.reference.genus else "family"
+    return Identification(
+        outcome="genus_label_only",
+        label=best.reference.genus,
+        identity=best.identity,
+        matches=shown,
+        notes=(
+            f"The closest match is a reference record labelled only to "
+            f"{rank} ({best.reference.species or level}, "
+            f"{best.reference.record_id}), {best.identity:.1%} identical. "
+            f"Our reference data has no species name for it; the organism "
+            f"may still belong to a named {level} species.",
+        ),
+    )
+
+
+def _complex_of(species: str, rules: SpecialistConfig) -> ComplexConfig | None:
+    return next((c for c in rules.complexes if species in c.members), None)
 
 
 def write_neighbours(path: Path, neighbours: Mapping[str, Neighbour]) -> None:

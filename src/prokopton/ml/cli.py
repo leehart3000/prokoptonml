@@ -17,6 +17,10 @@ from prokopton.ml.pipeline.ingest import IngestError, ingest
 from prokopton.ml.pipeline.leakage import LeakageStageError, leakage
 from prokopton.ml.pipeline.reference import ReferenceStageError, build_reference
 from prokopton.ml.pipeline.sample import SampleStageError, sample
+from prokopton.ml.pipeline.specialist_evaluate import (
+    SpecialistEvaluationError,
+    evaluate_specialist,
+)
 from prokopton.ml.pipeline.split import SplitStageError, split
 from prokopton.ml.pipeline.train import TrainStageError, train
 from prokopton.ml.pipeline.validate import DataValidationError, validate
@@ -39,7 +43,10 @@ _COMMANDS = {
     "sample": "Draw balanced training and validation samples for a classifier.",
     "train": "Train a classifier's candidates, then track and register the best.",
     "calibrate": "Calibrate a registered classifier's confidence by length.",
-    "evaluate": "Measure a registered classifier on the test sets.",
+    "evaluate": (
+        "Measure a registered classifier on the test sets, or tune and test "
+        "a specialist (with --specialist)."
+    ),
     "card": "Write a classifier's model card from the pipeline's reports.",
     "reference": "Build a specialist's reference set from the training split.",
 }
@@ -62,10 +69,11 @@ def _build_parser() -> argparse.ArgumentParser:
                 default="router",
                 help="Which classifier to work on (default: router).",
             )
-        if name == "reference":
+        if name in ("reference", "evaluate"):
             command.add_argument(
                 "--specialist",
-                required=True,
+                required=name == "reference",
+                default="",
                 help="Which specialist (as named in the app's config).",
             )
     return parser
@@ -112,6 +120,13 @@ def _run(
         return (
             f"v{calibration.base_version} calibrated as v{calibration.model_version}; "
             f"NLL {calibration.nll_before:.4f} -> {calibration.nll_after:.4f}"
+        )
+    if command == "evaluate" and specialist:
+        tuned = evaluate_specialist(config, specialist)
+        chosen = tuned.chosen
+        return (
+            f"{specialist} thresholds: species {chosen.species_identity}, "
+            f"group margin {chosen.group_margin}, member {chosen.member_identity}"
         )
     if command == "card":
         files = build_card(config, model)
@@ -162,6 +177,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         CardError,
         UnknownClassifierError,
         ReferenceStageError,
+        SpecialistEvaluationError,
     ) as error:
         logger.error("%s", error)
         return 1
