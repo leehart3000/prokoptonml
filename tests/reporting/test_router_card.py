@@ -120,7 +120,9 @@ def train_report(version: str = "4") -> TrainReport:
     )
 
 
-def calibration_report(base: str = "4", version: str = "5") -> CalibrationReport:
+def calibration_report(
+    base: str = "4", version: str = "5", b: float = -0.009
+) -> CalibrationReport:
     return CalibrationReport(
         **COMMON,
         rules=RouterCalibrationConfig(),
@@ -129,7 +131,7 @@ def calibration_report(base: str = "4", version: str = "5") -> CalibrationReport
         model_version=version,
         alias="candidate",
         a=-0.281,
-        b=-0.009,
+        b=b,
         nll_before=0.25,
         nll_after=0.21,
         before={"val_novel": {**METRICS, "ece": 0.04, "mean_confidence": 0.92}},
@@ -222,7 +224,7 @@ def test_card_describes_the_evaluated_calibrated_model(tmp_path: Path) -> None:
     assert "| Version | 5 (alias `@candidate`) |" in card
     assert "Logistic regression on 8-mer frequencies, rescaled to unit length" in card
     assert "Length-aware temperature, from v4" in card
-    assert "T = exp(-0.2810 + -0.0090 * ln(length))" in card
+    assert "T = exp(-0.2810 - 0.0090 * ln(length))" in card
     assert "| Novel species (clean) | 1,000 | 97.0% |" in card
     assert "![Accuracy by sequence length](router-fragments.svg)" in card
     assert "| Whole |" in card
@@ -231,13 +233,22 @@ def test_card_describes_the_evaluated_calibrated_model(tmp_path: Path) -> None:
     assert "| Tiny |" not in card
     assert "## Development notes\n\nHand-written notes." in card
     assert "(1 of them), and 7 validation records" in card
-    assert "3 candidate models were compared" in card
+    assert "In the final round of the search, 3 candidate models were" in card
+    assert "the broad group (for animals, the order)" in card
     assert "1 random fragment of 75-600 bases" in card
     assert "| Validation, novel species | 97.0% | 92.0% → 96.8% |" in card
     assert "(at 100 bases, 97% accurate for novel species)" in card
     assert "`calibration-run`" in card
     assert files.fragments_chart.read_text().startswith("<svg")
     assert files.reliability_chart.read_text().startswith("<svg")
+
+
+def test_card_formula_with_a_positive_length_term(tmp_path: Path) -> None:
+    config = write_reports(tmp_path, calibration=calibration_report(b=0.02))
+
+    card = build_router_card(config).card.read_text()
+
+    assert "T = exp(-0.2810 + 0.0200 * ln(length))" in card
 
 
 def test_card_for_an_uncalibrated_model(tmp_path: Path) -> None:
