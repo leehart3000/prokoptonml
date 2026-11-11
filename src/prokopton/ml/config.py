@@ -186,9 +186,11 @@ class ClassifierSampleConfig(ConfigModel):
     """
 
     salt: str = Field(default="prokopton-sample-v1", min_length=1)
-    # Spread each class's records across as many species, or as many orders
-    # (for a gene-wide class, so no one group dominates), as possible
-    diversity: Literal["species", "order"] = "species"
+    # Spread each class's records across as many species, or as many orders,
+    # as possible; "group_order" first takes turns between groups of
+    # organisms (Metazoa, Fungi, ...) and then between orders within each,
+    # so no group dominates a gene-wide class
+    diversity: Literal["species", "order", "group_order"] = "species"
     train_cap: int = Field(default=2000, ge=1)
     eval_cap: int = Field(default=200, ge=1)
     min_class_records: int = Field(default=20, ge=1)
@@ -211,16 +213,19 @@ class ClassifierTrainingConfig(ConfigModel):
     to ``fragment_max_length``, so the model learns short inputs too. Each
     validation sample then gets one such fragment per record as well.
 
+    With ``reverse_label`` set, the reverse complement (the other strand)
+    of every training record is added too, labelled ``reverse_label``, so
+    the model learns to recognise a sequence given as the other strand.
+
     The best candidate is chosen by ``selection_score``: the mean of macro-F1
     on the known-species and novel-species validation samples (and their
-    fragments, if any).
+    fragments, if any). Leave ``k_values`` or ``naive_bayes_alphas`` empty to
+    try logistic regression only.
     """
 
-    k_values: tuple[int, ...] = Field(default=(5, 6, 7, 8), min_length=1)
+    k_values: tuple[int, ...] = (5, 6, 7, 8)
     ambiguity_thresholds: tuple[float, ...] = Field(default=(0.03, 0.10), min_length=1)
-    naive_bayes_alphas: tuple[float, ...] = Field(
-        default=(1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2), min_length=1
-    )
+    naive_bayes_alphas: tuple[float, ...] = (1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2)
     logistic_k_values: tuple[int, ...] = (6,)
     logistic_ambiguity_threshold: float = Field(default=0.03, ge=0.0, le=1.0)
     logistic_alphas: tuple[float, ...] = (1e-7, 1e-6)
@@ -228,6 +233,7 @@ class ClassifierTrainingConfig(ConfigModel):
     fragments_per_record: int = Field(default=0, ge=0)
     fragment_min_length: int = Field(default=75, ge=1)
     fragment_max_length: int = Field(default=600, ge=1)
+    reverse_label: str | None = None
     threads: int = Field(default=8, ge=1)
     random_state: int = 273
     experiment: str = Field(default="router", min_length=1)
@@ -236,6 +242,11 @@ class ClassifierTrainingConfig(ConfigModel):
 
     @model_validator(mode="after")
     def _check_fragment_lengths(self) -> "ClassifierTrainingConfig":
+        naive_bayes = self.k_values and self.naive_bayes_alphas
+        logistic = self.logistic_k_values and self.logistic_alphas
+        if not naive_bayes and not logistic:
+            msg = "The search has no candidates: give naive Bayes or logistic settings"
+            raise ValueError(msg)
         if self.fragment_min_length > self.fragment_max_length:
             msg = (
                 f"fragment_min_length ({self.fragment_min_length}) is above "

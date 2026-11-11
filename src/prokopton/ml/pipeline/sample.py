@@ -98,15 +98,23 @@ def label_for(group: str | None, order: str | None) -> str | None:
 
 
 def select_capped(
-    classes: np.ndarray, species: np.ndarray, priority: np.ndarray, cap: int
+    classes: np.ndarray,
+    species: np.ndarray,
+    priority: np.ndarray,
+    cap: int,
+    outer: np.ndarray | None = None,
 ) -> np.ndarray:
     """Choose up to ``cap`` records per class, covering as many species as possible.
 
     Args:
         classes: Class id of each record.
-        species: Species id of each record.
+        species: Species id of each record (or another diversity key, such
+            as the order).
         priority: Tie-breaking number for each record (lower is chosen first).
         cap: Maximum records per class.
+        outer: Optional broader key (such as the group of organisms): if
+            given, each class first takes turns between these, and only
+            within each between species.
 
     Returns:
         A boolean mask of the chosen records.
@@ -114,18 +122,11 @@ def select_capped(
     count = classes.size
     if count == 0:
         return np.zeros(0, dtype=bool)
-    # Rank of each record within its (class, species) group, by priority
-    by_species = np.lexsort((priority, species, classes))
-    sorted_classes, sorted_species = classes[by_species], species[by_species]
-    new_group = np.ones(count, dtype=bool)
-    new_group[1:] = (sorted_classes[1:] != sorted_classes[:-1]) | (
-        sorted_species[1:] != sorted_species[:-1]
-    )
-    group_start = np.maximum.accumulate(np.where(new_group, np.arange(count), 0))
-    rank = np.empty(count, dtype=np.int64)
-    rank[by_species] = np.arange(count) - group_start
-
-    # Within each class, take rank 0 of every species first, then rank 1, ...
+    rank = _rank_within(classes, species, np.zeros(count, dtype=np.int64), priority)
+    if outer is not None:
+        # Within each (class, outer) group, take turns between species
+        rank = _rank_within(classes, outer, rank, priority)
+    # Within each class, take rank 0 first (of every species or group), then 1
     by_class = np.lexsort((priority, rank, classes))
     sorted_classes = classes[by_class]
     new_class = np.ones(count, dtype=bool)
@@ -134,6 +135,23 @@ def select_capped(
     chosen = np.zeros(count, dtype=bool)
     chosen[by_class[(np.arange(count) - class_start) < cap]] = True
     return chosen
+
+
+def _rank_within(
+    classes: np.ndarray, keys: np.ndarray, rank: np.ndarray, priority: np.ndarray
+) -> np.ndarray:
+    """Number each record within its (class, key) group, by (rank, priority)."""
+    count = classes.size
+    order = np.lexsort((priority, rank, keys, classes))
+    sorted_classes, sorted_keys = classes[order], keys[order]
+    new_group = np.ones(count, dtype=bool)
+    new_group[1:] = (sorted_classes[1:] != sorted_classes[:-1]) | (
+        sorted_keys[1:] != sorted_keys[:-1]
+    )
+    group_start = np.maximum.accumulate(np.where(new_group, np.arange(count), 0))
+    found = np.empty(count, dtype=np.int64)
+    found[order] = np.arange(count) - group_start
+    return found
 
 
 class _Report(BaseModel):
@@ -203,6 +221,7 @@ def _eligible_rows(
                     if rules.diversity == "species"
                     else row["order"] or row["group"]
                 ) or ""
+                row["outer"] = row["group"] or ""
                 yield row
 
 
@@ -229,10 +248,13 @@ def _sample_split(
     species_ids: dict[str, int] = {}
     classes = array("q")
     species = array("q")
+    outer = array("q")
+    outer_ids: dict[str, int] = {}
     priority = array("d")
     for row in _eligible_rows(inputs, split, rules, excluded, label_kind):
         classes.append(label_ids.setdefault(row["label"], len(label_ids)))
         species.append(species_ids.setdefault(row["diversity"], len(species_ids)))
+        outer.append(outer_ids.setdefault(row["outer"], len(outer_ids)))
         priority.append(hash_fraction(row["record_id"], rules.salt))
     labels_by_id = dict(enumerate(label_ids))
     class_array = np.frombuffer(classes, dtype=np.int64)
@@ -252,6 +274,9 @@ def _sample_split(
         np.frombuffer(species, dtype=np.int64),
         np.frombuffer(priority, dtype=np.float64),
         cap,
+        np.frombuffer(outer, dtype=np.int64)
+        if rules.diversity == "group_order"
+        else None,
     )
     if keep_class.size:
         chosen &= keep_class[class_array]

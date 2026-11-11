@@ -368,3 +368,18 @@ def test_cli_sample_for_an_app_without_that_classifier(tmp_path: Path) -> None:
     write_inputs(tmp_path, make_rows(), [])
 
     assert main(["sample", str(write_app_toml(tmp_path)), "--model", "marker"]) == 1
+
+
+def test_select_capped_takes_turns_between_groups_then_orders() -> None:
+    # One class: group 0 has orders 0 and 1 (4 records each); group 1 has
+    # order 2 (2 records)
+    classes = np.zeros(10, dtype=np.int64)
+    orders = np.array([0, 0, 0, 0, 1, 1, 1, 1, 2, 2])
+    groups = np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 1])
+    priority = np.arange(10) / 10
+
+    chosen = select_capped(classes, orders, priority, cap=4, outer=groups)
+
+    picked = Counter(zip(groups[chosen].tolist(), orders[chosen].tolist(), strict=True))
+    # Half from each group; within group 0, one from each order
+    assert picked == {(0, 0): 1, (0, 1): 1, (1, 2): 2}

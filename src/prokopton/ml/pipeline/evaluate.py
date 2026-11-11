@@ -15,7 +15,8 @@ record in the test splits, and reports:
 The run is recorded in MLflow, tagged with the model version and the SHA-256
 of the data it was measured on. With ``orientation`` on, the fragment
 records are also predicted as their reverse complement, to measure how often
-the right strand is the more confident one. Outputs
+the right strand is the more confident one (comparing real classes only, if
+the model also has a class for reversed sequences). Outputs
 ``<models_dir>/<model>/_evaluation_report.json``.
 """
 
@@ -124,10 +125,19 @@ class EvaluationReport(_Report):
 class _Collector:
     """Predicts buffered test records in batches and keeps compact results."""
 
-    def __init__(self, model: Any, rules: ClassifierEvaluationConfig) -> None:
+    def __init__(
+        self,
+        model: Any,
+        rules: ClassifierEvaluationConfig,
+        reverse_label: str | None = None,
+    ) -> None:
         self.model = model
         self.rules = rules
         self.index = {str(label): i for i, label in enumerate(model.classes_)}
+        # The strand check compares the best real class, not "reverse"
+        self.real = np.array(
+            [str(label) != reverse_label for label in model.classes_], dtype=bool
+        )
         self.rng = np.random.default_rng(rules.random_state)
         self.buffer: list[dict[str, Any]] = []
         self.sets: dict[str, Predictions] = {}
@@ -284,7 +294,7 @@ def evaluate(
         training.alias,
     )
     novel = set(rules.novel_splits)
-    collector = _Collector(loaded, rules)
+    collector = _Collector(loaded, rules, training.reverse_label)
     wanted = set(rules.splits)
     unlabelled: Counter[str] = Counter()
     unseen: Counter[str] = Counter()

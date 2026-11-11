@@ -202,7 +202,11 @@ def write_reports(
     model: str = "router",
 ) -> AppConfig:
     settings = config_dict(tmp_path)
-    settings["marker"] = {"label": "gene", "genes": ["CO1", "Cytb"]}
+    settings["marker"] = {
+        "label": "gene",
+        "genes": ["CO1", "Cytb"],
+        "card": {"output_dir": str(tmp_path / "cards")},
+    }
     config = AppConfig.model_validate(settings)
     sample_dir = tmp_path / "samples" / "midori2_gb999" / model
     model_dir = tmp_path / "models" / model

@@ -18,6 +18,7 @@ from prokopton.ml.training.router import (
     predict_proba,
     train_router,
     with_fragments,
+    with_reverse,
 )
 
 # Each class is built from its own repeated motif, so k-mers separate them
@@ -274,3 +275,27 @@ def test_logistic_only_k_rescales_in_place_and_still_predicts() -> None:
 
     logistic = next(run for run in tracker.runs if run.name.startswith("logistic"))
     assert logistic.metrics["val_known_accuracy"] > 0.9
+
+
+def test_with_reverse_adds_the_other_strand_of_training_records() -> None:
+    train = RouterSample(["AACG", "TTGA"], ["a", "b"], np.array([0.0, 0.1]))
+    samples = {"train": train, "val_known": make_sample(1, seed=2)}
+
+    found = with_reverse(samples, small_rules(reverse_label="reverse"))
+
+    assert found["train"].sequences == ["AACG", "TTGA", "CGTT", "TCAA"]
+    assert found["train"].labels == ["a", "b", "reverse", "reverse"]
+    assert found["train"].ambiguous_fraction.tolist() == [0.0, 0.1, 0.0, 0.1]
+    assert found["val_known"] is samples["val_known"]
+    assert with_reverse(samples, small_rules()) is samples
+
+
+def test_logistic_regression_only() -> None:
+    rules = small_rules(k_values=(), naive_bayes_alphas=())
+
+    assert {c.model for c in candidates(rules)} == {"logistic"}
+
+
+def test_a_search_needs_candidates() -> None:
+    with pytest.raises(ValueError, match="no candidates"):
+        small_rules(k_values=(), logistic_k_values=())

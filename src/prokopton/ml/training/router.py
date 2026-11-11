@@ -39,7 +39,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import Normalizer, normalize
 
 from prokopton.ml.config import ClassifierTrainingConfig
-from prokopton.ml.features.fragments import random_fragments
+from prokopton.ml.features.fragments import random_fragments, reverse_complement
 from prokopton.ml.features.kmers import KmerVectorizer
 from prokopton.ml.training.metrics import classification_metrics
 from prokopton.ml.training.tracking import Tracker
@@ -54,6 +54,7 @@ __all__ = [
     "predict_proba",
     "train_router",
     "with_fragments",
+    "with_reverse",
 ]
 
 logger = logging.getLogger(__name__)
@@ -206,6 +207,28 @@ VALIDATION_SETS = (
 """Validation sets, scored when present (fragments only when enabled)."""
 
 
+def with_reverse(
+    samples: dict[str, RouterSample], rules: ClassifierTrainingConfig
+) -> dict[str, RouterSample]:
+    """Add the reverse complement of every training record, if configured.
+
+    The copies are labelled ``rules.reverse_label`` and keep each record's
+    ambiguous fraction. Validation samples are unchanged.
+    """
+    if rules.reverse_label is None:
+        return samples
+    train = samples["train"]
+    found = dict(samples)
+    found["train"] = RouterSample(
+        sequences=train.sequences + [reverse_complement(s) for s in train.sequences],
+        labels=train.labels + [rules.reverse_label] * len(train.labels),
+        ambiguous_fraction=np.concatenate(
+            [train.ambiguous_fraction, train.ambiguous_fraction]
+        ),
+    )
+    return found
+
+
 def with_fragments(
     samples: dict[str, RouterSample], rules: ClassifierTrainingConfig
 ) -> dict[str, RouterSample]:
@@ -323,7 +346,7 @@ def train_router(
         raise ValueError(msg)
     search = candidates(rules)
     originals = samples["train"].sequences
-    samples = with_fragments(samples, rules)
+    samples = with_fragments(with_reverse(samples, rules), rules)
     train = samples["train"]
     labels = np.asarray(train.labels, dtype=object)
     best: tuple[Candidate, list[tuple[str, Any]], dict[str, float]] | None = None
