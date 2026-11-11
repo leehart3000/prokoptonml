@@ -51,7 +51,26 @@ def test_overhanging_ends_cost_nothing() -> None:
     found = align("GGGGG" + SEQUENCE[:300] + "CCCCC", SEQUENCE[:300])
 
     assert found.identity == 1.0
-    assert found.coverage == pytest.approx(300 / 310)
+    assert found.aligned == 300
+
+
+def test_a_long_query_covers_a_shorter_reference() -> None:
+    # A whole CO1 gene against a barcode-length reference: the reference
+    # lies wholly inside the alignment, so coverage is 1.0
+    longer = "".join(rng.choice(list("ACGT"), 400)) + SEQUENCE + "ACGT" * 100
+
+    found = align(longer, SEQUENCE)
+
+    assert (found.identity, found.aligned, found.coverage) == (1.0, 600, 1.0)
+
+
+def test_partial_overlap_is_not_full_coverage() -> None:
+    # Only the last 200 bases of the query overlap the first 200 of the
+    # reference
+    overlap = align(SEQUENCE[:400], SEQUENCE[200:])
+
+    assert overlap.aligned == 200
+    assert overlap.coverage == pytest.approx(200 / 400)
 
 
 def test_ambiguous_bases_are_left_out() -> None:

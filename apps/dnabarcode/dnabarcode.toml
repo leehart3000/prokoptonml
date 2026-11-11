@@ -297,19 +297,27 @@ target = "Culicidae"
 background_rank = "order"
 background = "Diptera"
 close_relatives = ["Chaoboridae", "Dixidae", "Corethrellidae"]
-per_species = 20
+# Up to 50 distinct sequences per species (identical copies are kept once)
+per_species = 50
 background_per_family = 100
 max_ambiguous_fraction = 0.10
 salt = "dnabarcode-culicidae-v1"
 k = 8
-candidates = 20
-# A match must cover this share of the query to count
+# Align the 30 closest references by k-mers, at most 3 from any one species
+candidates = 30
+candidates_per_species = 3
+# A match counts if it covers this share of the query or the reference
+# (whichever lies more completely inside the alignment), over enough bases
 min_coverage = 0.8
+min_aligned = 100
+# Records per species used to find its nearest other species (barcode gap)
+neighbour_references = 3
 # Starting thresholds (percent identity); tuned on validation data later
 member_identity = 0.90
 genus_identity = 0.95
 species_identity = 0.98
-tie_margin = 0.002
+# Named species within this much of the best match are reported together
+group_margin = 0.01
 
 [[specialists.culicidae.complexes]]
 name = "Anopheles gambiae complex"
@@ -320,6 +328,17 @@ members = [
 ]
 resolve = "Confirm with a nuclear assay: an IGS PCR (separates An. arabiensis, An. melas and An. gambiae/coluzzii), a SINE200 PCR (An. gambiae against An. coluzzii), or a multilocus amplicon panel such as ANOSPP."
 reference = "Boddé et al. (2022), eLife 11:e78775; Santolamazza et al. (2008), Malaria Journal 7:163"
+
+[[specialists.culicidae.complexes]]
+name = "Culex pipiens complex"
+# Culex pallens and the molestus form are often treated as a subspecies or
+# form of Cx. pipiens, but appear as species names in sequence records
+members = [
+  "Culex pipiens", "Culex quinquefasciatus", "Culex australicus",
+  "Culex globocoxitus", "Culex pallens", "Culex molestus",
+]
+resolve = "Confirm with a nuclear assay: an ACE-2 PCR (separates Cx. pipiens, Cx. quinquefasciatus and Cx. australicus), and a CQ11 PCR for the pipiens and molestus forms of Cx. pipiens."
+reference = "Smith & Fonseca (2004), American Journal of Tropical Medicine and Hygiene 70:339-345; Bahnck & Fonseca (2006), American Journal of Tropical Medicine and Hygiene 75:251-255"
 
 [mlflow]
 # Run metadata and the model registry in SQLite; model files in an artifact

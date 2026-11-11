@@ -8,7 +8,13 @@ import pyarrow.parquet as pq
 import pytest
 
 from prokopton.ml.config import ComplexConfig, SpecialistConfig
-from prokopton.ml.specialists.identify import Reference, Specialist
+from prokopton.ml.specialists.identify import (
+    NEIGHBOURS_NAME,
+    Neighbour,
+    Reference,
+    Specialist,
+    write_neighbours,
+)
 
 rng = np.random.default_rng(7)
 
@@ -34,7 +40,7 @@ CHAOBORUS = random_sequence()
 
 
 def ref(
-    record_id: str, sequence: str, species: str, genus: str, **fields: object
+    record_id: str, sequence: str, species: str, genus: str | None, **fields: object
 ) -> Reference:
     return Reference(
         record_id=record_id,
@@ -91,6 +97,68 @@ def test_species(specialist: Specialist) -> None:
     assert (found.outcome, found.label) == ("species", "Aedes aegypti")
     assert found.identity > 0.98
     assert found.matches[0].reference.species == "Aedes aegypti"
+    assert found.notes[0].startswith("Best match in our reference data: Aedes")
+
+
+def test_a_long_query_matches_barcode_length_references(
+    specialist: Specialist,
+) -> None:
+    # A whole gene (here, the barcode with 450 extra bases each side)
+    found = specialist.identify(random_sequence(450) + AEGYPTI + random_sequence(450))
+
+    assert (found.outcome, found.label) == ("species", "Aedes aegypti")
+
+
+def test_species_within_the_group_margin_are_a_group() -> None:
+    query = random_sequence()
+    references = [
+        ref("a", query, "Aedes cinereus", "Aedes"),
+        ref("b", mutate(query, 0.005), "Aedes rossicus", "Aedes"),
+        REFERENCES[8],
+    ]
+
+    found = Specialist(references, RULES).identify(query)
+
+    assert found.outcome == "species_group"
+    assert found.species == ("Aedes cinereus", "Aedes rossicus")
+
+
+def test_closest_species_when_inside_the_barcode_gap() -> None:
+    # Two named species 1.2% apart; a query 1.5% from one of them is no
+    # closer to it than its neighbour is
+    base = random_sequence()
+    references = [
+        ref("a", base, "Anopheles epiroticus", "Anopheles"),
+        ref("b", mutate(base, 0.012), "Anopheles dravidicus", "Anopheles"),
+        REFERENCES[8],
+    ]
+    specialist = Specialist(references, RULES)
+    specialist.neighbours = specialist.find_neighbours()
+
+    assert specialist.neighbours["Anopheles epiroticus"].nearest == (
+        "Anopheles dravidicus"
+    )
+    found = specialist.identify(mutate(base, 0.015))
+    assert (found.outcome, found.label) == ("closest_species", "Anopheles epiroticus")
+    assert "may be a related species missing" in found.notes[-1]
+    assert specialist.identify(base).outcome == "species"
+
+
+def test_candidates_are_capped_per_species() -> None:
+    query = random_sequence()
+    copies = [
+        ref(f"c{i}", mutate(query, 0.001), "Culex delta", "Culex") for i in range(8)
+    ]
+    other = ref("o", mutate(query, 0.01), "Culex epsilon", "Culex")
+    specialist = Specialist([*copies, other, REFERENCES[8]], RULES)
+
+    numbers = specialist.candidates([query], count=4, per_species=2)[0]
+
+    assert [specialist.references[n].species for n in numbers][:3] == [
+        "Culex delta",
+        "Culex delta",
+        "Culex epsilon",
+    ]
 
 
 def test_fragment_of_a_species(specialist: Specialist) -> None:
@@ -123,11 +191,36 @@ def test_species_group_when_named_species_tie(specialist: Specialist) -> None:
     assert found.species == ("Culex alpha", "Culex beta")
 
 
-def test_unidentified_specimen(specialist: Specialist) -> None:
+def test_genus_label_only(specialist: Specialist) -> None:
     found = specialist.identify(mutate(PLACEHOLDER, 0.005))
 
-    assert (found.outcome, found.label) == ("unidentified_specimen", "Culex")
-    assert "unidentified Culex specimen (Culex sp. BIOUG001)" in found.notes[0]
+    assert (found.outcome, found.label) == ("genus_label_only", "Culex")
+    assert "labelled only to genus (Culex sp. BIOUG001, r6)" in found.notes[0]
+    assert "may still belong to a named Culex species" in found.notes[0]
+
+
+def test_a_record_labelled_only_to_family() -> None:
+    family_only = ref("r10", PLACEHOLDER, "Culicidae sp. X", None, named=False)
+    found = Specialist([family_only, REFERENCES[8]], RULES).identify(PLACEHOLDER)
+
+    assert (found.outcome, found.label) == ("genus_label_only", None)
+    assert "labelled only to family (Culicidae sp. X, r10)" in found.notes[0]
+
+
+def test_a_named_species_slightly_behind_a_genus_only_record_is_named() -> None:
+    # The genus-only record is identical; the named species is 0.5% away,
+    # within the group margin, so the species is named, with a note
+    query = random_sequence()
+    references = [
+        ref("u1", query, "Culex sp. BIOUG002", "Culex", named=False),
+        ref("n1", mutate(query, 0.005), "Culex gamma", "Culex"),
+        REFERENCES[8],
+    ]
+
+    found = Specialist(references, RULES).identify(query)
+
+    assert (found.outcome, found.label) == ("species", "Culex gamma")
+    assert any("without a species name" in note for note in found.notes)
 
 
 def test_genus(specialist: Specialist) -> None:
@@ -135,6 +228,7 @@ def test_genus(specialist: Specialist) -> None:
     found = specialist.identify(AEDES)
 
     assert (found.outcome, found.label) == ("genus", "Aedes")
+    assert "may be a species missing from our reference data" in found.notes[0]
 
 
 def test_family_when_only_distantly_similar() -> None:
@@ -150,6 +244,13 @@ def test_not_a_member_when_closest_is_background(specialist: Specialist) -> None
 
     assert (found.outcome, found.label) == ("not_member", "Chaoboridae")
     assert "outside Culicidae" in found.notes[0]
+
+
+def test_a_background_record_without_a_species_name() -> None:
+    unnamed = ref("x", CHAOBORUS, "", "", role="background", family="Chaoboridae")
+    found = Specialist([REFERENCES[0], unnamed], RULES).identify(CHAOBORUS)
+
+    assert "a record without a species name" in found.notes[0]
 
 
 def test_not_a_member_when_too_dissimilar(specialist: Specialist) -> None:
@@ -201,3 +302,25 @@ def test_loads_a_reference_file(tmp_path: Path) -> None:
 
     assert len(loaded.references) == len(REFERENCES)
     assert loaded.identify(AEGYPTI).label == "Aedes aegypti"
+    assert loaded.neighbours == {}
+
+    gaps = {"Aedes aegypti": Neighbour("Aedes aegypti", "Aedes albopictus", 0.96)}
+    write_neighbours(tmp_path / NEIGHBOURS_NAME, gaps)
+    assert Specialist.from_parquet(path, RULES).neighbours == gaps
+
+
+def test_neighbours_skip_species_without_a_usable_match() -> None:
+    # Unrelated species: no alignment covers enough to count
+    found = Specialist([REFERENCES[3], REFERENCES[6], REFERENCES[8]], RULES)
+
+    assert found.find_neighbours() == {}
+
+
+def test_queries_are_compared_in_batches(
+    specialist: Specialist, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    queries = [AEGYPTI, GAMBIAE, SHARED]
+    whole = specialist.candidates(queries)
+    monkeypatch.setattr("prokopton.ml.specialists.identify.QUERY_BATCH", 2)
+
+    assert specialist.candidates(queries) == whole

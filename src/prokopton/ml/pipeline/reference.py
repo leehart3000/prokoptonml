@@ -13,12 +13,19 @@ keeps:
   ``per_species`` per species for close relatives, and up to
   ``background_per_family`` per family otherwise.
 
-Within each species or family, records are chosen by a salted hash, so the
-choice is reproducible. The data is streamed twice (to choose, then to
-write). Outputs ``<models_dir>/specialists/<name>/reference.parquet`` and
-``_reference_report.json``.
+Identical sequences within a species (or family) are kept once, so copies
+of one haplotype do not use up its places. Within each species or family,
+records are then chosen by a salted hash, so the choice is reproducible.
+The data is streamed twice (to choose, then to write).
+
+Finally, each named target species' nearest other named species is found
+(its barcode gap in our data; see ``Specialist.find_neighbours``).
+
+Outputs ``<models_dir>/specialists/<name>/reference.parquet``,
+``neighbours.json`` and ``_reference_report.json``.
 """
 
+import hashlib
 import logging
 from array import array
 from collections import Counter
@@ -35,6 +42,11 @@ from pydantic import BaseModel, ConfigDict
 from prokopton.ml import __version__
 from prokopton.ml.config import AppConfig, SpecialistConfig
 from prokopton.ml.pipeline.split import hash_fraction
+from prokopton.ml.specialists.identify import (
+    NEIGHBOURS_NAME,
+    Specialist,
+    write_neighbours,
+)
 
 __all__ = [
     "REFERENCE_NAME",
@@ -101,6 +113,11 @@ class ReferenceReport(BaseModel):
     background_records: int
     background_families: int
     close_relative_records: int
+    duplicates_skipped: int
+    species_with_neighbours: int
+    species_within_species_identity: int
+    """Named species whose nearest other species is at least
+    ``species_identity`` identical: the marker cannot separate them well."""
     output: str
 
 
@@ -176,8 +193,12 @@ def build_reference(config: AppConfig, name: str) -> ReferenceReport:
         raise ReferenceStageError(msg)
 
     # Pass 1: give each record a key (species, or family for most of the
-    # background) and that key's cap
+    # background)
+    # and that key's cap. Repeated sequences within a key get key -1 and
+    # cap 0, so they are never chosen and take no one's place
     key_ids: dict[tuple[str, str], int] = {}
+    seen: set[tuple[int, bytes]] = set()
+    duplicates = 0
     keys = array("q")
     caps = array("q")
     priority = array("d")
@@ -188,7 +209,18 @@ def build_reference(config: AppConfig, name: str) -> ReferenceReport:
             if by_species
             else ("family", row["family"] or "")
         )
-        keys.append(key_ids.setdefault(key, len(key_ids)))
+        key_id = key_ids.setdefault(key, len(key_ids))
+        digest = hashlib.blake2b(
+            row["sequence"].upper().encode("ascii"), digest_size=12
+        ).digest()
+        if (key_id, digest) in seen:
+            duplicates += 1
+            keys.append(-1)
+            caps.append(0)
+            priority.append(0.0)
+            continue
+        seen.add((key_id, digest))
+        keys.append(key_id)
         caps.append(rules.per_species if by_species else rules.background_per_family)
         priority.append(hash_fraction(row["record_id"], rules.salt))
     chosen = first_per_key(
@@ -227,7 +259,16 @@ def build_reference(config: AppConfig, name: str) -> ReferenceReport:
                 writer.write_table(pa.Table.from_pylist(rows, schema=REFERENCE_SCHEMA))
                 rows.clear()
         writer.write_table(pa.Table.from_pylist(rows, schema=REFERENCE_SCHEMA))
+    if not counts["target"]:
+        partial.unlink()
+        msg = f"No training records of {rules.target} found in {path}"
+        raise ReferenceStageError(msg)
     partial.replace(output)
+
+    # The barcode gap of each named target species
+    logger.info("Finding the nearest other species for %d species", len(named_species))
+    neighbours = Specialist.from_parquet(output, rules).find_neighbours()
+    write_neighbours(output.parent / NEIGHBOURS_NAME, neighbours)
 
     report = ReferenceReport(
         app=config.name,
@@ -245,18 +286,31 @@ def build_reference(config: AppConfig, name: str) -> ReferenceReport:
         background_records=counts["background"],
         background_families=len(families),
         close_relative_records=counts["close"],
+        duplicates_skipped=duplicates,
+        species_with_neighbours=len(neighbours),
+        species_within_species_identity=sum(
+            n.identity >= rules.species_identity for n in neighbours.values()
+        ),
         output=str(output),
     )
     report_path = output.parent / REPORT_NAME
     report_path.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     logger.info(
         "Reference for %s: %d target records (%d named species), %d background "
-        "records in %d families -> %s",
+        "records in %d families, %d repeated sequences skipped -> %s",
         name,
         report.target_records,
         report.target_named_species,
         report.background_records,
         report.background_families,
+        report.duplicates_skipped,
         output,
+    )
+    logger.info(
+        "Barcode gaps: %d of %d named species have another named species at "
+        "least %.0f%% identical",
+        report.species_within_species_identity,
+        report.species_with_neighbours,
+        rules.species_identity * 100,
     )
     return report
