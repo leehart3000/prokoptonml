@@ -221,3 +221,59 @@ def test_cli_evaluate_loads_the_registered_model_from_mlflow(tmp_path: Path) -> 
     saved = json.loads((tmp_path / "models" / "router" / REPORT_NAME).read_text())
     assert saved["model_version"] == "1"
     assert saved["splits"]["test_known"]["metrics"]["accuracy"] == 1.0
+
+
+def test_evaluate_marker_by_gene_group_and_strand(tmp_path: Path) -> None:
+    write_data(tmp_path)
+    cytb = [
+        {
+            "record_id": f"cytb-{i}",
+            "split": "test_known",
+            "group": "Fungi",
+            "order": None,
+            "ambiguous_fraction": 0.0,
+            "sequence": "TTTAAACC" * 10,
+        }
+        for i in range(5)
+    ]
+    path = tmp_path / "splits" / FOLDER / "gene=Cytb" / "records.parquet"
+    path.parent.mkdir(parents=True)
+    pq.write_table(pa.Table.from_pylist(cytb), path)
+    model = Pipeline(
+        [("kmers", KmerVectorizer(k=3)), ("classifier", MultinomialNB(fit_prior=False))]
+    ).fit(
+        [m * 10 for m in MOTIFS.values()] + ["TTTAAACC" * 10] * 2,
+        ["CO1", "CO1", "Cytb", "Cytb"],
+    )
+    tracker = FakeTracker()
+    tracker.log_model(model, None, "test-marker", "candidate")
+    settings = config_dict(tmp_path)
+    settings["marker"] = {
+        "label": "gene",
+        "genes": ["CO1", "Cytb"],
+        "training": {"registered_model": "test-marker"},
+        "evaluation": {
+            "splits": ["test_known"],
+            "novel_splits": [],
+            "fragment_lengths": [20],
+            "fragment_fraction": 1.0,
+            "orientation": True,
+            "threads": 2,
+        },
+    }
+
+    report = evaluate(
+        AppConfig.model_validate(settings), lambda _c: tracker, model="marker"
+    )
+
+    assert report.model == "marker"
+    assert report.gene == "CO1,Cytb"
+    assert set(report.data_sha256) == {"records.CO1", "records.Cytb"}
+    known = report.splits["test_known"]
+    assert known.records == 13 + 1 + 5  # every CO1 record now has a label
+    assert {g.group: g.records for g in known.by_group} == {"Metazoa": 14, "Fungi": 5}
+    whole, short = report.fragments["test_known"]
+    assert whole.forward_strand_share is not None
+    assert 0.0 <= whole.forward_strand_share <= 1.0
+    assert short.forward_strand_share is not None
+    assert (tmp_path / "models" / "marker" / REPORT_NAME).exists()

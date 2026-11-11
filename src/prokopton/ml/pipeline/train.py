@@ -13,6 +13,7 @@ Outputs ``<models_dir>/router/_train_report.json``.
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -20,15 +21,14 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.config import AppConfig, RouterTrainingConfig
+from prokopton.ml.config import AppConfig, ClassifierTrainingConfig
 from prokopton.ml.data.checksums import sha256_of_file
 from prokopton.ml.pipeline.sample import REPORT_NAME as SAMPLE_REPORT_NAME
 from prokopton.ml.training.router import RouterSample, train_router
-from prokopton.ml.training.tracking import MlflowTracker, Tracker
+from prokopton.ml.training.tracking import Tracker, mlflow_tracker
 
 __all__ = [
     "REPORT_NAME",
-    "SAMPLE_SPLITS",
     "TrainReport",
     "TrainStageError",
     "read_sample",
@@ -38,7 +38,6 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 REPORT_NAME = "_train_report.json"
-SAMPLE_SPLITS = ("train", "val_known", "val_novel")
 
 
 class TrainStageError(RuntimeError):
@@ -51,10 +50,11 @@ class TrainReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     app: str
+    model: str = "router"
     release: str
     gene: str
     prokopton_ml_version: str
-    rules: RouterTrainingConfig
+    rules: ClassifierTrainingConfig
     started_at: datetime
     finished_at: datetime
     sample_sha256: dict[str, str]
@@ -82,22 +82,17 @@ def read_sample(path: Path) -> RouterSample:
     )
 
 
-def _mlflow_tracker(config: AppConfig) -> Tracker:
-    return MlflowTracker(
-        config.mlflow.tracking_uri,
-        config.mlflow.artifact_dir,
-        config.router.training.experiment,
-    )
-
-
 def train(
     config: AppConfig,
-    tracker_factory: Callable[[AppConfig], Tracker] = _mlflow_tracker,
+    tracker_factory: Callable[[AppConfig], Tracker] | None = None,
+    *,
+    model: str = "router",
 ) -> TrainReport:
-    """Train the router candidates, register the best and write a report.
+    """Train a classifier's candidates, register the best and write a report.
 
     Args:
         config: The app's configuration.
+        model: Which classifier to train (``router`` or ``marker``).
         tracker_factory: Makes the experiment tracker (MLflow by default).
 
     Raises:
@@ -106,17 +101,20 @@ def train(
             effect).
     """
     started_at = datetime.now(UTC)
-    rules = config.router.training
-    gene = config.router.gene
+    classifier = config.classifier(model)
+    rules = classifier.training
+    gene = ",".join(classifier.genes)
+    make_tracker = tracker_factory or partial(mlflow_tracker, model=model)
     folder = f"midori2_{config.data.source.release.lower()}"
-    sample_root = config.data.paths.samples_dir / folder / "router"
-    paths = {name: sample_root / f"{name}.parquet" for name in SAMPLE_SPLITS}
+    sample_root = config.data.paths.samples_dir / folder / model
+    splits = ("train", *classifier.sample.eval_splits)
+    paths = {name: sample_root / f"{name}.parquet" for name in splits}
     missing = [str(path) for path in paths.values() if not path.exists()]
     if missing:
         msg = f"{', '.join(missing)} not found; run the sample stage first"
         raise TrainStageError(msg)
 
-    sampled_at = config.router.sample.max_ambiguous_fraction
+    sampled_at = classifier.sample.max_ambiguous_fraction
     thresholds = {*rules.ambiguity_thresholds, rules.logistic_ambiguity_threshold}
     too_high = sorted(t for t in thresholds if t > sampled_at)
     if too_high:
@@ -134,6 +132,7 @@ def train(
         "app": config.name,
         "release": config.data.source.release,
         "gene": gene,
+        "model_role": model,
         "prokopton_ml_version": __version__,
         **{f"sample_sha256.{name}": value for name, value in checksums.items()},
     }
@@ -142,7 +141,7 @@ def train(
     for name, loaded in samples.items():
         logger.info("Loaded %s: %d records", name, len(loaded.labels))
 
-    result = train_router(samples, rules, tracker_factory(config), tags)
+    result = train_router(samples, rules, make_tracker(config), tags)
     logger.info(
         "Best: %s (selection score %.4f); registered %s version %s as @%s",
         result.best.name,
@@ -154,6 +153,7 @@ def train(
 
     report = TrainReport(
         app=config.name,
+        model=model,
         release=config.data.source.release,
         gene=gene,
         prokopton_ml_version=__version__,
@@ -172,7 +172,7 @@ def train(
         alias=rules.alias,
         parent_run_id=result.parent_run_id,
     )
-    output = config.data.paths.models_dir / "router" / REPORT_NAME
+    output = config.data.paths.models_dir / model / REPORT_NAME
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     logger.info("Wrote %s", output)

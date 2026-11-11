@@ -10,7 +10,11 @@ from collections.abc import Sequence
 
 import numpy as np
 
-__all__ = ["fragment", "random_fragments"]
+__all__ = ["fragment", "random_fragments", "reverse_complement"]
+
+_COMPLEMENT = str.maketrans(
+    "ACGTURYKMBVDHSWNacgturykmbvdhswn", "TGCAAYRMKVBHDSWNtgcaayrmkvbhdswn"
+)
 
 
 def fragment(sequence: str, length: int, rng: np.random.Generator) -> str | None:
@@ -38,3 +42,12 @@ def random_fragments(
         piece = fragment(sequence, int(length), rng)
         pieces.append(sequence if piece is None else piece)
     return pieces
+
+
+def reverse_complement(sequence: str) -> str:
+    """Return the other strand, read in its own direction.
+
+    Ambiguity codes are complemented too (for example ``R`` (A or G)
+    becomes ``Y`` (C or T)); ``U`` is treated as ``T``.
+    """
+    return sequence.translate(_COMPLEMENT)[::-1]

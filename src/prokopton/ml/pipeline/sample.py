@@ -1,19 +1,21 @@
-"""Sample stage: draw balanced training and validation samples for the router.
+"""Sample stage: draw balanced training and validation samples for a classifier.
 
-The router predicts a **label** for each sequence: the order for animals
-(Metazoa), or the group for other eukaryotes (Fungi, Viridiplantae, Other
-eukaryotes). Animal records without an order, and records with no known group,
-are left out.
+Each classifier predicts a **label** for each sequence. For the router
+(``label = "group_order"``) it is the order for animals (Metazoa), or the
+group for other eukaryotes (Fungi, Viridiplantae, Other eukaryotes); animal
+records without an order, and records with no known group, are left out. For
+the marker classifier (``label = "gene"``) it is the gene a record came from.
+Records are drawn from the splits of each of the classifier's ``genes``.
 
 Classes are very unbalanced, so each is capped (``train_cap`` for training,
 ``eval_cap`` for validation). Within a class, records are chosen to cover as
-many species as possible: first one record from every species, then a second,
-and so on, with ties broken by a salted hash so the choice is reproducible.
-Classes with fewer than ``min_class_records`` eligible training records are
-dropped, from validation too, and reported.
+many species (or orders) as possible: first one record from every species,
+then a second, and so on, with ties broken by a salted hash so the choice is
+reproducible. Classes with fewer than ``min_class_records`` eligible training
+records are dropped, from validation too, and reported.
 
 The data is streamed twice per split (to choose, then to write), so memory
-stays small. Outputs ``<samples_dir>/midori2_<release>/router/<split>.parquet``
+stays small. Outputs ``<samples_dir>/midori2_<release>/<model>/<split>.parquet``
 and ``_sample_report.json``.
 """
 
@@ -31,7 +33,7 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.config import AppConfig, RouterSampleConfig
+from prokopton.ml.config import AppConfig, ClassifierSampleConfig
 from prokopton.ml.pipeline.split import hash_fraction
 
 __all__ = [
@@ -153,10 +155,12 @@ class SampleReport(_Report):
     """Provenance and sizes of a sampling run."""
 
     app: str
+    model: str = "router"
     release: str
+    # The genes sampled, comma-separated
     gene: str
     prokopton_ml_version: str
-    rules: RouterSampleConfig
+    rules: ClassifierSampleConfig
     started_at: datetime
     finished_at: datetime
     labels: list[str]
@@ -166,28 +170,47 @@ class SampleReport(_Report):
 
 
 def _eligible_rows(
-    path: Path, split: str, rules: RouterSampleConfig, excluded: set[str]
+    inputs: list[tuple[str, Path]],
+    split: str,
+    rules: ClassifierSampleConfig,
+    excluded: set[str],
+    label_kind: str,
 ) -> Iterator[dict[str, Any]]:
-    """Yield the rows of ``split`` that can be sampled, with their label."""
-    for batch in pq.ParquetFile(path).iter_batches(
-        batch_size=BATCH_SIZE, columns=_COLUMNS
-    ):
-        for row in batch.to_pylist():
-            if row["split"] != split or row["record_id"] in excluded:
-                continue
-            if row["ambiguous_fraction"] > rules.max_ambiguous_fraction:
-                continue
-            label = label_for(row["group"], row["order"])
-            if label is None:
-                continue
-            row["label"] = label
-            yield row
+    """Yield the rows of ``split`` that can be sampled, with their label.
+
+    Each row also gets a ``diversity`` key: its species, or its order (its
+    group if it has none), depending on ``rules.diversity``.
+    """
+    for gene, path in inputs:
+        for batch in pq.ParquetFile(path).iter_batches(
+            batch_size=BATCH_SIZE, columns=_COLUMNS
+        ):
+            for row in batch.to_pylist():
+                if row["split"] != split or row["record_id"] in excluded:
+                    continue
+                if row["ambiguous_fraction"] > rules.max_ambiguous_fraction:
+                    continue
+                label = (
+                    gene
+                    if label_kind == "gene"
+                    else label_for(row["group"], row["order"])
+                )
+                if label is None:
+                    continue
+                row["label"] = label
+                row["diversity"] = (
+                    row["species"]
+                    if rules.diversity == "species"
+                    else row["order"] or row["group"]
+                ) or ""
+                yield row
 
 
 def _sample_split(
-    path: Path,
+    inputs: list[tuple[str, Path]],
+    label_kind: str,
     split: str,
-    rules: RouterSampleConfig,
+    rules: ClassifierSampleConfig,
     cap: int,
     excluded: set[str],
     keep_label: Callable[[str, int], bool],
@@ -207,9 +230,9 @@ def _sample_split(
     classes = array("q")
     species = array("q")
     priority = array("d")
-    for row in _eligible_rows(path, split, rules, excluded):
+    for row in _eligible_rows(inputs, split, rules, excluded, label_kind):
         classes.append(label_ids.setdefault(row["label"], len(label_ids)))
-        species.append(species_ids.setdefault(row["species"] or "", len(species_ids)))
+        species.append(species_ids.setdefault(row["diversity"], len(species_ids)))
         priority.append(hash_fraction(row["record_id"], rules.salt))
     labels_by_id = dict(enumerate(label_ids))
     class_array = np.frombuffer(classes, dtype=np.int64)
@@ -239,7 +262,8 @@ def _sample_split(
     species_seen: dict[str, set[str]] = {}
     with pq.ParquetWriter(partial, SAMPLE_SCHEMA, compression="zstd") as writer:
         rows: list[dict[str, Any]] = []
-        for position, row in enumerate(_eligible_rows(path, split, rules, excluded)):
+        rows_again = _eligible_rows(inputs, split, rules, excluded, label_kind)
+        for position, row in enumerate(rows_again):
             if not chosen[position]:
                 continue
             rows.append({name: row[name] for name in SAMPLE_SCHEMA.names})
@@ -266,42 +290,56 @@ def _sample_split(
     return report, eligible
 
 
-def sample(config: AppConfig) -> SampleReport:
-    """Draw the router's training and validation samples and write them.
+def sample(config: AppConfig, model: str = "router") -> SampleReport:
+    """Draw a classifier's training and validation samples and write them.
+
+    Args:
+        config: The app's configuration.
+        model: Which classifier to sample for (``router`` or ``marker``).
 
     Raises:
         SampleStageError: If the split (or, when needed, leakage) data is missing.
     """
     started_at = datetime.now(UTC)
-    rules = config.router.sample
-    gene = config.router.gene
+    classifier = config.classifier(model)
+    rules = classifier.sample
     folder = f"midori2_{config.data.source.release.lower()}"
-    split_path = (
-        config.data.paths.splits_dir / folder / f"gene={gene}" / "records.parquet"
-    )
-    if not split_path.exists():
-        msg = f"{split_path} not found; run the split stage first"
-        raise SampleStageError(msg)
+    inputs = [
+        (
+            gene,
+            config.data.paths.splits_dir / folder / f"gene={gene}" / "records.parquet",
+        )
+        for gene in classifier.genes
+    ]
+    for _gene, split_path in inputs:
+        if not split_path.exists():
+            msg = f"{split_path} not found; run the split stage first"
+            raise SampleStageError(msg)
 
     excluded: set[str] = set()
     if rules.exclude_near_duplicates:
-        leakage_path = (
-            config.data.paths.leakage_dir
-            / folder
-            / f"gene={gene}"
-            / "near_duplicates.parquet"
-        )
-        if not leakage_path.exists():
-            msg = f"{leakage_path} not found; run the leakage stage first"
-            raise SampleStageError(msg)
-        excluded = set(
-            pq.read_table(leakage_path, columns=["record_id"]).column(0).to_pylist()
-        )
+        # Near-copies are only searched for in the genes the leakage stage covers
+        for gene in [g for g in classifier.genes if g in config.leakage.genes]:
+            leakage_path = (
+                config.data.paths.leakage_dir
+                / folder
+                / f"gene={gene}"
+                / "near_duplicates.parquet"
+            )
+            if not leakage_path.exists():
+                msg = f"{leakage_path} not found; run the leakage stage first"
+                raise SampleStageError(msg)
+            excluded |= set(
+                pq.read_table(leakage_path, columns=["record_id"])
+                .column("record_id")
+                .to_pylist()
+            )
 
-    output_root = config.data.paths.samples_dir / folder / "router"
+    output_root = config.data.paths.samples_dir / folder / model
     splits: dict[str, SplitSampleReport] = {}
     splits["train"], train_eligible = _sample_split(
-        split_path,
+        inputs,
+        classifier.label,
         "train",
         rules,
         rules.train_cap,
@@ -322,7 +360,8 @@ def sample(config: AppConfig) -> SampleReport:
     known = set(labels)
     for split_name in rules.eval_splits:
         splits[split_name], _ = _sample_split(
-            split_path,
+            inputs,
+            classifier.label,
             split_name,
             rules,
             rules.eval_cap,
@@ -341,8 +380,9 @@ def sample(config: AppConfig) -> SampleReport:
 
     result = SampleReport(
         app=config.name,
+        model=model,
         release=config.data.source.release,
-        gene=gene,
+        gene=",".join(classifier.genes),
         prokopton_ml_version=__version__,
         rules=rules,
         started_at=started_at,

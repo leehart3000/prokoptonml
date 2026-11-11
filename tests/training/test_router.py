@@ -7,7 +7,7 @@ from scipy import sparse
 from sklearn.naive_bayes import MultinomialNB
 
 from fakes import FakeTracker
-from prokopton.ml.config import RouterTrainingConfig
+from prokopton.ml.config import ClassifierTrainingConfig
 from prokopton.ml.training import router
 from prokopton.ml.training.router import (
     Candidate,
@@ -39,7 +39,7 @@ def make_sample(per_class: int, seed: int, ambiguous: float = 0.0) -> RouterSamp
     return RouterSample(sequences, labels, fractions)
 
 
-def small_rules(**fields: object) -> RouterTrainingConfig:
+def small_rules(**fields: object) -> ClassifierTrainingConfig:
     settings: dict[str, object] = {
         "k_values": (3, 4),
         "ambiguity_thresholds": (0.01, 0.05),
@@ -51,7 +51,7 @@ def small_rules(**fields: object) -> RouterTrainingConfig:
         "registered_model": "test-router",
     }
     settings.update(fields)
-    return RouterTrainingConfig.model_validate(settings)
+    return ClassifierTrainingConfig.model_validate(settings)
 
 
 def test_candidates_cover_the_grid_in_k_order() -> None:
@@ -120,14 +120,31 @@ def test_ambiguity_threshold_filters_training_records() -> None:
     assert records == {0.01: 30.0, 0.05: 90.0}
 
 
-def test_train_router_requires_every_sample() -> None:
-    with pytest.raises(ValueError, match="val_novel"):
-        train_router(
-            {"train": make_sample(2, 1), "val_known": make_sample(2, 2)},
-            small_rules(),
-            FakeTracker(),
-            {},
-        )
+def test_train_router_requires_training_and_validation_samples() -> None:
+    with pytest.raises(ValueError, match="at least one of val_known"):
+        train_router({"train": make_sample(2, 1)}, small_rules(), FakeTracker(), {})
+
+
+def test_train_router_with_known_species_validation_only() -> None:
+    samples = {"train": make_sample(20, seed=1), "val_known": make_sample(5, seed=2)}
+    tracker = FakeTracker()
+    rules = small_rules(
+        k_values=(3,),
+        ambiguity_thresholds=(0.05,),
+        fragments_per_record=1,
+        fragment_min_length=30,
+        fragment_max_length=60,
+    )
+
+    result = train_router(samples, rules, tracker, {"model_role": "marker"})
+
+    assert tracker.runs[0].tags["model_role"] == "marker"
+    sets = {
+        key.removesuffix("_macro_f1")
+        for key in result.metrics
+        if key.endswith("_macro_f1")
+    }
+    assert sets == {"val_known", "val_known_fragments"}
 
 
 def test_naive_bayes_from_counts_matches_fitting() -> None:

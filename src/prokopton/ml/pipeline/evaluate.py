@@ -1,4 +1,4 @@
-"""Evaluate stage: measure the router chosen by training on the test sets.
+"""Evaluate stage: measure a classifier chosen by training on the test sets.
 
 Loads the model that ``[router.training]``'s alias points at, predicts every
 record in the test splits, and reports:
@@ -7,20 +7,23 @@ record in the test splits, and reports:
   for records without (``clean``) and with (``leaky``) a near-copy in
   training;
 - scores by ambiguous fraction, calibration and confidence coverage;
-- per-class scores;
+- per-class scores, and scores by group of organisms (to show whether the
+  model works across groups, rather than learning a shortcut from them);
 - the "how short can you go?" table: scores on random fragments of each
   length.
 
 The run is recorded in MLflow, tagged with the model version and the SHA-256
-of the data it was measured on. Outputs
-``<models_dir>/router/_evaluation_report.json``.
+of the data it was measured on. With ``orientation`` on, the fragment
+records are also predicted as their reverse complement, to measure how often
+the right strand is the more confident one. Outputs
+``<models_dir>/<model>/_evaluation_report.json``.
 """
 
 import logging
 from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -28,24 +31,26 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.config import AppConfig, RouterEvaluationConfig
+from prokopton.ml.config import AppConfig, ClassifierEvaluationConfig
 from prokopton.ml.data.checksums import sha256_of_file
 from prokopton.ml.evaluation.scores import (
     AmbiguityBin,
     CalibrationBin,
     ClassScore,
     CoveragePoint,
+    GroupScore,
     Predictions,
     by_ambiguity,
+    by_group,
     calibration,
     coverage,
-    fragment,
     per_class,
 )
+from prokopton.ml.features.fragments import fragment, reverse_complement
 from prokopton.ml.pipeline.sample import label_for
 from prokopton.ml.pipeline.split import hash_fraction
 from prokopton.ml.training.router import predict_proba
-from prokopton.ml.training.tracking import MlflowTracker, Tracker
+from prokopton.ml.training.tracking import Tracker, mlflow_tracker
 
 __all__ = [
     "REPORT_NAME",
@@ -79,6 +84,7 @@ class SplitScores(_Report):
     by_ambiguity: list[AmbiguityBin]
     calibration: list[CalibrationBin]
     coverage: list[CoveragePoint]
+    by_group: list[GroupScore] = []
 
 
 class FragmentScore(_Report):
@@ -88,16 +94,19 @@ class FragmentScore(_Report):
     records: int
     too_short: int
     metrics: dict[str, float]
+    # Share where the forward strand was the more confident (if measured)
+    forward_strand_share: float | None = None
 
 
 class EvaluationReport(_Report):
     """Provenance and results of an evaluation run."""
 
     app: str
+    model: str = "router"
     release: str
     gene: str
     prokopton_ml_version: str
-    rules: RouterEvaluationConfig
+    rules: ClassifierEvaluationConfig
     started_at: datetime
     finished_at: datetime
     registered_model: str
@@ -115,7 +124,7 @@ class EvaluationReport(_Report):
 class _Collector:
     """Predicts buffered test records in batches and keeps compact results."""
 
-    def __init__(self, model: Any, rules: RouterEvaluationConfig) -> None:
+    def __init__(self, model: Any, rules: ClassifierEvaluationConfig) -> None:
         self.model = model
         self.rules = rules
         self.index = {str(label): i for i, label in enumerate(model.classes_)}
@@ -124,6 +133,8 @@ class _Collector:
         self.sets: dict[str, Predictions] = {}
         self.fragments: dict[tuple[str, int | None], Predictions] = {}
         self.too_short: Counter[tuple[str, int]] = Counter()
+        self.forward_wins: Counter[tuple[str, int | None]] = Counter()
+        self.strand_checks: Counter[tuple[str, int | None]] = Counter()
 
     def _predictions(self, name: str) -> Predictions:
         return self.sets.setdefault(name, Predictions())
@@ -143,13 +154,25 @@ class _Collector:
         probabilities = self._predict([row["sequence"] for row in rows])
         truth = np.array([self.index[row["label"]] for row in rows], dtype=np.int32)
         ambiguity = np.array([row["ambiguous_fraction"] for row in rows])
+        groups = np.array([row["group"] or "" for row in rows], dtype=object)
         names = np.array([row["set"] for row in rows], dtype=object)
         for name in {row["set"] for row in rows}:
             mask = names == name
             self._predictions(name).add(
-                truth[mask], probabilities[mask], ambiguity[mask]
+                truth[mask], probabilities[mask], ambiguity[mask], groups[mask]
             )
         self._flush_fragments(rows, truth, probabilities, ambiguity)
+
+    def _check_strand(
+        self, key: tuple[str, int | None], sequences: list[str], forward: np.ndarray
+    ) -> None:
+        if not self.rules.orientation:
+            return
+        reverse = self._predict([reverse_complement(s) for s in sequences])
+        self.forward_wins[key] += int(
+            (forward.max(axis=1) >= reverse.max(axis=1)).sum()
+        )
+        self.strand_checks[key] += len(sequences)
 
     def _flush_fragments(
         self,
@@ -164,6 +187,11 @@ class _Collector:
             self.fragments.setdefault((fragment_set, None), Predictions()).add(
                 truth[members], probabilities[members], ambiguity[members]
             )
+            self._check_strand(
+                (fragment_set, None),
+                [rows[i]["sequence"] for i in members],
+                probabilities[members],
+            )
             for length in self.rules.fragment_lengths:
                 cut: list[str] = []
                 kept: list[int] = []
@@ -175,21 +203,15 @@ class _Collector:
                         cut.append(piece)
                         kept.append(i)
                 if kept:
+                    predicted = self._predict(cut)
                     self.fragments.setdefault(
                         (fragment_set, length), Predictions()
-                    ).add(truth[kept], self._predict(cut), ambiguity[kept])
-
-
-def _mlflow_tracker(config: AppConfig) -> Tracker:
-    return MlflowTracker(
-        config.mlflow.tracking_uri,
-        config.mlflow.artifact_dir,
-        config.router.training.experiment,
-    )
+                    ).add(truth[kept], predicted, ambiguity[kept])
+                    self._check_strand((fragment_set, length), cut, predicted)
 
 
 def _split_scores(
-    predictions: Predictions, rules: RouterEvaluationConfig
+    predictions: Predictions, rules: ClassifierEvaluationConfig
 ) -> SplitScores:
     return SplitScores(
         records=len(predictions),
@@ -197,52 +219,64 @@ def _split_scores(
         by_ambiguity=by_ambiguity(predictions, rules.ambiguity_edges),
         calibration=calibration(predictions, rules.calibration_bins),
         coverage=coverage(predictions, rules.confidence_thresholds),
+        by_group=by_group(predictions),
     )
 
 
 def evaluate(
     config: AppConfig,
-    tracker_factory: Callable[[AppConfig], Tracker] = _mlflow_tracker,
+    tracker_factory: Callable[[AppConfig], Tracker] | None = None,
+    *,
+    model: str = "router",
 ) -> EvaluationReport:
-    """Measure the router on the test splits, record it and write a report.
+    """Measure a classifier on the test splits, record it and write a report.
+
+    ``model`` says which classifier to evaluate (``router`` or ``marker``).
 
     Raises:
         EvaluationStageError: If the split or leakage data is missing.
     """
     started_at = datetime.now(UTC)
-    rules = config.router.evaluation
-    training = config.router.training
-    gene = config.router.gene
+    classifier = config.classifier(model)
+    rules = classifier.evaluation
+    training = classifier.training
+    make_tracker = tracker_factory or partial(mlflow_tracker, model=model)
     folder = f"midori2_{config.data.source.release.lower()}"
-    split_path = (
-        config.data.paths.splits_dir / folder / f"gene={gene}" / "records.parquet"
-    )
-    leakage_path = (
-        config.data.paths.leakage_dir
+    split_paths = {
+        gene: config.data.paths.splits_dir / folder / f"gene={gene}" / "records.parquet"
+        for gene in classifier.genes
+    }
+    # Near-copies are only listed for the genes the leakage stage covers
+    leakage_paths = {
+        gene: config.data.paths.leakage_dir
         / folder
         / f"gene={gene}"
         / "near_duplicates.parquet"
-    )
-    needed: list[Path] = [split_path]
-    if rules.novel_splits:
-        needed.append(leakage_path)
+        for gene in classifier.genes
+        if rules.novel_splits and gene in config.leakage.genes
+    }
+    needed = [*split_paths.values(), *leakage_paths.values()]
     missing = [str(path) for path in needed if not path.exists()]
     if missing:
         msg = f"{', '.join(missing)} not found; run the split and leakage stages first"
         raise EvaluationStageError(msg)
 
-    data_sha256 = {"records": sha256_of_file(split_path)}
+    single = len(split_paths) == 1
+    data_sha256 = {
+        "records" if single else f"records.{gene}": sha256_of_file(path)
+        for gene, path in split_paths.items()
+    }
     leaky: set[str] = set()
-    if rules.novel_splits:
-        data_sha256["near_duplicates"] = sha256_of_file(leakage_path)
-        leaky = set(
-            pq.read_table(leakage_path, columns=["record_id"])
-            .column("record_id")
-            .to_pylist()
+    for gene, path in leakage_paths.items():
+        data_sha256["near_duplicates" if single else f"near_duplicates.{gene}"] = (
+            sha256_of_file(path)
+        )
+        leaky |= set(
+            pq.read_table(path, columns=["record_id"]).column("record_id").to_pylist()
         )
 
-    tracker = tracker_factory(config)
-    model, version = tracker.load_model(training.registered_model, training.alias)
+    tracker = make_tracker(config)
+    loaded, version = tracker.load_model(training.registered_model, training.alias)
     logger.info(
         "Evaluating %s version %s (@%s)",
         training.registered_model,
@@ -250,37 +284,42 @@ def evaluate(
         training.alias,
     )
     novel = set(rules.novel_splits)
-    collector = _Collector(model, rules)
+    collector = _Collector(loaded, rules)
     wanted = set(rules.splits)
     unlabelled: Counter[str] = Counter()
     unseen: Counter[str] = Counter()
-    for batch in pq.ParquetFile(split_path).iter_batches(
-        batch_size=rules.batch_size, columns=_COLUMNS
-    ):
-        for row in batch.to_pylist():
-            split = row["split"]
-            if split not in wanted:
-                continue
-            label = label_for(row["group"], row["order"])
-            if label is None:
-                unlabelled[split] += 1
-                continue
-            if label not in collector.index:
-                unseen[split] += 1
-                continue
-            name = split
-            if split in novel:
-                name = (
-                    f"{split}_leaky" if row["record_id"] in leaky else f"{split}_clean"
+    for gene, split_path in split_paths.items():
+        for batch in pq.ParquetFile(split_path).iter_batches(
+            batch_size=rules.batch_size, columns=_COLUMNS
+        ):
+            for row in batch.to_pylist():
+                split = row["split"]
+                if split not in wanted:
+                    continue
+                label = (
+                    gene
+                    if classifier.label == "gene"
+                    else label_for(row["group"], row["order"])
                 )
-            chosen = (
-                hash_fraction(row["record_id"], rules.salt) < rules.fragment_fraction
-            )
-            # Fragments of novel splits use only clean records
-            fragment_set = name if chosen and not name.endswith("_leaky") else None
-            collector.add(
-                {**row, "label": label, "set": name, "fragment_set": fragment_set}
-            )
+                if label is None:
+                    unlabelled[split] += 1
+                    continue
+                if label not in collector.index:
+                    unseen[split] += 1
+                    continue
+                name = split
+                if split in novel:
+                    leaked = row["record_id"] in leaky
+                    name = f"{split}_leaky" if leaked else f"{split}_clean"
+                chosen = (
+                    hash_fraction(row["record_id"], rules.salt)
+                    < rules.fragment_fraction
+                )
+                # Fragments of novel splits use only clean records
+                fragment_set = name if chosen and not name.endswith("_leaky") else None
+                collector.add(
+                    {**row, "label": label, "set": name, "fragment_set": fragment_set}
+                )
     collector.flush()
 
     # Whole novel splits combine the clean and leaky records
@@ -288,7 +327,7 @@ def evaluate(
         combined = Predictions()
         for part in (f"{split}_clean", f"{split}_leaky"):
             found = collector.sets.get(part, Predictions())
-            for field_name in ("truth", "ranked", "confidence", "ambiguity"):
+            for field_name in ("truth", "ranked", "confidence", "ambiguity", "group"):
                 getattr(combined, field_name).extend(getattr(found, field_name))
         collector.sets[split] = combined
 
@@ -306,12 +345,18 @@ def evaluate(
                 metrics=collector.fragments.get(
                     (name, length), Predictions()
                 ).metrics(),
+                forward_strand_share=(
+                    collector.forward_wins[name, length]
+                    / collector.strand_checks[name, length]
+                    if collector.strand_checks[name, length]
+                    else None
+                ),
             )
             for length in [None, *rules.fragment_lengths]
         ]
         for name in fragment_sets
     }
-    classes = [str(label) for label in model.classes_]
+    classes = [str(label) for label in loaded.classes_]
     class_scores = {
         name: per_class(predictions, classes)
         for name, predictions in collector.sets.items()
@@ -333,10 +378,10 @@ def evaluate(
             {
                 "app": config.name,
                 "release": config.data.source.release,
-                "gene": gene,
+                "gene": ",".join(classifier.genes),
                 "prokopton_ml_version": __version__,
                 "stage": "evaluate",
-                "model_role": "router",
+                "model_role": model,
                 "registered_model": training.registered_model,
                 "model_version": version,
                 **{f"data_sha256.{key}": value for key, value in data_sha256.items()},
@@ -352,8 +397,9 @@ def evaluate(
         tracker.log_metrics(metrics)
         report = EvaluationReport(
             app=config.name,
+            model=model,
             release=config.data.source.release,
-            gene=gene,
+            gene=",".join(classifier.genes),
             prokopton_ml_version=__version__,
             rules=rules,
             started_at=started_at,
@@ -380,7 +426,7 @@ def evaluate(
             scores.metrics["macro_f1"],
             scores.metrics["ece"],
         )
-    output = config.data.paths.models_dir / "router" / REPORT_NAME
+    output = config.data.paths.models_dir / model / REPORT_NAME
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     logger.info("Wrote %s", output)

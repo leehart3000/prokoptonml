@@ -289,3 +289,82 @@ def test_sample_writes_in_batches(
 
     assert pq.read_table(output).equals(whole)
     assert pq.ParquetFile(output).num_row_groups > 1
+
+
+def marker_config(tmp_path: Path, **sample_fields: object) -> AppConfig:
+    settings = make_config(tmp_path).model_dump(mode="json")
+    settings["marker"] = {
+        "label": "gene",
+        "genes": ["CO1", "Cytb"],
+        "sample": {
+            "diversity": "order",
+            "train_cap": 10,
+            "eval_cap": 5,
+            "min_class_records": 5,
+            "eval_splits": ["val_known"],
+            **sample_fields,
+        },
+    }
+    return AppConfig.model_validate(settings)
+
+
+def write_cytb(tmp_path: Path) -> None:
+    rows = [
+        {
+            "record_id": f"cytb-{split}-{order}-{i}",
+            "split": split,
+            "group": "Metazoa",
+            "order": order,
+            "family": "Fam",
+            "genus": "Gen",
+            "species": f"{order} species {i}",
+            "species_named": True,
+            "length": 120,
+            "ambiguous_fraction": 0.0,
+            "sequence": "GGCC" * 30,
+        }
+        for split, counts in {"train": {"Perciformes": 30, "Diptera": 3}}.items()
+        for order, count in counts.items()
+        for i in range(count)
+    ]
+    rows += [
+        {**rows[0], "record_id": f"cytb-val-{i}", "split": "val_known"}
+        for i in range(6)
+    ]
+    path = tmp_path / "splits" / "midori2_gb999" / "gene=Cytb" / "records.parquet"
+    path.parent.mkdir(parents=True)
+    pq.write_table(pa.Table.from_pylist(rows), path)
+
+
+def test_marker_sample_labels_genes_and_spreads_across_orders(tmp_path: Path) -> None:
+    write_inputs(tmp_path, make_rows(), ["train-Metazoa-Diptera-0"])
+    write_cytb(tmp_path)
+
+    report = sample(marker_config(tmp_path), "marker")
+
+    assert (report.model, report.gene) == ("marker", "CO1,Cytb")
+    assert report.labels == ["CO1", "Cytb"]
+    train = pq.read_table(report.splits["train"].output).to_pylist()
+    cytb_orders = Counter(r["order"] for r in train if r["label"] == "Cytb")
+    # Spread across orders: all 3 Diptera records are kept before more Perciformes
+    assert cytb_orders == {"Diptera": 3, "Perciformes": 7}
+    # CO1 records with no order are still eligible: their group is used
+    co1_orders = Counter(r["order"] for r in train if r["label"] == "CO1")
+    assert co1_orders[None] >= 1
+    assert set(report.splits) == {"train", "val_known"}
+    assert report.splits["val_known"].output.endswith("marker/val_known.parquet")
+    # Only CO1 has leakage data; its near-duplicates are still left out
+    assert report.excluded_near_duplicates == 1
+
+
+def test_marker_sample_requires_every_gene(tmp_path: Path) -> None:
+    write_inputs(tmp_path, make_rows(), [])
+
+    with pytest.raises(SampleStageError, match="gene=Cytb"):
+        sample(marker_config(tmp_path), "marker")
+
+
+def test_cli_sample_for_an_app_without_that_classifier(tmp_path: Path) -> None:
+    write_inputs(tmp_path, make_rows(), [])
+
+    assert main(["sample", str(write_app_toml(tmp_path)), "--model", "marker"]) == 1

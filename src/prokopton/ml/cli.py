@@ -7,7 +7,7 @@ from pathlib import Path
 
 from prokopton.core.config import ConfigError, load_config
 
-from prokopton.ml.config import AppConfig
+from prokopton.ml.config import AppConfig, UnknownClassifierError
 from prokopton.ml.data.checksums import ChecksumManifestError, ChecksumMismatchError
 from prokopton.ml.data.download import DownloadError
 from prokopton.ml.data.taxonomy import ReferenceDataError
@@ -19,7 +19,7 @@ from prokopton.ml.pipeline.sample import SampleStageError, sample
 from prokopton.ml.pipeline.split import SplitStageError, split
 from prokopton.ml.pipeline.train import TrainStageError, train
 from prokopton.ml.pipeline.validate import DataValidationError, validate
-from prokopton.ml.reporting.router_card import CardError, build_router_card
+from prokopton.ml.reporting.card import CardError, build_card
 
 __all__ = ["ENV_PREFIX", "main"]
 
@@ -35,12 +35,13 @@ _COMMANDS = {
     "validate": "Check data quality, apply rules and write processed data.",
     "split": "Assign records to training, validation and test sets.",
     "leakage": "List novel-set records with a near-copy in the training set.",
-    "sample": "Draw balanced training and validation samples for the router.",
-    "train": "Train router candidates, then track and register the best.",
-    "calibrate": "Calibrate the registered router's confidence by length.",
-    "evaluate": "Measure the registered router on the test sets.",
-    "card": "Write the router's model card from the pipeline's reports.",
+    "sample": "Draw balanced training and validation samples for a classifier.",
+    "train": "Train a classifier's candidates, then track and register the best.",
+    "calibrate": "Calibrate a registered classifier's confidence by length.",
+    "evaluate": "Measure a registered classifier on the test sets.",
+    "card": "Write a classifier's model card from the pipeline's reports.",
 }
+_CLASSIFIER_COMMANDS = {"sample", "train", "calibrate", "evaluate", "card"}
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -52,10 +53,17 @@ def _build_parser() -> argparse.ArgumentParser:
     for name, help_text in _COMMANDS.items():
         command = commands.add_parser(name, help=help_text)
         command.add_argument("config", type=Path, help="Path to the app's TOML file.")
+        if name in _CLASSIFIER_COMMANDS:
+            command.add_argument(
+                "--model",
+                choices=("router", "marker"),
+                default="router",
+                help="Which classifier to work on (default: router).",
+            )
     return parser
 
 
-def _run(command: str, config: AppConfig) -> str:
+def _run(command: str, config: AppConfig, model: str = "router") -> str:
     """Run one pipeline stage and return a one-line summary."""
     if command == "ingest":
         ingest_report = ingest(config)
@@ -71,11 +79,11 @@ def _run(command: str, config: AppConfig) -> str:
         found = {g: r.near_duplicates for g, r in leakage_report.genes.items()}
         return f"near-duplicates: {found}"
     if command == "sample":
-        sample_report = sample(config)
+        sample_report = sample(config, model)
         sizes = {name: r.sampled_records for name, r in sample_report.splits.items()}
         return f"{len(sample_report.labels)} classes; records per split: {sizes}"
     if command == "train":
-        train_report = train(config)
+        train_report = train(config, model=model)
         return (
             f"best {train_report.best_model} k={train_report.best_k}, "
             f"selection score {train_report.metrics['selection_score']:.4f}; "
@@ -83,16 +91,16 @@ def _run(command: str, config: AppConfig) -> str:
             f"@{train_report.alias}"
         )
     if command == "calibrate":
-        calibration = calibrate(config)
+        calibration = calibrate(config, model=model)
         return (
             f"v{calibration.base_version} calibrated as v{calibration.model_version}; "
             f"NLL {calibration.nll_before:.4f} -> {calibration.nll_after:.4f}"
         )
     if command == "card":
-        files = build_router_card(config)
+        files = build_card(config, model)
         return f"model card for v{files.model_version} written to {files.card}"
     if command == "evaluate":
-        evaluation = evaluate(config)
+        evaluation = evaluate(config, model=model)
         accuracy = {
             name: round(scores.metrics["accuracy"], 4)
             for name, scores in evaluation.splits.items()
@@ -114,7 +122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     try:
         config = load_config(args.config, AppConfig, env_prefix=ENV_PREFIX)
-        summary = _run(args.command, config)
+        summary = _run(args.command, config, getattr(args, "model", "router"))
     except (
         ConfigError,
         IngestError,
@@ -130,6 +138,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         EvaluationStageError,
         CalibrationStageError,
         CardError,
+        UnknownClassifierError,
     ) as error:
         logger.error("%s", error)
         return 1

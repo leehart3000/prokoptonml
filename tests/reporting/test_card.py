@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.reporting.router_card."""
+"""Tests for prokopton.ml.reporting.card."""
 
 import json
 from datetime import UTC, datetime
@@ -10,22 +10,24 @@ import pytest
 from prokopton.ml.cli import main
 from prokopton.ml.config import (
     AppConfig,
-    RouterCalibrationConfig,
-    RouterEvaluationConfig,
-    RouterSampleConfig,
-    RouterTrainingConfig,
+    ClassifierCalibrationConfig,
+    ClassifierEvaluationConfig,
+    ClassifierSampleConfig,
+    ClassifierTrainingConfig,
+    UnknownClassifierError,
 )
 from prokopton.ml.evaluation.scores import (
     AmbiguityBin,
     CalibrationBin,
     ClassScore,
     CoveragePoint,
+    GroupScore,
 )
 from prokopton.ml.pipeline.calibrate import CalibrationReport
 from prokopton.ml.pipeline.evaluate import EvaluationReport, FragmentScore, SplitScores
 from prokopton.ml.pipeline.sample import SampleReport, SplitSampleReport
 from prokopton.ml.pipeline.train import TrainReport
-from prokopton.ml.reporting.router_card import CardError, build_router_card
+from prokopton.ml.reporting.card import CardError, build_card
 
 NOW = datetime(2026, 11, 11, 12, 0, tzinfo=UTC)
 METRICS = {
@@ -68,6 +70,10 @@ def config_dict(tmp_path: Path) -> dict[str, Any]:
             "card": {
                 "output_dir": str(tmp_path / "cards"),
                 "notes": str(tmp_path / "notes.md"),
+                "title": "router model card",
+                "task": "Predict the broad group (for animals, the order)",
+                "intended_use": "For COI of at least {min_length} bases.",
+                "limitations": ["**Only COI** is supported."],
             }
         },
     }
@@ -84,7 +90,7 @@ def sample_report() -> SampleReport:
     )
     return SampleReport(
         **COMMON,
-        rules=RouterSampleConfig(),
+        rules=ClassifierSampleConfig(),
         labels=["Diptera", "Hymenoptera"],
         dropped_classes={"Rare": 3},
         excluded_near_duplicates=7,
@@ -105,7 +111,7 @@ def train_report(version: str = "4") -> TrainReport:
     }
     return TrainReport(
         **COMMON,
-        rules=RouterTrainingConfig(fragments_per_record=1),
+        rules=ClassifierTrainingConfig(fragments_per_record=1),
         sample_sha256={"train": "a" * 64},
         candidates_tried=3,
         best_model="logistic",
@@ -125,7 +131,7 @@ def calibration_report(
 ) -> CalibrationReport:
     return CalibrationReport(
         **COMMON,
-        rules=RouterCalibrationConfig(),
+        rules=ClassifierCalibrationConfig(),
         registered_model="test-router",
         base_version=base,
         model_version=version,
@@ -172,7 +178,7 @@ def evaluation_report(version: str = "5") -> EvaluationReport:
     }
     return EvaluationReport(
         **COMMON,
-        rules=RouterEvaluationConfig(),
+        rules=ClassifierEvaluationConfig(),
         registered_model="test-router",
         alias="candidate",
         model_version=version,
@@ -216,7 +222,7 @@ def write_reports(
 def test_card_describes_the_evaluated_calibrated_model(tmp_path: Path) -> None:
     config = write_reports(tmp_path, calibration=calibration_report())
 
-    files = build_router_card(config)
+    files = build_card(config)
 
     card = files.card.read_text()
     assert files.model_version == "5"
@@ -237,16 +243,57 @@ def test_card_describes_the_evaluated_calibrated_model(tmp_path: Path) -> None:
     assert "the broad group (for animals, the order)" in card
     assert "1 random fragment of 75-600 bases" in card
     assert "| Validation, novel species | 97.0% | 92.0% → 96.8% |" in card
-    assert "(at 100 bases, 97% accurate for novel species)" in card
+    assert "(at 100 bases, 97% accurate for novel species (clean))" in card
+    assert "## Intended use\n\nFor COI of at least 100 bases." in card
+    assert "- **Only COI** is supported." in card
+    # These need per-group scores and the strand check
+    assert "## By group of organisms" not in card
+    assert "## Which strand?" not in card
     assert "`calibration-run`" in card
     assert files.fragments_chart.read_text().startswith("<svg")
     assert files.reliability_chart.read_text().startswith("<svg")
 
 
+def test_card_for_a_model_without_novel_species(tmp_path: Path) -> None:
+    config = write_reports(tmp_path, calibration=calibration_report())
+    path = tmp_path / "models" / "router" / "_evaluation_report.json"
+    report = evaluation_report()
+    known = report.splits["test_known"].model_copy(
+        update={
+            "by_group": [
+                GroupScore(group="Metazoa", records=900, accuracy=0.99, macro_f1=0.98),
+                GroupScore(group="Fungi", records=100, accuracy=0.9, macro_f1=0.85),
+            ]
+        }
+    )
+    fragments = [
+        point.model_copy(update={"forward_strand_share": 0.995})
+        for point in report.fragments["test_known"]
+    ]
+    path.write_text(
+        report.model_copy(
+            update={
+                "splits": {"test_known": known},
+                "fragments": {"test_known": fragments},
+                "per_class": {"test_known": report.per_class["test_known"]},
+            }
+        ).model_dump_json()
+    )
+
+    card = build_card(config).card.read_text()
+
+    assert "| Test set | 1,000 | 97.0% |" in card
+    assert "Records were split into training, validation and test sets" in card
+    assert "| Test set | Fungi | 100 | 90.0% | 0.850 |" in card
+    assert "## Which strand?" in card
+    assert "| Whole | 99.5% |" in card
+    assert "lowest F1 on test set" in card
+
+
 def test_card_formula_with_a_positive_length_term(tmp_path: Path) -> None:
     config = write_reports(tmp_path, calibration=calibration_report(b=0.02))
 
-    card = build_router_card(config).card.read_text()
+    card = build_card(config).card.read_text()
 
     assert "T = exp(-0.2810 + 0.0200 * ln(length))" in card
 
@@ -254,10 +301,17 @@ def test_card_formula_with_a_positive_length_term(tmp_path: Path) -> None:
 def test_card_for_an_uncalibrated_model(tmp_path: Path) -> None:
     config = write_reports(tmp_path, evaluation_version="4")
 
-    card = build_router_card(config).card.read_text()
+    card = build_card(config).card.read_text()
 
     assert "This model's confidence is not calibrated." in card
     assert "| Calibration | None |" in card
+
+
+def test_card_for_an_app_without_that_classifier(tmp_path: Path) -> None:
+    config = write_reports(tmp_path, calibration=calibration_report())
+
+    with pytest.raises(UnknownClassifierError, match="marker"):
+        build_card(config, "marker")
 
 
 def test_card_without_notes(tmp_path: Path) -> None:
@@ -265,7 +319,7 @@ def test_card_without_notes(tmp_path: Path) -> None:
     write_reports(tmp_path, calibration=calibration_report())
     del settings["router"]["card"]["notes"]
 
-    card = build_router_card(AppConfig.model_validate(settings)).card.read_text()
+    card = build_card(AppConfig.model_validate(settings)).card.read_text()
 
     assert "Development notes" not in card
 
@@ -288,14 +342,14 @@ def test_card_refuses_reports_of_different_models(
     )
 
     with pytest.raises(CardError, match=message):
-        build_router_card(config)
+        build_card(config)
 
 
 def test_card_requires_the_reports(tmp_path: Path) -> None:
     config = AppConfig.model_validate(config_dict(tmp_path))
 
     with pytest.raises(CardError, match="run the pipeline first"):
-        build_router_card(config)
+        build_card(config)
 
 
 def test_card_requires_the_notes_file_it_names(tmp_path: Path) -> None:
@@ -303,7 +357,7 @@ def test_card_requires_the_notes_file_it_names(tmp_path: Path) -> None:
     (tmp_path / "notes.md").unlink()
 
     with pytest.raises(CardError, match=r"notes\.md not found"):
-        build_router_card(config)
+        build_card(config)
 
 
 def write_app_toml(tmp_path: Path) -> Path:
