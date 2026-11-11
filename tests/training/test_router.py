@@ -17,6 +17,7 @@ from prokopton.ml.training.router import (
     naive_bayes_from_counts,
     predict_proba,
     train_router,
+    with_fragments,
 )
 
 # Each class is built from its own repeated motif, so k-mers separate them
@@ -181,3 +182,78 @@ def test_logistic_regression_is_saved_with_its_rescaling_step() -> None:
     assert [name for name, _ in model.steps] == ["kmers", "scale", "classifier"]
     query = pd.DataFrame({"sequence": [MOTIFS["Lepidoptera"] * 12]})
     assert model.predict(query).tolist() == ["Lepidoptera"]
+
+
+def test_with_fragments_adds_training_fragments_and_validation_sets() -> None:
+    samples = {
+        "train": make_sample(4, seed=1, ambiguous=0.02),
+        "val_known": make_sample(2, seed=2),
+        "val_novel": make_sample(2, seed=3),
+    }
+    rules = small_rules(
+        fragments_per_record=2, fragment_min_length=10, fragment_max_length=20
+    )
+
+    found = with_fragments(samples, rules)
+
+    train = found["train"]
+    assert len(train.sequences) == len(train.labels) == 12 * 3
+    assert train.sequences[:12] == samples["train"].sequences
+    assert {len(piece) for piece in train.sequences[12:]} <= set(range(10, 21))
+    assert train.labels[12:24] == samples["train"].labels
+    assert train.ambiguous_fraction.tolist() == [0.02] * 36
+    assert len(found["val_known_fragments"].sequences) == 6
+    assert found["val_novel_fragments"].labels == samples["val_novel"].labels
+    assert with_fragments(samples, small_rules()) is samples
+
+
+def test_train_router_with_fragments_scores_fragment_sets() -> None:
+    samples = {
+        "train": make_sample(30, seed=1),
+        "val_known": make_sample(10, seed=2),
+        "val_novel": make_sample(10, seed=3),
+    }
+    tracker = FakeTracker()
+    rules = small_rules(
+        k_values=(4,),
+        ambiguity_thresholds=(0.05,),
+        fragments_per_record=1,
+        fragment_min_length=40,
+        fragment_max_length=60,
+    )
+
+    train_router(samples, rules, tracker, {})
+
+    parent, *children = tracker.runs
+    assert parent.params["fragments_per_record"] == 1
+    assert parent.params["train_records"] == 180
+    for child in children:
+        scores = [
+            child.metrics[f"{name}_macro_f1"]
+            for name in (
+                "val_known",
+                "val_novel",
+                "val_known_fragments",
+                "val_novel_fragments",
+            )
+        ]
+        assert child.metrics["selection_score"] == pytest.approx(sum(scores) / 4)
+    # The input example is made of whole training sequences, not fragments
+    example = tracker.models[0][1]
+    assert example["sequence"].tolist() == samples["train"].sequences[:3]
+
+
+def test_logistic_only_k_rescales_in_place_and_still_predicts() -> None:
+    samples = {
+        "train": make_sample(30, seed=1),
+        "val_known": make_sample(10, seed=2),
+        "val_novel": make_sample(10, seed=3),
+    }
+    tracker = FakeTracker()
+    # k=3 has only naive Bayes; k=4 has only logistic regression
+    rules = small_rules(k_values=(3,), ambiguity_thresholds=(0.05,))
+
+    train_router(samples, rules, tracker, {})
+
+    logistic = next(run for run in tracker.runs if run.name.startswith("logistic"))
+    assert logistic.metrics["val_known_accuracy"] > 0.9

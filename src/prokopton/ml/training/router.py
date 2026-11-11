@@ -36,9 +36,10 @@ from scipy import sparse
 from sklearn.linear_model import SGDClassifier
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import Normalizer
+from sklearn.preprocessing import Normalizer, normalize
 
 from prokopton.ml.config import RouterTrainingConfig
+from prokopton.ml.features.fragments import random_fragments
 from prokopton.ml.features.kmers import KmerVectorizer
 from prokopton.ml.training.metrics import classification_metrics
 from prokopton.ml.training.tracking import Tracker
@@ -52,6 +53,7 @@ __all__ = [
     "naive_bayes_from_counts",
     "predict_proba",
     "train_router",
+    "with_fragments",
 ]
 
 logger = logging.getLogger(__name__)
@@ -192,6 +194,57 @@ def predict_proba(classifier: Any, features: Any, threads: int) -> np.ndarray:
     return stacked
 
 
+VALIDATION_SETS = (
+    "val_known",
+    "val_novel",
+    "val_known_fragments",
+    "val_novel_fragments",
+)
+"""Validation sets, scored when present (fragments only when enabled)."""
+
+
+def with_fragments(
+    samples: dict[str, RouterSample], rules: RouterTrainingConfig
+) -> dict[str, RouterSample]:
+    """Add random fragments to training, and fragment sets for validation.
+
+    Training gets ``fragments_per_record`` fragments of each record, which
+    keep the record's label and ambiguous fraction. Each validation sample
+    gets a ``<name>_fragments`` set with one fragment per record. Fragments
+    are repeatable: they are drawn with ``random_state``.
+    """
+    if rules.fragments_per_record == 0:
+        return samples
+    rng = np.random.default_rng(rules.random_state)
+    lengths = (rules.fragment_min_length, rules.fragment_max_length)
+
+    def cut(sample: RouterSample, copies: int) -> RouterSample:
+        pieces = [
+            piece
+            for _ in range(copies)
+            for piece in random_fragments(sample.sequences, *lengths, rng)
+        ]
+        return RouterSample(
+            sequences=pieces,
+            labels=sample.labels * copies,
+            ambiguous_fraction=np.tile(sample.ambiguous_fraction, copies),
+        )
+
+    train = samples["train"]
+    extra = cut(train, rules.fragments_per_record)
+    found = dict(samples)
+    found["train"] = RouterSample(
+        sequences=train.sequences + extra.sequences,
+        labels=train.labels + extra.labels,
+        ambiguous_fraction=np.concatenate(
+            [train.ambiguous_fraction, extra.ambiguous_fraction]
+        ),
+    )
+    for split in ("val_known", "val_novel"):
+        found[f"{split}_fragments"] = cut(samples[split], 1)
+    return found
+
+
 def _evaluate(
     classifier: Any,
     features: dict[str, sparse.csr_matrix],
@@ -200,13 +253,14 @@ def _evaluate(
 ) -> dict[str, float]:
     metrics: dict[str, float] = {}
     classes = list(classifier.classes_)
-    for split in ("val_known", "val_novel"):
+    scored = [split for split in VALIDATION_SETS if split in samples]
+    for split in scored:
         probabilities = predict_proba(classifier, features[split], threads)
         found = classification_metrics(samples[split].labels, probabilities, classes)
         metrics.update({f"{split}_{name}": value for name, value in found.items()})
-    metrics["selection_score"] = (
-        metrics["val_known_macro_f1"] + metrics["val_novel_macro_f1"]
-    ) / 2
+    metrics["selection_score"] = sum(
+        metrics[f"{split}_macro_f1"] for split in scored
+    ) / len(scored)
     return metrics
 
 
@@ -264,14 +318,28 @@ def train_router(
         msg = f"Missing samples: {sorted(missing)}"
         raise ValueError(msg)
     search = candidates(rules)
+    originals = samples["train"].sequences
+    samples = with_fragments(samples, rules)
     train = samples["train"]
     labels = np.asarray(train.labels, dtype=object)
     best: tuple[Candidate, list[tuple[str, Any]], dict[str, float]] | None = None
 
     with tracker.run("router-search") as parent_run_id:
         tracker.set_tags({**tags, "stage": "train", "model_role": "router"})
-        tracker.log_params({"candidates": len(search), "train_records": labels.size})
-        for k, k_group in groupby(search, key=lambda c: c.k):
+        tracker.log_params(
+            {
+                "candidates": len(search),
+                "train_records": labels.size,
+                "fragments_per_record": rules.fragments_per_record,
+                "fragment_min_length": rules.fragment_min_length,
+                "fragment_max_length": rules.fragment_max_length,
+            }
+        )
+        for k, k_candidates in groupby(search, key=lambda c: c.k):
+            k_group = list(k_candidates)
+            # With no naive Bayes at this k, the unscaled features are not
+            # needed again, so they are rescaled in place to save memory
+            in_place = all(c.model == "logistic" for c in k_group)
             started = time.monotonic()
             vectorizer = KmerVectorizer(k=k).fit()
             features = {
@@ -287,10 +355,12 @@ def train_router(
                 steps: list[tuple[str, Any]] = [("kmers", vectorizer)]
                 inputs = features
                 if model == "logistic":
-                    scaler = Normalizer()
                     if not scaled:
-                        scaled = {n: scaler.transform(x) for n, x in features.items()}
-                    steps.append(("scale", scaler))
+                        scaled = {
+                            n: normalize(x, copy=not in_place)
+                            for n, x in features.items()
+                        }
+                    steps.append(("scale", Normalizer()))
                     inputs = scaled
                 keep = train.ambiguous_fraction <= threshold
                 for candidate, classifier, fit_seconds in _fitted(
@@ -355,7 +425,7 @@ def train_router(
         tracker.log_dict(
             {"classes": [str(c) for c in classifier.classes_]}, "classes.json"
         )
-        example = pd.DataFrame({"sequence": train.sequences[:3]})
+        example = pd.DataFrame({"sequence": originals[:3]})
         version = tracker.log_model(
             pipeline, example, rules.registered_model, rules.alias
         )

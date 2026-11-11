@@ -20,6 +20,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 from sklearn.metrics import precision_recall_fscore_support
 
+from prokopton.ml.features.fragments import fragment
 from prokopton.ml.training.metrics import TOP_K, metrics_from_ranks, top_ranks
 
 __all__ = [
@@ -115,14 +116,6 @@ class Predictions:
         """Accuracy, top-5 accuracy, macro-F1 and ECE."""
         truth, ranked, confidence, _ = self.arrays()
         return metrics_from_ranks(truth, ranked, confidence)
-
-
-def fragment(sequence: str, length: int, rng: np.random.Generator) -> str | None:
-    """Cut ``length`` bases from a random position, or None if too short."""
-    if len(sequence) < length:
-        return None
-    start = int(rng.integers(0, len(sequence) - length + 1))
-    return sequence[start : start + length]
 
 
 def by_ambiguity(
