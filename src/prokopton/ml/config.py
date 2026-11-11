@@ -28,6 +28,7 @@ __all__ = [
     "Midori2SourceConfig",
     "MlflowConfig",
     "SpecialistConfig",
+    "SpecialistEvaluationConfig",
     "SplitConfig",
     "UnknownClassifierError",
     "ValidationConfig",
@@ -408,6 +409,39 @@ class ComplexConfig(ConfigModel):
     reference: str = ""
 
 
+class SpecialistEvaluationConfig(ConfigModel):
+    """How a specialist's thresholds are tuned and its accuracy measured.
+
+    Up to ``per_species`` records of each species are drawn from each set
+    (at most ``max_records`` per set), so species with many records do not
+    dominate. Each record is aligned once; every combination of the
+    ``*_grid`` values is then scored on the validation sets.
+
+    The chosen combination is the one with the highest *known species
+    named exactly* minus *held-out species wrongly named* (both averaged
+    over species), among those that wrongly name known species at most
+    ``max_known_wrong`` of the time and let in background records at most
+    ``max_background_admitted`` of the time. It is then measured once on
+    the test sets.
+    """
+
+    per_species: int = Field(default=3, ge=1)
+    max_records: int = Field(default=1500, ge=1)
+    salt: str = Field(default="prokopton-specialist-evaluation-v1", min_length=1)
+    workers: int = Field(default=8, ge=1)
+    species_identity_grid: tuple[float, ...] = Field(
+        default=(0.975, 0.98, 0.985, 0.99, 0.995), min_length=1
+    )
+    group_margin_grid: tuple[float, ...] = Field(
+        default=(0.005, 0.01, 0.015), min_length=1
+    )
+    member_identity_grid: tuple[float, ...] = Field(
+        default=(0.88, 0.90, 0.92), min_length=1
+    )
+    max_known_wrong: float = Field(default=0.01, ge=0.0, le=1.0)
+    max_background_admitted: float = Field(default=0.005, ge=0.0, le=1.0)
+
+
 class SpecialistConfig(ConfigModel):
     """A specialist: species-level identification within one group.
 
@@ -456,6 +490,9 @@ class SpecialistConfig(ConfigModel):
     species_identity: float = Field(default=0.98, gt=0.0, le=1.0)
     group_margin: float = Field(default=0.01, ge=0.0, le=0.1)
     complexes: tuple[ComplexConfig, ...] = ()
+    evaluation: SpecialistEvaluationConfig = Field(
+        default_factory=SpecialistEvaluationConfig
+    )
 
     @model_validator(mode="after")
     def _check_identities(self) -> "SpecialistConfig":

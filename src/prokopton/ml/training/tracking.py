@@ -13,7 +13,13 @@ from typing import Any, Protocol
 
 from prokopton.ml.config import AppConfig
 
-__all__ = ["MlflowTracker", "Tracker", "mlflow_tracker", "own_types"]
+__all__ = [
+    "MlflowTracker",
+    "Tracker",
+    "mlflow_tracker",
+    "own_types",
+    "specialist_tracker",
+]
 
 
 class Tracker(Protocol):
@@ -147,4 +153,13 @@ def mlflow_tracker(config: AppConfig, model: str) -> Tracker:
         config.mlflow.tracking_uri,
         config.mlflow.artifact_dir,
         config.classifier(model).training.experiment,
+    )
+
+
+def specialist_tracker(config: AppConfig, name: str) -> Tracker:
+    """Make an MLflow tracker for a specialist's experiment."""
+    return MlflowTracker(
+        config.mlflow.tracking_uri,
+        config.mlflow.artifact_dir,
+        f"{config.name}-{name}-specialist",
     )
