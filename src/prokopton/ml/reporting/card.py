@@ -209,6 +209,14 @@ def _training_data(config: AppConfig, model: str) -> str:
     return f"MIDORI2 {source.release} ({covered}), {link}, {source.licence}"
 
 
+def _output(reports: _Reports) -> str:
+    labels = f"One of {len(reports.sample.labels)} labels"
+    reverse = reports.train.rules.reverse_label
+    if reverse:
+        labels += f" (or *{reverse}* for a sequence given as the other strand)"
+    return f"{labels}, with a confidence"
+
+
 def _model_section(config: AppConfig, model_name: str, reports: _Reports) -> str:
     card = config.classifier(model_name).card
     train_report = reports.train
@@ -221,7 +229,7 @@ def _model_section(config: AppConfig, model_name: str, reports: _Reports) -> str
         ["Version", f"{evaluation.model_version} (alias `@{evaluation.alias}`)"],
         ["Task", card.task],
         ["Input", card.input],
-        ["Output", f"One of {len(reports.sample.labels)} labels, with a confidence"],
+        ["Output", _output(reports)],
         [
             "Model",
             f"{model} on {train_report.best_k}-mer frequencies"
@@ -281,7 +289,11 @@ def _data_section(reports: _Reports) -> str:
         else "Records were split into training, validation and test sets; "
         "identical sequences always fall in the same set."
     )
-    spread = "species" if rules.diversity == "species" else "orders"
+    spread = {
+        "species": "species",
+        "order": "orders",
+        "group_order": "groups of organisms, then orders,",
+    }[rules.diversity]
     return (
         "## Data\n\n"
         f"{splitting}\n\n"

@@ -282,13 +282,18 @@ def test_evaluate_marker_by_gene_group_and_strand(tmp_path: Path) -> None:
 def test_strand_check_ignores_the_reverse_class(tmp_path: Path) -> None:
     write_data(tmp_path)
     sequences = [m * 10 for m in MOTIFS.values()]
-    reverse = [
-        "".join({"A": "T", "C": "G", "G": "C", "T": "A"}[b] for b in s[::-1])
-        for s in sequences
-    ]
+    complement = {"A": "T", "C": "G", "G": "C", "T": "A"}
+    reverse = ["".join(complement[b] for b in s[::-1]) for s in sequences]
+    # CO1 and Cytb are trained on the same sequences, so on the right strand
+    # the best gene has only about half the probability; on the other strand,
+    # "reverse" is nearly certain. Comparing every class would pick the
+    # wrong strand; comparing genes only picks the right one.
     model = Pipeline(
         [("kmers", KmerVectorizer(k=3)), ("classifier", MultinomialNB(fit_prior=False))]
-    ).fit(sequences + reverse, ["CO1", "CO1", "reverse", "reverse"])
+    ).fit(
+        sequences * 2 + reverse,
+        ["CO1", "CO1", "Cytb", "Cytb", "reverse", "reverse"],
+    )
     tracker = FakeTracker()
     tracker.log_model(model, None, "test-marker", "candidate")
     settings = config_dict(tmp_path)
@@ -310,6 +315,8 @@ def test_strand_check_ignores_the_reverse_class(tmp_path: Path) -> None:
         AppConfig.model_validate(settings), lambda _c: tracker, model="marker"
     )
 
-    # The other strand is confidently "reverse", so CO1 wins on the original
     (whole,) = report.fragments["test_known"]
-    assert whole.forward_strand_share == 1.0
+    # The motif records all pick the right strand (the 1 in 14 that misses
+    # is the "ACGT" record, which is its own reverse complement)
+    assert whole.forward_strand_share is not None
+    assert whole.forward_strand_share >= 13 / 14

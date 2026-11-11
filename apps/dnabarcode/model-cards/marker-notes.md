@@ -32,9 +32,26 @@ These notes are written by hand and included in the generated card.
   other strand won, it was mostly predicted as a *different* gene (a model
   error), not the record's own gene (which would mean a record stored
   backwards).
-- **v3 onwards:** records take turns between groups of organisms before
-  orders, and the reverse class was added. Naive Bayes was dropped from the
-  search (0.870 against 0.915 for logistic regression in v1).
+- **v3-v4:** records took turns between groups of organisms before
+  orders, and the reverse class was added. The reverse class worked: the
+  other strand was now more confident for only 0.5% of animal and 1.8% of
+  fungal records. Balancing groups did not: fungi stayed at about 60%
+  accurate, and animals fell from 99.5% to 98.3%. Naive Bayes was dropped
+  from the search (0.870 against 0.915 for logistic regression in v1).
+- **v5 onwards:** records are spread across orders again (as in v1), with
+  the reverse class kept.
+
+### Fungi
+
+Fungal sequences remain the weak point (about 60% accurate in v1-v4), and
+more fungal training data did not help. A likely reason is biology rather
+than sampling: fungal mitochondrial genes such as *cox1* (CO1), *cob*
+(Cytb), *nad5* (ND5) and the large ribosomal RNA often contain many
+introns, which can make up much of a record. A model that counts k-mers
+across the whole record then sees mostly intron sequence, which these genes
+share. This has not been tested here. For this site it matters little:
+fungi are identified by ITS, not COI, and the marker classifier's main job
+is to check animal COI.
 
 ### What it cannot do
 

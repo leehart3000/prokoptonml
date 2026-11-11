@@ -242,8 +242,31 @@ def test_card_for_the_marker_uses_its_own_reports(tmp_path: Path) -> None:
     assert files.card.name == "marker.md"
     assert files.fragments_chart.name == "marker-fragments.svg"
     assert "MIDORI2 GB999 (CO1, Cytb)" in card
+    assert "| Output | One of 2 labels, with a confidence |" in card
     # The marker has no card text configured, so those parts are left out
     assert "## Intended use" not in card
+
+
+def test_card_mentions_the_reverse_class_and_group_spread(tmp_path: Path) -> None:
+    config = write_reports(tmp_path, calibration=calibration_report())
+    sample_path = (
+        tmp_path / "samples" / "midori2_gb999" / "router" / "_sample_report.json"
+    )
+    sample_path.write_text(
+        sample_report()
+        .model_copy(update={"rules": ClassifierSampleConfig(diversity="group_order")})
+        .model_dump_json()
+    )
+    train_path = tmp_path / "models" / "router" / "_train_report.json"
+    rules = ClassifierTrainingConfig(fragments_per_record=1, reverse_label="reverse")
+    train_path.write_text(
+        train_report().model_copy(update={"rules": rules}).model_dump_json()
+    )
+
+    card = build_card(config).card.read_text()
+
+    assert "(or *reverse* for a sequence given as the other strand)" in card
+    assert "spread across as many groups of organisms, then orders, as" in card
 
 
 def test_card_refuses_reports_for_another_model(tmp_path: Path) -> None:
