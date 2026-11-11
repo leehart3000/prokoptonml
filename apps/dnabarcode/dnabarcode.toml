@@ -203,12 +203,11 @@ genes = [
 
 [marker.sample]
 salt = "dnabarcode-marker-sample-v1"
-# Each gene's records take turns between groups of organisms (Metazoa,
-# Fungi, Viridiplantae, Other eukaryotes), then between orders within each,
-# so the model must learn the genes, not the organisms. v2 spread records
-# across orders only; animals have far more orders, so other groups were
-# scarce, and fungi were only 62% accurate (see analysis/04)
-diversity = "group_order"
+# Spread each gene's records across as many orders as possible. v3-v4 tried
+# taking turns between groups of organisms first ("group_order"): fungi did
+# not improve (60% against 62%) and animals got worse (98.3% against
+# 99.5%), so v5 returns to orders (see analysis/04)
+diversity = "order"
 train_cap = 20000
 eval_cap = 2000
 min_class_records = 20
@@ -232,8 +231,9 @@ fragments_per_record = 1
 fragment_min_length = 75
 fragment_max_length = 600
 # Every training record's other strand is added as a "reverse" class: in v2
-# the other strand was more confident for 2% of animal and 34% of fungal
-# records, mostly mistaken for another gene (see analysis/04)
+# the other strand was more confident for 2.3% of animal and 34% of fungal
+# records, mostly mistaken for another gene; with it (v4), 0.5% and 1.8%
+# (see analysis/04)
 reverse_label = "reverse"
 threads = 8
 random_state = 273

@@ -179,9 +179,9 @@ class _Collector:
         if not self.rules.orientation:
             return
         reverse = self._predict([reverse_complement(s) for s in sequences])
-        self.forward_wins[key] += int(
-            (forward.max(axis=1) >= reverse.max(axis=1)).sum()
-        )
+        best_forward = forward[:, self.real].max(axis=1)
+        best_reverse = reverse[:, self.real].max(axis=1)
+        self.forward_wins[key] += int((best_forward >= best_reverse).sum())
         self.strand_checks[key] += len(sequences)
 
     def _flush_fragments(
