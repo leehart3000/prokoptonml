@@ -84,6 +84,12 @@ def _table(header: list[str], rows: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
+def _phrase(reports: _Reports, name: str) -> str:
+    """A test set's name for use inside a sentence."""
+    shown = reports.names[name]
+    return "the test set" if shown == "Test set" else shown.lower()
+
+
 def _main_set(reports: _Reports) -> str:
     """The test set that best shows real use: clean novel species if any."""
     splits = reports.evaluation.splits
@@ -92,20 +98,17 @@ def _main_set(reports: _Reports) -> str:
 
 def _read(config: AppConfig, model: str) -> _Reports:
     folder = f"midori2_{config.data.source.release.lower()}"
-    router_dir = config.data.paths.models_dir / model
+    model_dir = config.data.paths.models_dir / model
     paths = {
-        "sample": config.data.paths.samples_dir
-        / folder
-        / "router"
-        / sample.REPORT_NAME,
-        "train": router_dir / train.REPORT_NAME,
-        "evaluation": router_dir / evaluate.REPORT_NAME,
+        "sample": config.data.paths.samples_dir / folder / model / sample.REPORT_NAME,
+        "train": model_dir / train.REPORT_NAME,
+        "evaluation": model_dir / evaluate.REPORT_NAME,
     }
     missing = [str(path) for path in paths.values() if not path.exists()]
     if missing:
         msg = f"{', '.join(missing)} not found; run the pipeline first"
         raise CardError(msg)
-    calibration_path = router_dir / calibrate.REPORT_NAME
+    calibration_path = model_dir / calibrate.REPORT_NAME
     evaluation = EvaluationReport.model_validate_json(
         paths["evaluation"].read_text("utf-8")
     )
@@ -124,6 +127,17 @@ def _read(config: AppConfig, model: str) -> _Reports:
         evaluation=evaluation,
         names=names,
     )
+    made_for = {
+        "sample": reports.sample.model,
+        "train": reports.train.model,
+        "evaluation": reports.evaluation.model,
+    }
+    if reports.calibration is not None:
+        made_for["calibration"] = reports.calibration.model
+    wrong = sorted(name for name, found in made_for.items() if found != model)
+    if wrong:
+        msg = f"The {', '.join(wrong)} report(s) are not for the {model!r} model"
+        raise CardError(msg)
     expected = reports.train.model_version
     if reports.calibration is not None:
         if reports.calibration.base_version != expected:
@@ -180,7 +194,7 @@ def _reliability_chart(reports: _Reports) -> str:
     main = _main_set(reports)
     bins = reports.evaluation.splits[main].calibration
     return reliability_chart(
-        f"Reliability: {reports.names[main].lower()}, whole sequences",
+        f"Reliability: {_phrase(reports, main).removeprefix('the ')}, whole sequences",
         [b.mean_confidence for b in bins],
         [b.accuracy for b in bins],
         [b.records for b in bins],
@@ -282,7 +296,7 @@ def _data_section(reports: _Reports) -> str:
     )
 
 
-def _training_section(reports: _Reports) -> str:
+def _training_section(reports: _Reports, note: str) -> str:
     train_report = reports.train
     metrics = train_report.metrics
     rules = train_report.rules
@@ -307,12 +321,10 @@ def _training_section(reports: _Reports) -> str:
     )
     return (
         "## Training\n\n"
-        "In the final round of the search, "
         f"{_count(train_report.candidates_tried, 'candidate model')} were "
-        "compared on the "
-        "validation samples (never the test sets), and the best was chosen by "
-        "the mean macro-F1 across them (earlier rounds are described in the "
-        "development notes). "
+        "compared on the validation samples (never the test sets), and the "
+        "best was chosen by the mean macro-F1 across them. "
+        f"{note.strip() + ' ' if note.strip() else ''}"
         f"{fragments}Every candidate is recorded in MLflow (run "
         f"`{train_report.parent_run_id}`).\n\n"
         + _table(["Validation set", "Accuracy", "Macro-F1"], rows)
@@ -379,9 +391,13 @@ def _results_section(reports: _Reports) -> str:
             ],
             rows,
         )
-        + f"\n\n{unlabelled:,} test records had no group or order label, and "
-        f"{unseen:,} belonged to classes too rare to train on; these were not "
-        "scored."
+        + (
+            f"\n\n{unlabelled:,} test records had no group or order label, and "
+            f"{unseen:,} belonged to classes too rare to train on; these were "
+            "not scored."
+            if unlabelled or unseen
+            else ""
+        )
     )
 
 
@@ -421,7 +437,7 @@ def _reliability_section(reports: _Reports, chart: str) -> str:
         "diagonal, confidence matches how often the model is right.\n\n"
         f"![Reliability chart]({chart})\n\n"
         "Accepting only predictions at or above a confidence threshold "
-        f"({reports.names[main].lower()}):\n\n"
+        f"({_phrase(reports, main)}):\n\n"
         + _table(["Threshold", "Share accepted", "Accuracy of those"], rows)
     )
 
@@ -471,7 +487,7 @@ def _hardest_section(reports: _Reports) -> str:
     ]
     return (
         "## Hardest classes\n\n"
-        f"The {_HARDEST} classes with the lowest F1 on {reports.names[main].lower()}, "
+        f"The {_HARDEST} classes with the lowest F1 on {_phrase(reports, main)}, "
         f"among those with at least {_MIN_SUPPORT} test records. *Precision*: "
         "of the records predicted as this class, the share that were; "
         "*recall*: of this class's records, the share found.\n\n"
@@ -487,7 +503,7 @@ def _limitations_section(config: AppConfig, model: str, reports: _Reports) -> st
     shortest = lengths.get(serving.min_length)
     at_minimum = (
         f" (at {serving.min_length} bases, {_pct(shortest.metrics['accuracy'], 0)} "
-        f"accurate for {reports.names[main].lower()})"
+        f"accurate on {_phrase(reports, main)})"
         if shortest
         else ""
     )
@@ -607,7 +623,7 @@ def build_card(config: AppConfig, model: str = "router") -> CardFiles:
         _model_section(config, model, reports),
         _use_section(config, model),
         _data_section(reports),
-        _training_section(reports),
+        _training_section(reports, card.training_note),
         _calibration_section(reports),
         _results_section(reports),
         _groups_section(reports),

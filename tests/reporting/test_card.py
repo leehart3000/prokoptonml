@@ -73,6 +73,7 @@ def config_dict(tmp_path: Path) -> dict[str, Any]:
                 "title": "router model card",
                 "task": "Predict the broad group (for animals, the order)",
                 "intended_use": "For COI of at least {min_length} bases.",
+                "training_note": "Earlier rounds are in the notes.",
                 "limitations": ["**Only COI** is supported."],
             }
         },
@@ -198,25 +199,58 @@ def write_reports(
     train_version: str = "4",
     calibration: CalibrationReport | None = None,
     evaluation_version: str = "5",
+    model: str = "router",
 ) -> AppConfig:
-    config = AppConfig.model_validate(config_dict(tmp_path))
-    sample_dir = tmp_path / "samples" / "midori2_gb999" / "router"
-    model_dir = tmp_path / "models" / "router"
+    settings = config_dict(tmp_path)
+    settings["marker"] = {"label": "gene", "genes": ["CO1", "Cytb"]}
+    config = AppConfig.model_validate(settings)
+    sample_dir = tmp_path / "samples" / "midori2_gb999" / model
+    model_dir = tmp_path / "models" / model
     sample_dir.mkdir(parents=True)
     model_dir.mkdir(parents=True)
-    (sample_dir / "_sample_report.json").write_text(sample_report().model_dump_json())
+    (sample_dir / "_sample_report.json").write_text(
+        sample_report().model_copy(update={"model": model}).model_dump_json()
+    )
     (model_dir / "_train_report.json").write_text(
-        train_report(train_version).model_dump_json()
+        train_report(train_version)
+        .model_copy(update={"model": model})
+        .model_dump_json()
     )
     if calibration is not None:
         (model_dir / "_calibration_report.json").write_text(
-            calibration.model_dump_json()
+            calibration.model_copy(update={"model": model}).model_dump_json()
         )
     (model_dir / "_evaluation_report.json").write_text(
-        evaluation_report(evaluation_version).model_dump_json()
+        evaluation_report(evaluation_version)
+        .model_copy(update={"model": model})
+        .model_dump_json()
     )
     (tmp_path / "notes.md").write_text("Hand-written notes.\n")
     return config
+
+
+def test_card_for_the_marker_uses_its_own_reports(tmp_path: Path) -> None:
+    config = write_reports(tmp_path, calibration=calibration_report(), model="marker")
+
+    files = build_card(config, "marker")
+
+    card = files.card.read_text()
+    assert files.card.name == "marker.md"
+    assert files.fragments_chart.name == "marker-fragments.svg"
+    assert "MIDORI2 GB999 (CO1, Cytb)" in card
+    # The marker has no card text configured, so those parts are left out
+    assert "## Intended use" not in card
+
+
+def test_card_refuses_reports_for_another_model(tmp_path: Path) -> None:
+    config = write_reports(tmp_path, calibration=calibration_report())
+    path = tmp_path / "models" / "router" / "_evaluation_report.json"
+    path.write_text(
+        evaluation_report().model_copy(update={"model": "marker"}).model_dump_json()
+    )
+
+    with pytest.raises(CardError, match="evaluation report"):
+        build_card(config)
 
 
 def test_card_describes_the_evaluated_calibrated_model(tmp_path: Path) -> None:
@@ -239,11 +273,13 @@ def test_card_describes_the_evaluated_calibrated_model(tmp_path: Path) -> None:
     assert "| Tiny |" not in card
     assert "## Development notes\n\nHand-written notes." in card
     assert "(1 of them), and 7 validation records" in card
-    assert "In the final round of the search, 3 candidate models were" in card
+    assert "3 candidate models were compared" in card
+    assert "the mean macro-F1 across them. Earlier rounds are in the notes." in card
     assert "the broad group (for animals, the order)" in card
     assert "1 random fragment of 75-600 bases" in card
     assert "| Validation, novel species | 97.0% | 92.0% → 96.8% |" in card
-    assert "(at 100 bases, 97% accurate for novel species (clean))" in card
+    assert "(at 100 bases, 97% accurate on novel species (clean))" in card
+    assert "6 test records had no group or order label" in card
     assert "## Intended use\n\nFor COI of at least 100 bases." in card
     assert "- **Only COI** is supported." in card
     # These need per-group scores and the strand check
@@ -276,6 +312,8 @@ def test_card_for_a_model_without_novel_species(tmp_path: Path) -> None:
                 "splits": {"test_known": known},
                 "fragments": {"test_known": fragments},
                 "per_class": {"test_known": report.per_class["test_known"]},
+                "unlabelled_records": {},
+                "unseen_class_records": {},
             }
         ).model_dump_json()
     )
@@ -287,7 +325,9 @@ def test_card_for_a_model_without_novel_species(tmp_path: Path) -> None:
     assert "| Test set | Fungi | 100 | 90.0% | 0.850 |" in card
     assert "## Which strand?" in card
     assert "| Whole | 99.5% |" in card
-    assert "lowest F1 on test set" in card
+    assert "lowest F1 on the test set" in card
+    assert "were not scored" not in card
+    assert "(the test set):" in card
 
 
 def test_card_formula_with_a_positive_length_term(tmp_path: Path) -> None:
@@ -308,7 +348,8 @@ def test_card_for_an_uncalibrated_model(tmp_path: Path) -> None:
 
 
 def test_card_for_an_app_without_that_classifier(tmp_path: Path) -> None:
-    config = write_reports(tmp_path, calibration=calibration_report())
+    write_reports(tmp_path, calibration=calibration_report())
+    config = AppConfig.model_validate(config_dict(tmp_path))
 
     with pytest.raises(UnknownClassifierError, match="marker"):
         build_card(config, "marker")
