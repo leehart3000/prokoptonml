@@ -11,6 +11,7 @@ from prokopton.ml.config import AppConfig
 from prokopton.ml.data.checksums import ChecksumManifestError, ChecksumMismatchError
 from prokopton.ml.data.download import DownloadError
 from prokopton.ml.data.taxonomy import ReferenceDataError
+from prokopton.ml.pipeline.calibrate import CalibrationStageError, calibrate
 from prokopton.ml.pipeline.evaluate import EvaluationStageError, evaluate
 from prokopton.ml.pipeline.ingest import IngestError, ingest
 from prokopton.ml.pipeline.leakage import LeakageStageError, leakage
@@ -35,6 +36,7 @@ _COMMANDS = {
     "leakage": "List novel-set records with a near-copy in the training set.",
     "sample": "Draw balanced training and validation samples for the router.",
     "train": "Train router candidates, then track and register the best.",
+    "calibrate": "Calibrate the registered router's confidence by length.",
     "evaluate": "Measure the registered router on the test sets.",
 }
 
@@ -78,6 +80,12 @@ def _run(command: str, config: AppConfig) -> str:
             f"{train_report.registered_model} v{train_report.model_version} "
             f"@{train_report.alias}"
         )
+    if command == "calibrate":
+        calibration = calibrate(config)
+        return (
+            f"v{calibration.base_version} calibrated as v{calibration.model_version}; "
+            f"NLL {calibration.nll_before:.4f} -> {calibration.nll_after:.4f}"
+        )
     if command == "evaluate":
         evaluation = evaluate(config)
         accuracy = {
@@ -115,6 +123,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         SampleStageError,
         TrainStageError,
         EvaluationStageError,
+        CalibrationStageError,
     ) as error:
         logger.error("%s", error)
         return 1

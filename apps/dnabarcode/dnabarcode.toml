@@ -132,6 +132,15 @@ experiment = "dnabarcode-router"
 registered_model = "dnabarcode-router"
 alias = "candidate"
 
+[router.calibration]
+# Confidence is calibrated by length on the validation samples: whole
+# sequences plus one fragment per record (new fragments, not training's).
+# v4 (trained with fragments) was underconfident: on clean novel species,
+# mean confidence 0.935 for accuracy 0.975
+fragment_min_length = 75
+fragment_max_length = 600
+threads = 8
+
 [router.evaluation]
 splits = ["test_known", "test_novel"]
 # Also scored separately with and without a near-copy in training

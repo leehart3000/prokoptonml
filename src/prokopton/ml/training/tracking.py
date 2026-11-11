@@ -54,8 +54,11 @@ def own_types(model: Any) -> list[str]:
     MLflow saves scikit-learn models in the skops format, which only rebuilds
     types it has been told to trust; scikit-learn's own are trusted already.
     """
-    steps = getattr(model, "steps", [("model", model)])
-    names = {f"{type(step).__module__}.{type(step).__qualname__}" for _, step in steps}
+    found = [model]
+    if hasattr(model, "get_params"):
+        # Includes every nested estimator, e.g. a wrapped pipeline's steps
+        found += list(model.get_params(deep=True).values())
+    names = {f"{type(part).__module__}.{type(part).__qualname__}" for part in found}
     return sorted(name for name in names if name.startswith("prokopton."))
 
 

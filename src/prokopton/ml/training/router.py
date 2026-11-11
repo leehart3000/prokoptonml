@@ -177,11 +177,14 @@ def _logistic(candidate: Candidate, rules: RouterTrainingConfig) -> SGDClassifie
     )
 
 
-def predict_proba(classifier: Any, features: Any, threads: int) -> np.ndarray:
+def predict_proba(
+    classifier: Any, features: Any, threads: int, method: str = "predict_proba"
+) -> np.ndarray:
     """Predict class probabilities in chunks spread across threads.
 
     ``features`` can be a feature matrix (for a classifier) or a list of
-    sequences (for a whole pipeline).
+    sequences (for a whole pipeline). ``method`` can instead be
+    ``"predict_log_proba"``.
     """
     rows = features.shape[0] if hasattr(features, "shape") else len(features)
     chunks = [
@@ -189,7 +192,7 @@ def predict_proba(classifier: Any, features: Any, threads: int) -> np.ndarray:
         for start in range(0, rows, PREDICT_CHUNK)
     ]
     with ThreadPoolExecutor(max_workers=threads) as pool:
-        parts = list(pool.map(classifier.predict_proba, chunks))
+        parts = list(pool.map(getattr(classifier, method), chunks))
     stacked: np.ndarray = np.vstack(parts)
     return stacked
 

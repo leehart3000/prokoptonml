@@ -26,7 +26,14 @@ from prokopton.ml.pipeline.sample import REPORT_NAME as SAMPLE_REPORT_NAME
 from prokopton.ml.training.router import RouterSample, train_router
 from prokopton.ml.training.tracking import MlflowTracker, Tracker
 
-__all__ = ["REPORT_NAME", "SAMPLE_SPLITS", "TrainReport", "TrainStageError", "train"]
+__all__ = [
+    "REPORT_NAME",
+    "SAMPLE_SPLITS",
+    "TrainReport",
+    "TrainStageError",
+    "read_sample",
+    "train",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +70,8 @@ class TrainReport(BaseModel):
     parent_run_id: str
 
 
-def _read_sample(path: Path) -> RouterSample:
+def read_sample(path: Path) -> RouterSample:
+    """Read a router sample file written by the sample stage."""
     table = pq.read_table(path, columns=["sequence", "label", "ambiguous_fraction"])
     return RouterSample(
         sequences=table.column("sequence").to_pylist(),
@@ -130,7 +138,7 @@ def train(
         **{f"sample_sha256.{name}": value for name, value in checksums.items()},
     }
 
-    samples = {name: _read_sample(path) for name, path in paths.items()}
+    samples = {name: read_sample(path) for name, path in paths.items()}
     for name, loaded in samples.items():
         logger.info("Loaded %s: %d records", name, len(loaded.labels))
 
