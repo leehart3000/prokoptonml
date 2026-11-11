@@ -273,7 +273,7 @@ def _data_section(reports: _Reports) -> str:
             _SAMPLE_NAMES.get(name, name),
             f"{split.sampled_records:,}",
             f"{split.classes:,}",
-            f"{split.mean_species_per_class:.0f}",
+            f"{split.mean_species_per_class:,.0f}",
         ]
         for name, split in sample_report.splits.items()
     ]
@@ -289,6 +289,18 @@ def _data_section(reports: _Reports) -> str:
         else "Records were split into training, validation and test sets; "
         "identical sequences always fall in the same set."
     )
+    notes = []
+    if sample_report.dropped_classes:
+        notes.append(
+            f"Classes with under {rules.min_class_records} records were left out "
+            f"({len(sample_report.dropped_classes):,} of them)."
+        )
+    if sample_report.excluded_near_duplicates:
+        notes.append(
+            f"{sample_report.excluded_near_duplicates:,} validation records with a "
+            "near-copy in training were removed."
+        )
+    removed = "".join(f" {note}" for note in notes)
     spread = {
         "species": "species",
         "order": "orders",
@@ -299,11 +311,7 @@ def _data_section(reports: _Reports) -> str:
         f"{splitting}\n\n"
         f"Training samples were capped at {rules.train_cap:,} records per class "
         f"(validation: {rules.eval_cap:,}), spread across as many {spread} as "
-        "possible. "
-        f"Classes with under {rules.min_class_records} records were left out "
-        f"({len(sample_report.dropped_classes):,} of them), and "
-        f"{sample_report.excluded_near_duplicates:,} validation records with a "
-        "near-copy in training were removed.\n\n"
+        f"possible.{removed}\n\n"
         + _table(["Sample", "Records", "Classes", "Species per class"], rows)
     )
 

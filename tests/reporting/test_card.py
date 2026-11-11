@@ -266,7 +266,32 @@ def test_card_mentions_the_reverse_class_and_group_spread(tmp_path: Path) -> Non
     card = build_card(config).card.read_text()
 
     assert "(or *reverse* for a sequence given as the other strand)" in card
+    assert "| Training | 90 | 2 | 12 |" in card
     assert "spread across as many groups of organisms, then orders, as" in card
+
+
+def test_card_leaves_out_empty_sample_notes_and_formats_counts(
+    tmp_path: Path,
+) -> None:
+    config = write_reports(tmp_path, calibration=calibration_report())
+    path = tmp_path / "samples" / "midori2_gb999" / "router" / "_sample_report.json"
+    report = sample_report()
+    big = report.splits["train"].model_copy(update={"mean_species_per_class": 13554.0})
+    path.write_text(
+        report.model_copy(
+            update={
+                "dropped_classes": {},
+                "excluded_near_duplicates": 0,
+                "splits": {"train": big},
+            }
+        ).model_dump_json()
+    )
+
+    card = build_card(config).card.read_text()
+
+    assert "were left out" not in card
+    assert "near-copy in training were removed" not in card
+    assert "| Training | 90 | 2 | 13,554 |" in card
 
 
 def test_card_refuses_reports_for_another_model(tmp_path: Path) -> None:
@@ -299,7 +324,7 @@ def test_card_describes_the_evaluated_calibrated_model(tmp_path: Path) -> None:
     assert "| Rare | 25 |" in card
     assert "| Tiny |" not in card
     assert "## Development notes\n\nHand-written notes." in card
-    assert "(1 of them), and 7 validation records" in card
+    assert "(1 of them). 7 validation records with a near-copy" in card
     assert "3 candidate models were compared" in card
     assert "the mean macro-F1 across them. Earlier rounds are in the notes." in card
     assert "the broad group (for animals, the order)" in card
