@@ -40,9 +40,9 @@ Every answer describes our reference data and this marker, never the organism's 
 
 ## Reference data
 
-From the training split only: 13,738 records of Culicidae (953 named species, up to 50 distinct sequences each; 76,479 repeated sequences skipped), and 10,095 records of other Diptera in 141 families as the background.
+From the training split only: 13,675 records of Culicidae (953 named species, up to 50 distinct sequences each; 76,479 repeated sequences skipped), and 10,095 records of other Diptera in 141 families as the background. 63 records labelled as one species but far more like another were left out as likely mislabelled (listed with the reference set).
 
-**330 of 949 named species** have another named species at least 98.0% identical in the reference set: COI does not separate them well. Such species are reported as a group or a closest match, not alone.
+**185 of 949 named species** have another named species at least 99.5% identical in the reference set: COI does not separate them well. Such species are reported as a group or a closest match, not alone.
 
 Species complexes, reported as the complex with how to resolve it:
 
@@ -63,13 +63,13 @@ Measured once, with the tuned thresholds. Rates are shares of records (in bracke
 
 | Set | Records | Species | Right | Wrongly named | Exact |
 |---|---|---|---|---|---|
-| Known species | 998 | 508 | 97.2% (96.3%) | 1.9% (2.6%) | 51.5% (50.8%) |
+| Known species | 998 | 508 | 97.3% (96.4%) | 1.9% (2.6%) | 53.9% (52.5%) |
 | Held-out species, no near-copy in training | 108 | 45 | 94.4% (93.3%) | 0.0% (0.0%) | 0.0% (0.0%) |
 | Held-out species with a near-copy in training | 58 | 29 | 62.1% (63.2%) | 37.9% (36.8%) | 3.4% (4.6%) |
 | Held-out species (all) | 166 | 56 | 83.1% (82.6%) | 13.3% (12.1%) | 1.2% (2.4%) |
 | Other flies (should be kept out) | 1,500 | 1,300 | 99.9% (99.9%) | 0.1% (0.1%) | 0.0% (0.0%) |
 
-Answers for known species: species 521, genus 202, species_group 166, closest_species 42, complex 34, family 20, genus_label_only 10, not_member 3.
+Answers for known species: species 547, genus 201, species_group 142, closest_species 40, complex 34, family 21, genus_label_only 10, not_member 3.
 
 ## Limitations
 
@@ -155,8 +155,8 @@ near-identical to another genus; and adding BOLD data and BINs.
 
 |  |  |
 |---|---|
-| Evaluation run | `6dde0d157c90427da46cf362d559f99f` |
-| Reference set SHA-256 | `1e0b7ee2b9829474…` |
+| Evaluation run | `8df0dbca3340408098f6daee4a501b4b` |
+| Reference set SHA-256 | `63dbba688003de82…` |
 | Split data SHA-256 | `4ff0d2754dbecd18…` |
-| Evaluated | 2026-11-12 11:20 UTC |
+| Evaluated | 2026-11-12 14:39 UTC |
 | prokopton-ml | 0.1.0 |

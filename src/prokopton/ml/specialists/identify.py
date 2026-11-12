@@ -125,7 +125,9 @@ class Contradiction:
     species: str
     looks_like: str
     similarity: float
-    """k-mer cosine similarity to its closest reference."""
+    """k-mer cosine similarity to the closest record of the other species."""
+    own_similarity: float
+    """Median k-mer cosine similarity to the records of its own species."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -372,26 +374,32 @@ class Specialist:
     def contradicted(self) -> list[Contradiction]:
         """Find named target references that look mislabelled.
 
-        A reference is contradicted when its own species has at least
-        ``curation_min_support`` other references, none of them is among its
-        ``curation_neighbours`` most similar references (by k-mers), and at
-        least ``curation_share`` of those belong to one other named species
-        (outside any configured complex shared with it). Such a record is
-        far more like another species than its own: usually a mislabelled
-        or contaminated sequence.
+        A reference is contradicted when it is nearly identical to a record
+        of another named species (k-mer similarity at least
+        ``curation_other_similarity``), but unlike most records of its own
+        species (median similarity to them at most
+        ``curation_own_similarity``), and its own species has more than
+        ``curation_min_support`` other references. Members of one configured
+        complex are not judged against each other.
+
+        Comparing with the species' records as a whole (the median) means a
+        group of mislabelled records cannot vouch for each other, and sister
+        species that genuinely share sequences are kept, since they also
+        resemble their own species.
         """
         rules = self.rules
-        count = rules.curation_neighbours
-        support = Counter(
-            r.species for r in self.references if r.role == "target" and r.species_named
+        species = np.array([r.species or "" for r in self.references], dtype=object)
+        named = np.array(
+            [
+                r.role == "target" and r.species_named and bool(r.species)
+                for r in self.references
+            ]
         )
+        support = Counter(species[named].tolist())
         checked = [
             n
-            for n, r in enumerate(self.references)
-            if r.role == "target"
-            and r.species_named
-            and r.species
-            and support[r.species] > rules.curation_min_support
+            for n in np.flatnonzero(named).tolist()
+            if support[species[n]] > rules.curation_min_support
         ]
         found: list[Contradiction] = []
         columns = self.index.T.tocsr()
@@ -399,32 +407,29 @@ class Specialist:
             numbers = checked[start : start + QUERY_BATCH]
             similarity = np.asarray((columns[numbers] @ self.index).todense())
             for row, number in enumerate(numbers):
-                similarity[row, number] = -1.0
-            nearest = np.argsort(-similarity, axis=1)[:, :count]
-            for row, number in enumerate(numbers):
-                own = self.references[number].species
-                names = [self.references[n].species for n in nearest[row]]
-                if own in names:
+                own = species[number]
+                same = species == own
+                same[number] = False
+                own_similarity = float(np.median(similarity[row, same]))
+                if own_similarity > rules.curation_own_similarity:
                     continue
-                named = Counter(
-                    name
-                    for name, n in zip(names, nearest[row], strict=True)
-                    if name and self.references[n].species_named
-                )
-                if not named:
+                other = named & ~same
+                other[number] = False
+                masked = np.where(other, similarity[row], -1.0)
+                best = int(np.argmax(masked))
+                if masked[best] < rules.curation_other_similarity:
                     continue
-                other, times = named.most_common(1)[0]
-                if times < rules.curation_share * count:
-                    continue
+                looks_like = str(species[best])
                 shared = _complex_of(str(own), rules)
-                if shared is not None and other in shared.members:
+                if shared is not None and looks_like in shared.members:
                     continue
                 found.append(
                     Contradiction(
                         record_id=self.references[number].record_id,
                         species=str(own),
-                        looks_like=other,
-                        similarity=float(similarity[row, nearest[row][0]]),
+                        looks_like=looks_like,
+                        similarity=float(similarity[row, best]),
+                        own_similarity=own_similarity,
                     )
                 )
         return found

@@ -263,7 +263,7 @@ def test_reference_leaves_out_records_that_look_like_another_species(
 
     def like(base: str) -> str:
         bases = list(base)
-        for position in rng.choice(len(bases), 3, replace=False):
+        for position in rng.choice(len(bases), 1, replace=False):
             bases[position] = "A" if bases[position] != "A" else "C"
         return "".join(bases)
 
