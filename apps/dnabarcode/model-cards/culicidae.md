@@ -79,6 +79,7 @@ Answers for known species: species 521, genus 202, species_group 166, closest_sp
 - **Poorly sampled genera can fall below the membership threshold** (88–90% identity for some *Toxorhynchites*, *Tripteroides*, *Heizmannia* and *Zeugnomyia* records), and are then reported as not mosquitoes.
 - *Aedes* is used in its broad sense (Wilkerson et al. 2015), including groups such as *Ochlerotatus* that some classifications treat as genera.
 - Only the **COI** barcode region is supported. A sequence must overlap the references by at least 100 bases and cover 80% of the shorter sequence.
+- **These results use a reference set drawn from the training split only**, so that the test records stay unseen. The site uses a reference set drawn from every split, which covers more species; its accuracy has not been measured separately.
 
 ## Development notes
 

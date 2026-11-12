@@ -91,6 +91,8 @@ def test_identifies_a_mosquito_with_a_trace() -> None:
         "specialist:culicidae",
     ]
     assert result.trace[0].details["name"] == "sample 1"
+    assert all(step.seconds >= 0 for step in result.trace)
+    assert result.seconds >= result.trace[-1].seconds
     assert result.trace[3].details["matches"][0]["species"] == "Aedes aegypti"
     assert any("Best match in our reference data" in note for note in result.notes)
 
@@ -205,7 +207,8 @@ def test_declines_a_long_sequence_without_a_barcode() -> None:
             "complex",
             "An. gambiae complex",
             ("A", "B"),
-            "An. gambiae complex: A, B.",
+            "An. gambiae complex (closest: A, B). This marker cannot separate its "
+            "members.",
             "complex",
             True,
         ),

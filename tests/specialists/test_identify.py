@@ -1,5 +1,6 @@
 """Tests for prokopton.ml.specialists.identify."""
 
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -379,3 +380,17 @@ def test_grouped_species_and_genus_only_answers_carry_the_note() -> None:
     assert (found.outcome, found.label) == ("genus_label_only", "Aedes")
     assert found.notes[-1] == "Aedes in the broad sense."
     assert Specialist([unnamed, REFERENCES[8]], RULES).identify(query).notes[1:] == ()
+
+
+def test_a_saved_index_is_used_and_checked(tmp_path: Path) -> None:
+    specialist = Specialist(REFERENCES, RULES)
+    path = tmp_path / "references.parquet"
+    pq.write_table(pa.Table.from_pylist([asdict(r) for r in REFERENCES]), path)
+    specialist.save_index(tmp_path / "index.npz")
+
+    loaded = Specialist.from_parquet(path, RULES, index=tmp_path / "index.npz")
+
+    assert (loaded.index != specialist.index).nnz == 0
+    assert loaded.identify(AEGYPTI).label == "Aedes aegypti"
+    with pytest.raises(ValueError, match="saved index has 9 references"):
+        Specialist(REFERENCES[:2], RULES, index=specialist.index)
