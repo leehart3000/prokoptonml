@@ -14,10 +14,12 @@ from prokopton.ml.cli import main
 from prokopton.ml.config import AppConfig
 from prokopton.ml.pipeline.reference import (
     REPORT_NAME,
+    SERVING_SPLITS,
     ReferenceStageError,
     build_reference,
     first_per_key,
     reference_path,
+    serving_reference_path,
 )
 from prokopton.ml.specialists.identify import NEIGHBOURS_NAME
 
@@ -72,6 +74,10 @@ def records() -> list[dict[str, Any]]:
     # A placeholder without a genus is left out
     add(2, "Diptera", "Culicidae", "Culicidae sp. BOLD1", named=False, genus=None)
     return rows
+
+
+TEST_RECORD_IDS = {f"r{n}" for n in range(220, 224)}
+SERVING_SPLITS_SORTED = tuple(sorted(SERVING_SPLITS))
 
 
 def config_dict(tmp_path: Path) -> dict[str, Any]:
@@ -162,6 +168,21 @@ def test_reference_is_reproducible(tmp_path: Path) -> None:
     assert again == first
 
 
+def test_serving_reference_uses_every_split(tmp_path: Path) -> None:
+    write_records(tmp_path)
+    config = AppConfig.model_validate(config_dict(tmp_path))
+
+    report = build_reference(config, "culicidae", serving=True)
+
+    assert report.splits == SERVING_SPLITS_SORTED
+    output = serving_reference_path(config, "culicidae")
+    assert report.output == str(output)
+    rows = pq.read_table(output).to_pylist()
+    # The 4 test records of Ae. aegypti compete for its 20 places
+    assert {r["record_id"] for r in rows} & TEST_RECORD_IDS
+    assert not reference_path(config, "culicidae").exists()
+
+
 def test_reference_requires_split_data(tmp_path: Path) -> None:
     config = AppConfig.model_validate(config_dict(tmp_path))
 
@@ -175,7 +196,7 @@ def test_reference_needs_target_records(tmp_path: Path) -> None:
     data["specialists"]["culicidae"]["target"] = "Simuliidae"
     config = AppConfig.model_validate(data)
 
-    with pytest.raises(ReferenceStageError, match="No training records"):
+    with pytest.raises(ReferenceStageError, match="No records of Simuliidae"):
         build_reference(config, "culicidae")
     assert not reference_path(config, "culicidae").exists()
 

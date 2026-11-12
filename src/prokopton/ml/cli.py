@@ -13,6 +13,12 @@ from prokopton.ml.config import AppConfig, UnknownClassifierError
 from prokopton.ml.data.checksums import ChecksumManifestError, ChecksumMismatchError
 from prokopton.ml.data.download import DownloadError
 from prokopton.ml.data.taxonomy import ReferenceDataError
+from prokopton.ml.inference.bundle import (
+    BundleError,
+    build_bundle,
+    bundle_path,
+    load_bundle,
+)
 from prokopton.ml.inference.load import LoadError, load_identifier
 from prokopton.ml.pipeline.calibrate import CalibrationStageError, calibrate
 from prokopton.ml.pipeline.evaluate import EvaluationStageError, evaluate
@@ -59,6 +65,10 @@ _COMMANDS = {
         "specialist's (with --specialist)."
     ),
     "reference": "Build a specialist's reference set from the training split.",
+    "bundle": (
+        "Build the serving bundle: the registered models, and each serving "
+        "specialist's reference set from every split, with checksums."
+    ),
     "identify": (
         "Identify one sequence with the registered models and print the "
         "result, with its decision trace, as JSON."
@@ -90,6 +100,12 @@ def _build_parser() -> argparse.ArgumentParser:
                 required=True,
                 help="A file with one sequence (plain or FASTA); '-' for stdin.",
             )
+            command.add_argument(
+                "--bundle",
+                type=Path,
+                default=None,
+                help="Use a serving bundle instead of the MLflow registry.",
+            )
         if name in ("reference", "evaluate", "card"):
             command.add_argument(
                 "--specialist",
@@ -100,9 +116,9 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _identify(config: AppConfig, source: Path) -> str:
+def _identify(config: AppConfig, source: Path, bundle: Path | None) -> str:
     text = sys.stdin.read() if str(source) == "-" else source.read_text("utf-8")
-    loaded = load_identifier(config)
+    loaded = load_bundle(bundle) if bundle else load_identifier(config)
     result = loaded.identifier.identify(text)
     output = {"versions": loaded.versions, **result.model_dump(mode="json")}
     print(json.dumps(output, indent=2))
@@ -115,10 +131,14 @@ def _run(
     model: str = "router",
     specialist: str = "",
     source: Path | None = None,
+    bundle: Path | None = None,
 ) -> str:
     """Run one pipeline stage and return a one-line summary."""
     if command == "identify" and source is not None:
-        return _identify(config, source)
+        return _identify(config, source, bundle)
+    if command == "bundle":
+        manifest = build_bundle(config)
+        return f"serving bundle {manifest.versions} written to {bundle_path(config)}"
     if command == "reference":
         reference = build_reference(config, specialist)
         return (
@@ -199,6 +219,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             getattr(args, "model", "router"),
             getattr(args, "specialist", ""),
             getattr(args, "input", None),
+            getattr(args, "bundle", None),
         )
     except (
         ConfigError,
@@ -220,6 +241,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         SpecialistEvaluationError,
         SpecialistCardError,
         LoadError,
+        BundleError,
         OSError,
     ) as error:
         logger.error("%s", error)

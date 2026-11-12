@@ -83,6 +83,7 @@ dnabarcode-marker-card = "prokopton-ml card apps/dnabarcode/dnabarcode.toml --mo
 dnabarcode-culicidae-reference = "prokopton-ml reference apps/dnabarcode/dnabarcode.toml --specialist culicidae"
 dnabarcode-culicidae-evaluate = "prokopton-ml evaluate apps/dnabarcode/dnabarcode.toml --specialist culicidae"
 dnabarcode-culicidae-card = "prokopton-ml card apps/dnabarcode/dnabarcode.toml --specialist culicidae"
+dnabarcode-bundle = "prokopton-ml bundle apps/dnabarcode/dnabarcode.toml"
 
 [tool.pixi.environments]
 default = { features = ["dev"], solve-group = "default" }
@@ -130,6 +131,8 @@ module = [
     "scipy.*",
     "sklearn",
     "sklearn.*",
+    "joblib",
+    "joblib.*",
 ]
 ignore_missing_imports = true
 

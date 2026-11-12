@@ -170,7 +170,16 @@ class Specialist:
         references: Sequence[Reference],
         rules: SpecialistConfig,
         neighbours: Mapping[str, Neighbour] | None = None,
+        index: sparse.csr_matrix | None = None,
     ) -> None:
+        """
+        Args:
+            references: The reference sequences.
+            rules: The specialist's settings.
+            neighbours: The barcode-gap table, if any.
+            index: A k-mer index saved earlier with ``save_index`` (to skip
+                counting k-mers again); it must match ``references``.
+        """
         if not references:
             msg = "A specialist needs at least one reference sequence"
             raise ValueError(msg)
@@ -178,18 +187,32 @@ class Specialist:
         self.rules = rules
         self.neighbours = dict(neighbours or {})
         self.vectorizer = KmerVectorizer(k=rules.k).fit()
-        self.index: sparse.csr_matrix = normalize(
-            self.vectorizer.transform([r.sequence for r in self.references])
-        ).T.tocsr()
+        if index is None:
+            index = normalize(
+                self.vectorizer.transform([r.sequence for r in self.references])
+            ).T.tocsr()
+        elif index.shape[1] != len(self.references):
+            msg = (
+                f"The saved index has {index.shape[1]} references, but "
+                f"{len(self.references)} were given"
+            )
+            raise ValueError(msg)
+        self.index: sparse.csr_matrix = index
         self._keys = [_key(r) for r in self.references]
         self._numbers = {r.record_id: n for n, r in enumerate(self.references)}
 
+    def save_index(self, path: Path) -> None:
+        """Save the k-mer index, so ``from_parquet`` can skip rebuilding it."""
+        sparse.save_npz(path, self.index)
+
     @classmethod
-    def from_parquet(cls, path: Path, rules: SpecialistConfig) -> "Specialist":
+    def from_parquet(
+        cls, path: Path, rules: SpecialistConfig, index: Path | None = None
+    ) -> "Specialist":
         """Load a reference set written by the reference stage.
 
         The barcode-gap table (``neighbours.json``) is loaded too, if it is
-        next to the reference set.
+        next to the reference set, and a saved k-mer ``index`` if given.
         """
         rows = pq.read_table(path).to_pylist()
         neighbours_path = path.parent / NEIGHBOURS_NAME
@@ -211,6 +234,7 @@ class Specialist:
             ],
             rules,
             neighbours,
+            sparse.load_npz(index).tocsr() if index is not None else None,
         )
 
     def candidates(

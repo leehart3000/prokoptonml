@@ -15,7 +15,7 @@ import pyarrow.parquet as pq
 from prokopton.ml.config import AppConfig
 from prokopton.ml.pipeline.reference import build_reference
 
-__all__ = ["config_dict", "prepared", "write_data"]
+__all__ = ["AEGYPTI", "config_dict", "prepared", "write_data"]
 
 rng = np.random.default_rng(5)
 

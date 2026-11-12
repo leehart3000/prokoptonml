@@ -53,17 +53,21 @@ __all__ = [
     "REFERENCE_NAME",
     "REFERENCE_SCHEMA",
     "REPORT_NAME",
+    "SERVING_SPLITS",
     "ReferenceReport",
     "ReferenceStageError",
     "build_reference",
     "first_per_key",
     "reference_path",
+    "serving_reference_path",
 ]
 
 logger = logging.getLogger(__name__)
 
 REFERENCE_NAME = "reference.parquet"
 REPORT_NAME = "_reference_report.json"
+SERVING_SPLITS = ("train", "val_known", "val_novel", "test_known", "test_novel")
+"""The splits a serving reference set is drawn from (all of them)."""
 BATCH_SIZE = 100_000
 _COLUMNS = [
     "record_id",
@@ -120,11 +124,18 @@ class ReferenceReport(BaseModel):
     """Named species whose nearest other species is at least
     ``species_identity`` identical: the marker cannot separate them well."""
     output: str
+    splits: tuple[str, ...] = ("train",)
 
 
 def reference_path(config: AppConfig, name: str) -> Path:
-    """Where a specialist's reference set is written."""
+    """Where a specialist's reference set (for evaluation) is written."""
     return config.data.paths.models_dir / "specialists" / name / REFERENCE_NAME
+
+
+def serving_reference_path(config: AppConfig, name: str) -> Path:
+    """Where a specialist's serving reference set (all splits) is written."""
+    folder = config.data.paths.models_dir / "specialists" / name / "serving"
+    return folder / REFERENCE_NAME
 
 
 def first_per_key(
@@ -161,13 +172,15 @@ def _role(row: dict[str, Any], rules: SpecialistConfig) -> str | None:
     return None
 
 
-def _rows(path: Path, rules: SpecialistConfig) -> Iterator[dict[str, Any]]:
-    """Yield the training rows that can be references, with their role."""
+def _rows(
+    path: Path, rules: SpecialistConfig, splits: frozenset[str]
+) -> Iterator[dict[str, Any]]:
+    """Yield the rows of ``splits`` that can be references, with their role."""
     for batch in pq.ParquetFile(path).iter_batches(
         batch_size=BATCH_SIZE, columns=_COLUMNS
     ):
         for row in batch.to_pylist():
-            if row["split"] != "train":
+            if row["split"] not in splits:
                 continue
             if row["ambiguous_fraction"] > rules.max_ambiguous_fraction:
                 continue
@@ -184,8 +197,15 @@ def _rows(path: Path, rules: SpecialistConfig) -> Iterator[dict[str, Any]]:
                 yield row
 
 
-def build_reference(config: AppConfig, name: str) -> ReferenceReport:
+def build_reference(
+    config: AppConfig, name: str, *, serving: bool = False
+) -> ReferenceReport:
     """Choose and write a specialist's reference set.
+
+    The reference set for evaluation uses the training split only, so the
+    validation and test records stay unseen. With ``serving``, every split
+    is used instead (more species and more variation for real queries), and
+    the set is written to ``serving_reference_path``.
 
     Raises:
         ReferenceStageError: If the split data is missing.
@@ -210,7 +230,8 @@ def build_reference(config: AppConfig, name: str) -> ReferenceReport:
     keys = array("q")
     caps = array("q")
     priority = array("d")
-    for row in _rows(path, rules):
+    splits = frozenset(SERVING_SPLITS if serving else ("train",))
+    for row in _rows(path, rules, splits):
         by_species = row["role"] == "target" or row["family"] in rules.close_relatives
         key = (
             ("species", row["species"] or "")
@@ -238,7 +259,7 @@ def build_reference(config: AppConfig, name: str) -> ReferenceReport:
     )
 
     # Pass 2: write the chosen rows
-    output = reference_path(config, name)
+    output = (serving_reference_path if serving else reference_path)(config, name)
     output.parent.mkdir(parents=True, exist_ok=True)
     partial = output.with_name(f"{output.name}.part")
     counts: Counter[str] = Counter()
@@ -247,7 +268,7 @@ def build_reference(config: AppConfig, name: str) -> ReferenceReport:
     families: set[str] = set()
     with pq.ParquetWriter(partial, REFERENCE_SCHEMA, compression="zstd") as writer:
         rows: list[dict[str, Any]] = []
-        for position, row in enumerate(_rows(path, rules)):
+        for position, row in enumerate(_rows(path, rules, splits)):
             if not chosen[position]:
                 continue
             rows.append({column: row[column] for column in REFERENCE_SCHEMA.names})
@@ -269,7 +290,7 @@ def build_reference(config: AppConfig, name: str) -> ReferenceReport:
         writer.write_table(pa.Table.from_pylist(rows, schema=REFERENCE_SCHEMA))
     if not counts["target"]:
         partial.unlink()
-        msg = f"No training records of {rules.target} found in {path}"
+        msg = f"No records of {rules.target} found in {path} ({sorted(splits)})"
         raise ReferenceStageError(msg)
     partial.replace(output)
 
@@ -300,6 +321,7 @@ def build_reference(config: AppConfig, name: str) -> ReferenceReport:
             n.identity >= rules.species_identity for n in neighbours.values()
         ),
         output=str(output),
+        splits=tuple(sorted(splits)),
     )
     report_path = output.parent / REPORT_NAME
     report_path.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
