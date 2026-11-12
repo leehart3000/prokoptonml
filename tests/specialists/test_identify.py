@@ -396,9 +396,7 @@ def test_a_saved_index_is_used_and_checked(tmp_path: Path) -> None:
         Specialist(REFERENCES[:2], RULES, index=specialist.index)
 
 
-CURATED = RULES.model_copy(
-    update={"curation_neighbours": 5, "curation_share": 0.7, "curation_min_support": 5}
-)
+CURATED = RULES.model_copy(update={"curation_min_support": 5})
 
 
 def curation_world() -> list[Reference]:
@@ -424,6 +422,7 @@ def test_finds_references_that_look_like_another_species() -> None:
         "Aedes aegypti",
     )
     assert 0.9 < found.similarity <= 1.0
+    assert found.own_similarity < 0.6
 
 
 def test_members_of_one_complex_are_not_contradicted() -> None:
@@ -443,7 +442,8 @@ def test_species_with_few_references_and_unnamed_neighbours_are_not_judged() -> 
     few = CURATED.model_copy(update={"curation_min_support": 7})
     assert Specialist(curation_world(), few).contradicted() == []
 
-    # A record whose closest references have no species name
+    # A record unlike its own species, whose closest references have no
+    # species name, is kept
     base, other = random_sequence(), random_sequence()
     references = [ref("y", base, "Culex gamma", "Culex")]
     references += [
@@ -453,21 +453,4 @@ def test_species_with_few_references_and_unnamed_neighbours_are_not_judged() -> 
         ref(f"p{i}", mutate(base, 0.005), "Culex sp. P", "Culex", named=False)
         for i in range(5)
     ]
-    assert Specialist(references, CURATED).contradicted() == []
-
-
-def test_no_clear_majority_is_not_a_contradiction() -> None:
-    # The record's 5 nearest are 3 + 3 references of two other species, so
-    # neither holds 70% of them
-    near, far = random_sequence(), random_sequence()
-    references = [ref("x", near, "Aedes rho", "Aedes")]
-    references += [
-        ref(f"r{i}", mutate(far, 0.005), "Aedes rho", "Aedes") for i in range(6)
-    ]
-    for species in ("Aedes pi", "Aedes sigma"):
-        references += [
-            ref(f"{species[-2:]}{i}", mutate(near, 0.005), species, "Aedes")
-            for i in range(3)
-        ]
-
     assert Specialist(references, CURATED).contradicted() == []

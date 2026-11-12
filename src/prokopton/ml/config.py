@@ -512,8 +512,10 @@ class SpecialistConfig(ConfigModel):
     curate: bool = True
     """Leave out named references that look mislabelled (see
     ``Specialist.contradicted``)."""
-    curation_neighbours: int = Field(default=10, ge=1)
-    curation_share: float = Field(default=0.7, gt=0.0, le=1.0)
+    curation_other_similarity: float = Field(default=0.9, gt=0.0, le=1.0)
+    curation_own_similarity: float = Field(default=0.6, ge=0.0, le=1.0)
+    """k-mer cosine similarities (k = 8): about 0.9 is within 1-2% sequence
+    divergence, and 0.6 is about 5% or more."""
     curation_min_support: int = Field(default=5, ge=1)
     placeholders_need_genus: bool = True
     genus_groups: dict[str, str] = Field(default_factory=dict)
