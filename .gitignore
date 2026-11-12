@@ -52,3 +52,6 @@ node_modules/
 # --- Playwright ---
 test-results/
 playwright-report/
+
+# --- Serving bundle copied in for a Docker build ---
+/bundle/

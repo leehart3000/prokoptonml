@@ -338,7 +338,7 @@ def build_reference(
     )
     logger.info(
         "Barcode gaps: %d of %d named species have another named species at "
-        "least %.0f%% identical",
+        "least %.1f%% identical",
         report.species_within_species_identity,
         report.species_with_neighbours,
         rules.species_identity * 100,
