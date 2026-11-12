@@ -378,6 +378,12 @@ member_identity_grid = [0.88, 0.90, 0.92]
 max_known_wrong = 0.03
 max_background_admitted = 0.005
 
+# Records left out by hand: errors within a genus, which the automatic check
+# (near-identical to another genus) does not judge
+[[specialists.culicidae.excluded]]
+accession = "KP896564.1"
+reason = "Labelled Aedes albopictus, but 99.6% identical over 733 bases to Ae. aegypti (NC_035159); the two species differ by roughly 10% in COI."
+
 [specialists.culicidae.card]
 output_dir = "apps/dnabarcode/model-cards"
 notes = "apps/dnabarcode/model-cards/culicidae-notes.md"
@@ -399,7 +405,7 @@ complexes, a nuclear assay.
 limitations = [
   "**Our reference data names 953 of about 3,729 described mosquito species.** A sequence from a species missing from it can be given the name of a close relative. On the test set, this happened mostly to held-out records that have a near-copy (at least 99% identical) of another species in training; see the test results.",
   "**COI does not separate many mosquito species.** About a third of named species in the reference set have another species at least 98% identical; these are reported as groups, complexes or closest matches.",
-  "**Public records include mislabelled and contaminated sequences**, such as a *Haemagogus* record 99.8% identical to *Mansonia titillans*; these cause some wrong names.",
+  "**Public records include mislabelled and contaminated sequences.** Records nearly identical to another genus are left out automatically (counted under Reference data); errors within a genus, such as an *Aedes aegypti* sequence filed as *Ae. albopictus*, are left out only once found and listed in the app's config, so some remain.",
   "**Poorly sampled genera can fall below the membership threshold** (88–90% identity for some *Toxorhynchites*, *Tripteroides*, *Heizmannia* and *Zeugnomyia* records), and are then reported as not mosquitoes.",
   "*Aedes* is used in its broad sense (Wilkerson et al. 2015), including groups such as *Ochlerotatus* that some classifications treat as genera.",
   "Only the **COI** barcode region is supported. A sequence must overlap the references by at least 100 bases and cover 80% of the shorter sequence.",

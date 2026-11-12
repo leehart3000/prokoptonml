@@ -182,12 +182,19 @@ def _role(row: dict[str, Any], rules: SpecialistConfig) -> str | None:
 def _rows(
     path: Path, rules: SpecialistConfig, splits: frozenset[str]
 ) -> Iterator[dict[str, Any]]:
-    """Yield the rows of ``splits`` that can be references, with their role."""
+    """Yield the rows of ``splits`` that can be references, with their role.
+
+    Records listed in ``excluded`` (by accession) are left out.
+    """
+    excluded = {record.accession for record in rules.excluded}
     for batch in pq.ParquetFile(path).iter_batches(
         batch_size=BATCH_SIZE, columns=_COLUMNS
     ):
         for row in batch.to_pylist():
             if row["split"] not in splits:
+                continue
+            # Record IDs start with the accession and its version
+            if ".".join(row["record_id"].split(".")[:2]) in excluded:
                 continue
             if row["ambiguous_fraction"] > rules.max_ambiguous_fraction:
                 continue

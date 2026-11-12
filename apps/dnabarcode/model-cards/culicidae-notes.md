@@ -1,4 +1,4 @@
-The specialist was developed in six rounds, each run on the same validation
+The specialist was developed in six rounds, followed by curation of the reference data, each run on the same validation
 data. Trials 1 and 2 are recorded in `analysis/README.md`
 (`05_specialist_trial.py`); the evaluations used `prokopton-ml evaluate
 --specialist culicidae`.
@@ -61,7 +61,21 @@ exactly (on validation, averaged over species: 51.0% against 56.9%), but
 held-out species are wrongly named less often (17.8% against 23.2%), and
 known species too (2.5% against 3.2%).
 
+### Curation: leaving out mislabelled records
+
+Raising the serving reference to 200 records per species drew in records
+such as KP896564.1, labelled *Aedes albopictus* but 99.6% identical to
+*Ae. aegypti*. Two automatic rules were tried. The first (a majority vote of
+the closest records) missed groups of mislabels that vouch for each other,
+and removed sister species. The second (unlike the species as a whole by
+median k-mer similarity) removed 690 records, mostly real sister and cryptic
+species, probably because k-mer similarity also falls when records cover
+different stretches of COI. The rule kept judges only near-identity to
+**another genus**, which is almost always an error; errors within a genus
+are listed by hand in the config, with reasons.
+
 Possible next steps:
 comparing the best mosquito match with the best other-fly match, rather
-than a fixed membership threshold; flagging reference records that are
-near-identical to another genus; and adding BOLD data and BINs.
+than a fixed membership threshold; checking each record against its own
+species by alignment rather than k-mers, to find errors within a genus
+automatically; and adding BOLD data and BINs.

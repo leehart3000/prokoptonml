@@ -259,7 +259,7 @@ def test_reference_writes_in_batches(
 def test_reference_leaves_out_records_that_look_like_another_species(
     tmp_path: Path,
 ) -> None:
-    aegypti, albopictus = ("".join(rng.choice(list("ACGT"), 300)) for _ in range(2))
+    aegypti, pipiens = ("".join(rng.choice(list("ACGT"), 300)) for _ in range(2))
 
     def like(base: str) -> str:
         bases = list(base)
@@ -273,17 +273,17 @@ def test_reference_leaves_out_records_that_look_like_another_species(
             "split": "train",
             "order": "Diptera",
             "family": "Culicidae",
-            "genus": "Aedes",
+            "genus": species.split()[0],
             "species": species,
             "species_named": True,
             "ambiguous_fraction": 0.0,
-            "sequence": like(base),
+            "sequence": like(base) if n < 24 else base,
         }
         for n, (species, base) in enumerate(
             [("Aedes aegypti", aegypti)] * 12
-            + [("Aedes albopictus", albopictus)] * 12
-            # Labelled Ae. albopictus, but an Ae. aegypti sequence
-            + [("Aedes albopictus", aegypti)]
+            + [("Culex pipiens", pipiens)] * 12
+            # Labelled Cx. pipiens, but exactly an Ae. aegypti sequence
+            + [("Culex pipiens", aegypti)]
         )
     ]
     path = tmp_path / "splits" / "midori2_gb999" / "gene=CO1" / "records.parquet"
@@ -304,3 +304,17 @@ def test_reference_leaves_out_records_that_look_like_another_species(
     )
     assert listed[0]["record_id"] == "r24"
     assert listed[0]["looks_like"] == "Aedes aegypti"
+
+
+def test_reference_leaves_out_records_listed_by_hand(tmp_path: Path) -> None:
+    write_records(tmp_path)
+    data = config_dict(tmp_path)
+    data["specialists"]["culicidae"]["excluded"] = [
+        {"accession": "r0", "reason": "A test of the list"}
+    ]
+    config = AppConfig.model_validate(data)
+
+    build_reference(config, "culicidae")
+
+    kept = pq.read_table(reference_path(config, "culicidae")).column("record_id")
+    assert "r0" not in kept.to_pylist()
