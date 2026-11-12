@@ -25,6 +25,10 @@ from prokopton.ml.pipeline.split import SplitStageError, split
 from prokopton.ml.pipeline.train import TrainStageError, train
 from prokopton.ml.pipeline.validate import DataValidationError, validate
 from prokopton.ml.reporting.card import CardError, build_card
+from prokopton.ml.reporting.specialist_card import (
+    SpecialistCardError,
+    build_specialist_card,
+)
 
 __all__ = ["ENV_PREFIX", "main"]
 
@@ -47,7 +51,10 @@ _COMMANDS = {
         "Measure a registered classifier on the test sets, or tune and test "
         "a specialist (with --specialist)."
     ),
-    "card": "Write a classifier's model card from the pipeline's reports.",
+    "card": (
+        "Write a classifier's model card from the pipeline's reports, or a "
+        "specialist's (with --specialist)."
+    ),
     "reference": "Build a specialist's reference set from the training split.",
 }
 _CLASSIFIER_COMMANDS = {"sample", "train", "calibrate", "evaluate", "card"}
@@ -69,7 +76,7 @@ def _build_parser() -> argparse.ArgumentParser:
                 default="router",
                 help="Which classifier to work on (default: router).",
             )
-        if name in ("reference", "evaluate"):
+        if name in ("reference", "evaluate", "card"):
             command.add_argument(
                 "--specialist",
                 required=name == "reference",
@@ -128,6 +135,9 @@ def _run(
             f"{specialist} thresholds: species {chosen.species_identity}, "
             f"group margin {chosen.group_margin}, member {chosen.member_identity}"
         )
+    if command == "card" and specialist:
+        written = build_specialist_card(config, specialist)
+        return f"{specialist} model card written to {written.card}"
     if command == "card":
         files = build_card(config, model)
         return f"model card for v{files.model_version} written to {files.card}"
@@ -178,6 +188,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         UnknownClassifierError,
         ReferenceStageError,
         SpecialistEvaluationError,
+        SpecialistCardError,
     ) as error:
         logger.error("%s", error)
         return 1

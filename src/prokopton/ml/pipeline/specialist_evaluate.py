@@ -174,6 +174,7 @@ class SpecialistEvaluationReport(_Report):
     test: dict[str, SetScore]
     wrong: dict[str, list[WrongAnswer]]
     output: str
+    run_id: str = ""
 
 
 def is_right(found: Identification, row: dict[str, Any]) -> bool:
@@ -561,7 +562,8 @@ def evaluate_specialist(
     )
 
     tracker = make_tracker(config)
-    with tracker.run(f"{name}-evaluation"):
+    with tracker.run(f"{name}-evaluation") as run_id:
+        report = report.model_copy(update={"run_id": run_id})
         tracker.set_tags(
             {
                 "specialist": name,
