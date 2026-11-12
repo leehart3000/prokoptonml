@@ -54,6 +54,7 @@ from prokopton.ml.specialists.identity import align
 
 __all__ = [
     "NEIGHBOURS_NAME",
+    "Contradiction",
     "Identification",
     "Match",
     "Neighbour",
@@ -114,6 +115,17 @@ class Neighbour:
     species: str
     nearest: str
     identity: float
+
+
+@dataclass(frozen=True, slots=True)
+class Contradiction:
+    """A reference that looks like another species far more than its own."""
+
+    record_id: str
+    species: str
+    looks_like: str
+    similarity: float
+    """k-mer cosine similarity to its closest reference."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -356,6 +368,66 @@ class Specialist:
             )
             for number, identity, coverage, aligned in compact
         ]
+
+    def contradicted(self) -> list[Contradiction]:
+        """Find named target references that look mislabelled.
+
+        A reference is contradicted when its own species has at least
+        ``curation_min_support`` other references, none of them is among its
+        ``curation_neighbours`` most similar references (by k-mers), and at
+        least ``curation_share`` of those belong to one other named species
+        (outside any configured complex shared with it). Such a record is
+        far more like another species than its own: usually a mislabelled
+        or contaminated sequence.
+        """
+        rules = self.rules
+        count = rules.curation_neighbours
+        support = Counter(
+            r.species for r in self.references if r.role == "target" and r.species_named
+        )
+        checked = [
+            n
+            for n, r in enumerate(self.references)
+            if r.role == "target"
+            and r.species_named
+            and r.species
+            and support[r.species] > rules.curation_min_support
+        ]
+        found: list[Contradiction] = []
+        columns = self.index.T.tocsr()
+        for start in range(0, len(checked), QUERY_BATCH):
+            numbers = checked[start : start + QUERY_BATCH]
+            similarity = np.asarray((columns[numbers] @ self.index).todense())
+            for row, number in enumerate(numbers):
+                similarity[row, number] = -1.0
+            nearest = np.argsort(-similarity, axis=1)[:, :count]
+            for row, number in enumerate(numbers):
+                own = self.references[number].species
+                names = [self.references[n].species for n in nearest[row]]
+                if own in names:
+                    continue
+                named = Counter(
+                    name
+                    for name, n in zip(names, nearest[row], strict=True)
+                    if name and self.references[n].species_named
+                )
+                if not named:
+                    continue
+                other, times = named.most_common(1)[0]
+                if times < rules.curation_share * count:
+                    continue
+                shared = _complex_of(str(own), rules)
+                if shared is not None and other in shared.members:
+                    continue
+                found.append(
+                    Contradiction(
+                        record_id=self.references[number].record_id,
+                        species=str(own),
+                        looks_like=other,
+                        similarity=float(similarity[row, nearest[row][0]]),
+                    )
+                )
+        return found
 
     def find_neighbours(self, candidates: int = 5) -> dict[str, Neighbour]:
         """Find each named target species' nearest other named species.

@@ -13,6 +13,7 @@ import pytest
 from prokopton.ml.cli import main
 from prokopton.ml.config import AppConfig
 from prokopton.ml.pipeline.reference import (
+    CONTRADICTED_NAME,
     REPORT_NAME,
     SERVING_SPLITS,
     ReferenceStageError,
@@ -106,6 +107,8 @@ def config_dict(tmp_path: Path) -> dict[str, Any]:
                 "close_relatives": ["Chaoboridae"],
                 "per_species": 20,
                 "background_per_family": 100,
+                # Random test sequences have no real neighbours to vote
+                "curate": False,
             }
         },
     }
@@ -251,3 +254,53 @@ def test_reference_writes_in_batches(
     build_reference(config, "culicidae")
 
     assert pq.read_table(reference_path(config, "culicidae")).to_pylist() == whole
+
+
+def test_reference_leaves_out_records_that_look_like_another_species(
+    tmp_path: Path,
+) -> None:
+    aegypti, albopictus = ("".join(rng.choice(list("ACGT"), 300)) for _ in range(2))
+
+    def like(base: str) -> str:
+        bases = list(base)
+        for position in rng.choice(len(bases), 3, replace=False):
+            bases[position] = "A" if bases[position] != "A" else "C"
+        return "".join(bases)
+
+    rows = [
+        {
+            "record_id": f"r{n}",
+            "split": "train",
+            "order": "Diptera",
+            "family": "Culicidae",
+            "genus": "Aedes",
+            "species": species,
+            "species_named": True,
+            "ambiguous_fraction": 0.0,
+            "sequence": like(base),
+        }
+        for n, (species, base) in enumerate(
+            [("Aedes aegypti", aegypti)] * 12
+            + [("Aedes albopictus", albopictus)] * 12
+            # Labelled Ae. albopictus, but an Ae. aegypti sequence
+            + [("Aedes albopictus", aegypti)]
+        )
+    ]
+    path = tmp_path / "splits" / "midori2_gb999" / "gene=CO1" / "records.parquet"
+    path.parent.mkdir(parents=True)
+    pq.write_table(pa.Table.from_pylist(rows), path)
+    data = config_dict(tmp_path)
+    data["specialists"]["culicidae"]["curate"] = True
+    config = AppConfig.model_validate(data)
+
+    report = build_reference(config, "culicidae")
+
+    assert report.contradicted_skipped == 1
+    assert report.target_records == 24
+    kept = pq.read_table(reference_path(config, "culicidae")).column("record_id")
+    assert "r24" not in kept.to_pylist()
+    listed = json.loads(
+        (reference_path(config, "culicidae").parent / CONTRADICTED_NAME).read_text()
+    )
+    assert listed[0]["record_id"] == "r24"
+    assert listed[0]["looks_like"] == "Aedes aegypti"

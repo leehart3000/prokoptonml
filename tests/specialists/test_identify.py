@@ -394,3 +394,80 @@ def test_a_saved_index_is_used_and_checked(tmp_path: Path) -> None:
     assert loaded.identify(AEGYPTI).label == "Aedes aegypti"
     with pytest.raises(ValueError, match="saved index has 9 references"):
         Specialist(REFERENCES[:2], RULES, index=specialist.index)
+
+
+CURATED = RULES.model_copy(
+    update={"curation_neighbours": 5, "curation_share": 0.7, "curation_min_support": 5}
+)
+
+
+def curation_world() -> list[Reference]:
+    aegypti, albopictus = random_sequence(), random_sequence()
+    references = [
+        ref(f"a{i}", mutate(aegypti, 0.005), "Aedes aegypti", "Aedes") for i in range(6)
+    ]
+    references += [
+        ref(f"b{i}", mutate(albopictus, 0.005), "Aedes albopictus", "Aedes")
+        for i in range(6)
+    ]
+    # Labelled Ae. albopictus, but an Ae. aegypti sequence
+    references.append(ref("x", mutate(aegypti, 0.005), "Aedes albopictus", "Aedes"))
+    return references
+
+
+def test_finds_references_that_look_like_another_species() -> None:
+    [found] = Specialist(curation_world(), CURATED).contradicted()
+
+    assert (found.record_id, found.species, found.looks_like) == (
+        "x",
+        "Aedes albopictus",
+        "Aedes aegypti",
+    )
+    assert 0.9 < found.similarity <= 1.0
+
+
+def test_members_of_one_complex_are_not_contradicted() -> None:
+    complex_ = ComplexConfig(
+        name="Test complex",
+        members=("Aedes aegypti", "Aedes albopictus"),
+        resolve="Use a nuclear assay.",
+        reference="Someone (2020)",
+    )
+    rules = CURATED.model_copy(update={"complexes": (complex_,)})
+
+    assert Specialist(curation_world(), rules).contradicted() == []
+
+
+def test_species_with_few_references_and_unnamed_neighbours_are_not_judged() -> None:
+    # Ae. albopictus has 7 references, so it needs more than 7 to be judged
+    few = CURATED.model_copy(update={"curation_min_support": 7})
+    assert Specialist(curation_world(), few).contradicted() == []
+
+    # A record whose closest references have no species name
+    base, other = random_sequence(), random_sequence()
+    references = [ref("y", base, "Culex gamma", "Culex")]
+    references += [
+        ref(f"g{i}", mutate(other, 0.005), "Culex gamma", "Culex") for i in range(6)
+    ]
+    references += [
+        ref(f"p{i}", mutate(base, 0.005), "Culex sp. P", "Culex", named=False)
+        for i in range(5)
+    ]
+    assert Specialist(references, CURATED).contradicted() == []
+
+
+def test_no_clear_majority_is_not_a_contradiction() -> None:
+    # The record's 5 nearest are 3 + 3 references of two other species, so
+    # neither holds 70% of them
+    near, far = random_sequence(), random_sequence()
+    references = [ref("x", near, "Aedes rho", "Aedes")]
+    references += [
+        ref(f"r{i}", mutate(far, 0.005), "Aedes rho", "Aedes") for i in range(6)
+    ]
+    for species in ("Aedes pi", "Aedes sigma"):
+        references += [
+            ref(f"{species[-2:]}{i}", mutate(near, 0.005), species, "Aedes")
+            for i in range(3)
+        ]
+
+    assert Specialist(references, CURATED).contradicted() == []
