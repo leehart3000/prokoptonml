@@ -318,6 +318,36 @@ genus_identity = 0.95
 species_identity = 0.98
 # Named species within this much of the best match are reported together
 group_margin = 0.01
+# Placeholders labelled only "Culicidae sp." add little and include
+# mislabelled records, so placeholders need at least a genus
+placeholders_need_genus = true
+# Report Aedes in the broad sense: NCBI files many species under genera that
+# Reinert et al. split from Aedes, and Wilkerson et al. (2015) returned to it
+# as subgenera. Names are made consistent before matching and scoring.
+genus_groups_note = "Aedes is used here in its broad sense (Wilkerson et al. 2015, PLoS ONE 10:e0133602), which includes groups such as Ochlerotatus and Stegomyia that some classifications treat as separate genera."
+species_synonyms = { "Ochlerotatus berlandi" = "Ochlerotatus brelandi" }
+
+[specialists.culicidae.genus_groups]
+Ochlerotatus = "Aedes"
+Stegomyia = "Aedes"
+Finlaya = "Aedes"
+Downsiomyia = "Aedes"
+Collessius = "Aedes"
+Georgecraigius = "Aedes"
+Hulecoeteomyia = "Aedes"
+Fredwardsius = "Aedes"
+Aedimorphus = "Aedes"
+Neomelaniconion = "Aedes"
+Mucidus = "Aedes"
+Howardina = "Aedes"
+Tanakaius = "Aedes"
+Phagomyia = "Aedes"
+Bruceharrisonius = "Aedes"
+Dahliana = "Aedes"
+Rampamyia = "Aedes"
+Jarnellius = "Aedes"
+Kompia = "Aedes"
+Lewnielsenius = "Aedes"
 
 [specialists.culicidae.evaluation]
 # Up to 3 records per species in each validation and test set (at most 1,500
@@ -356,6 +386,28 @@ members = [
 ]
 resolve = "Confirm with a nuclear assay: an ACE-2 PCR (separates Cx. pipiens, Cx. quinquefasciatus and Cx. australicus), and a CQ11 PCR for the pipiens and molestus forms of Cx. pipiens."
 reference = "Smith & Fonseca (2004), American Journal of Tropical Medicine and Hygiene 70:339-345; Bahnck & Fonseca (2006), American Journal of Tropical Medicine and Hygiene 75:251-255"
+
+[[specialists.culicidae.complexes]]
+name = "Anopheles maculipennis complex"
+members = [
+  "Anopheles maculipennis", "Anopheles messeae", "Anopheles daciae",
+  "Anopheles atroparvus", "Anopheles labranchiae", "Anopheles sacharovi",
+  "Anopheles melanoon", "Anopheles subalpinus", "Anopheles martinius",
+  "Anopheles beklemishevi", "Anopheles artemievi", "Anopheles persiensis",
+]
+resolve = "Confirm with a nuclear assay: a multiplex PCR of the ribosomal ITS2 separates the main Palaearctic members; An. messeae and An. daciae need ITS2 sequencing."
+reference = "Proft, Maier & Kampen (1999), Parasitology Research 85:837-843"
+
+[[specialists.culicidae.complexes]]
+name = "Anopheles funestus group"
+members = [
+  "Anopheles funestus", "Anopheles vaneedeni", "Anopheles parensis",
+  "Anopheles rivulorum", "Anopheles leesoni", "Anopheles longipalpis",
+  "Anopheles aruni", "Anopheles confusus", "Anopheles fuscivenosus",
+  "Anopheles brucei",
+]
+resolve = "Confirm with a nuclear assay: the ITS2 'cocktail' PCR separates An. funestus, An. vaneedeni, An. rivulorum, An. leesoni and An. parensis."
+reference = "Koekemoer et al. (2002), American Journal of Tropical Medicine and Hygiene 66:804-811"
 
 [mlflow]
 # Run metadata and the model registry in SQLite; model files in an artifact

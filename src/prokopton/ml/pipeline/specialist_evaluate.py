@@ -14,7 +14,8 @@ validation and test splits of its gene:
 Up to ``per_species`` records of each species are drawn per set (chosen by
 a salted hash), so species with many records do not dominate, and scores
 are given both per record and averaged over species. Only target records
-with a species name are used, since the right answer must be known.
+with a species name are used, since the right answer must be known; their
+names are made consistent in the same way as the reference set's.
 
 Each record is aligned once (in parallel processes). The thresholds in the
 grid are then all tried on the saved matches of the validation sets, and
@@ -49,6 +50,8 @@ from prokopton.ml.specialists.identify import (
     Identification,
     Match,
     Specialist,
+    canonical_genus,
+    canonical_species,
 )
 from prokopton.ml.training.tracking import Tracker, specialist_tracker
 
@@ -265,6 +268,8 @@ def _draw(
                 row["role"] = "background"
             else:
                 continue
+            row["genus"] = canonical_genus(row["genus"], rules)
+            row["species"] = canonical_species(row["species"], rules)
             name = _set_name(row, leaky)
             heap = heaps[name, row["species"] or row["record_id"]]
             item = (-hash_fraction(row["record_id"], settings.salt), row["record_id"])

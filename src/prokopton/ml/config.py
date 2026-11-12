@@ -464,6 +464,16 @@ class SpecialistConfig(ConfigModel):
     ``min_aligned`` bases. Species within ``group_margin`` of the best match
     are reported together.
 
+    Names are made consistent before use: ``species_synonyms`` maps a
+    species name to the one to use (such as a misspelling to the right
+    spelling), and ``genus_groups`` maps a genus to the genus to report
+    (such as ``Ochlerotatus`` to ``Aedes`` in the broad sense), in genus
+    names and in the first word of species names. ``genus_groups_note``
+    explains this in answers that use a grouped genus. Placeholder records
+    without a genus (such as "Culicidae sp. ...") are left out of the
+    reference set if ``placeholders_need_genus`` is on: they can only give
+    a family-level answer, and some are mislabelled.
+
     For ``neighbour_references`` records of each named species, the
     reference stage also finds the nearest *other* named species (its
     barcode gap). A query no closer to a species than that species'
@@ -491,6 +501,10 @@ class SpecialistConfig(ConfigModel):
     species_identity: float = Field(default=0.98, gt=0.0, le=1.0)
     group_margin: float = Field(default=0.01, ge=0.0, le=0.1)
     complexes: tuple[ComplexConfig, ...] = ()
+    placeholders_need_genus: bool = True
+    genus_groups: dict[str, str] = Field(default_factory=dict)
+    genus_groups_note: str = ""
+    species_synonyms: dict[str, str] = Field(default_factory=dict)
     evaluation: SpecialistEvaluationConfig = Field(
         default_factory=SpecialistEvaluationConfig
     )
