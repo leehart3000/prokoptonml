@@ -45,6 +45,7 @@ from pydantic import BaseModel, ConfigDict
 from prokopton.ml import __version__
 from prokopton.ml.config import AppConfig, SpecialistConfig
 from prokopton.ml.pipeline.split import hash_fraction
+from prokopton.ml.sources.refseq import read_anchors
 from prokopton.ml.specialists.identify import (
     NEIGHBOURS_NAME,
     Specialist,
@@ -233,6 +234,9 @@ def build_reference(
     if not path.exists():
         msg = f"{path} not found; run the split stage first"
         raise ReferenceStageError(msg)
+    if rules.curate and rules.anchors is not None and not rules.anchors.exists():
+        msg = f"{rules.anchors} not found; fetch the RefSeq anchors first"
+        raise ReferenceStageError(msg)
 
     # Pass 1: give each record a key (species, or family for most of the
     # background)
@@ -314,7 +318,19 @@ def build_reference(
     # Leave out references that look mislabelled
     contradicted = []
     if rules.curate:
-        contradicted = Specialist.from_parquet(output, rules).contradicted()
+        loaded = Specialist.from_parquet(output, rules)
+        contradicted = loaded.contradicted()
+        if rules.anchors is not None:
+            anchors = [
+                (a.accession, a.species, a.sequence)
+                for a in read_anchors(rules.anchors)
+            ]
+            already = {c.record_id for c in contradicted}
+            contradicted += [
+                c
+                for c in loaded.anchor_contradictions(anchors)
+                if c.record_id not in already
+            ]
         dropped = {c.record_id for c in contradicted}
         if dropped:
             kept = [

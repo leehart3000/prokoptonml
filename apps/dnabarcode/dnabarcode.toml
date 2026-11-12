@@ -336,6 +336,15 @@ placeholders_need_genus = true
 genus_groups_note = "Aedes is used here in its broad sense (Wilkerson et al. 2015, PLoS ONE 10:e0133602), which includes groups such as Ochlerotatus and Stegomyia that some classifications treat as separate genera."
 species_synonyms = { "Ochlerotatus berlandi" = "Ochlerotatus brelandi" }
 
+# Check named references against the COI genes of NCBI RefSeq mitogenomes
+# (curated): a record nearly identical to another species' RefSeq COI but
+# far from its own species' is left out. Fetched and committed with
+# `pixi run dnabarcode-culicidae-anchors`
+anchors = "apps/dnabarcode/reference/culicidae-refseq-cox1.fasta"
+anchor_taxon = "Culicidae"
+anchor_other_identity = 0.99
+anchor_own_identity = 0.95
+
 [specialists.culicidae.genus_groups]
 Ochlerotatus = "Aedes"
 Stegomyia = "Aedes"
@@ -405,7 +414,7 @@ complexes, a nuclear assay.
 limitations = [
   "**Our reference data names 953 of about 3,729 described mosquito species.** A sequence from a species missing from it can be given the name of a close relative. On the test set, this happened mostly to held-out records that have a near-copy (at least 99% identical) of another species in training; see the test results.",
   "**COI does not separate many mosquito species.** About a third of named species in the reference set have another species at least 98% identical; these are reported as groups, complexes or closest matches.",
-  "**Public records include mislabelled and contaminated sequences.** Records nearly identical to another genus are left out automatically (counted under Reference data); errors within a genus, such as an *Aedes aegypti* sequence filed as *Ae. albopictus*, are left out only once found and listed in the app's config, so some remain.",
+  "**Public records include mislabelled and contaminated sequences.** Records nearly identical to another genus, and records that contradict the curated NCBI RefSeq mitogenome of their own species, are left out automatically (counted under Reference data). Species without a RefSeq mitogenome rely on the other checks and a hand-kept list, so some errors remain.",
   "**Poorly sampled genera can fall below the membership threshold** (88–90% identity for some *Toxorhynchites*, *Tripteroides*, *Heizmannia* and *Zeugnomyia* records), and are then reported as not mosquitoes.",
   "*Aedes* is used in its broad sense (Wilkerson et al. 2015), including groups such as *Ochlerotatus* that some classifications treat as genera.",
   "Only the **COI** barcode region is supported. A sequence must overlap the references by at least 100 bases and cover 80% of the shorter sequence.",

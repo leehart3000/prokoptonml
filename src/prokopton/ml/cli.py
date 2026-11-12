@@ -38,6 +38,7 @@ from prokopton.ml.reporting.specialist_card import (
     SpecialistCardError,
     build_specialist_card,
 )
+from prokopton.ml.sources.refseq import AnchorError, fetch_anchors
 
 __all__ = ["ENV_PREFIX", "main"]
 
@@ -68,6 +69,10 @@ _COMMANDS = {
     "bundle": (
         "Build the serving bundle: the registered models, and each serving "
         "specialist's reference set from every split, with checksums."
+    ),
+    "anchors": (
+        "Fetch the COI genes of a specialist's RefSeq mitogenomes from NCBI, "
+        "to check reference labels against."
     ),
     "identify": (
         "Identify one sequence with the registered models and print the "
@@ -106,10 +111,10 @@ def _build_parser() -> argparse.ArgumentParser:
                 default=None,
                 help="Use a serving bundle instead of the MLflow registry.",
             )
-        if name in ("reference", "evaluate", "card"):
+        if name in ("reference", "evaluate", "card", "anchors"):
             command.add_argument(
                 "--specialist",
-                required=name == "reference",
+                required=name in ("reference", "anchors"),
                 default="",
                 help="Which specialist (as named in the app's config).",
             )
@@ -136,6 +141,13 @@ def _run(
     """Run one pipeline stage and return a one-line summary."""
     if command == "identify" and source is not None:
         return _identify(config, source, bundle)
+    if command == "anchors":
+        rules = config.specialist(specialist)
+        if rules.anchors is None or not rules.anchor_taxon:
+            msg = f"Set anchors and anchor_taxon for the {specialist!r} specialist"
+            raise AnchorError(msg)
+        anchors = fetch_anchors(rules.anchor_taxon, rules.anchors)
+        return f"{len(anchors)} COI anchors written to {rules.anchors}"
     if command == "bundle":
         manifest = build_bundle(config)
         return f"serving bundle {manifest.versions} written to {bundle_path(config)}"
@@ -242,6 +254,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         SpecialistCardError,
         LoadError,
         BundleError,
+        AnchorError,
         OSError,
     ) as error:
         logger.error("%s", error)

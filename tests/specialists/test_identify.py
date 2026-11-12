@@ -456,3 +456,57 @@ def test_species_with_few_references_and_unnamed_neighbours_are_not_judged() -> 
         for i in range(5)
     ]
     assert Specialist(references, CURATED).contradicted() == []
+
+
+def anchor_world() -> tuple[list[Reference], list[tuple[str, str, str]]]:
+    aegypti, albopictus = random_sequence(), random_sequence()
+    references = [
+        ref(f"a{i}", mutate(aegypti, 0.005), "Aedes aegypti", "Aedes") for i in range(4)
+    ]
+    references += [
+        ref(f"b{i}", mutate(albopictus, 0.005), "Aedes albopictus", "Aedes")
+        for i in range(4)
+    ]
+    # Labelled Ae. albopictus, but an Ae. aegypti sequence
+    references.append(ref("x", mutate(aegypti, 0.002), "Aedes albopictus", "Aedes"))
+    # Closer to Ae. aegypti than its own anchor, but only 97% identical to it
+    references.append(ref("z", mutate(aegypti, 0.03), "Aedes albopictus", "Aedes"))
+    anchors = [
+        ("NC_A.1", "Aedes aegypti", aegypti),
+        ("NC_B.1", "Aedes albopictus", albopictus),
+    ]
+    return references, anchors
+
+
+def test_references_that_contradict_refseq_are_found() -> None:
+    references, anchors = anchor_world()
+
+    [found] = Specialist(references, RULES).anchor_contradictions(anchors)
+
+    assert (found.record_id, found.looks_like, found.basis) == (
+        "x",
+        "Aedes aegypti",
+        "RefSeq NC_A.1",
+    )
+    assert found.similarity > 0.99
+    assert found.own_similarity < 0.95
+
+
+def test_refseq_checks_spare_complexes_and_close_own_anchors() -> None:
+    references, anchors = anchor_world()
+    complex_ = ComplexConfig(
+        name="Test complex",
+        members=("Aedes aegypti", "Aedes albopictus"),
+        resolve="Use a nuclear assay.",
+        reference="Someone (2020)",
+    )
+    rules = RULES.model_copy(update={"complexes": (complex_,)})
+    assert Specialist(references, rules).anchor_contradictions(anchors) == []
+
+    # Its own species' anchor is 98% identical: not a contradiction
+    record = references[-2].sequence
+    close = [
+        ("NC_C.1", "Aedes x", record),
+        ("NC_D.1", "Aedes albopictus", mutate(record, 0.02)),
+    ]
+    assert Specialist(references, RULES).anchor_contradictions(close) == []
