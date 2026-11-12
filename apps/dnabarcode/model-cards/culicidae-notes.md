@@ -74,9 +74,14 @@ different stretches of COI. The rule kept judges only near-identity to
 **another genus**, which is almost always an error. Within a genus,
 records are checked against an authoritative source instead: the COI genes
 of NCBI's curated RefSeq mitogenomes (one or more for about 170 mosquito
-species). A record at least 99% identical (by alignment) to another
+species). A record at least 97% identical (by alignment) to another
 species' RefSeq COI, but under 95% to every RefSeq COI of its own species,
-is left out, unless the two species are in a configured complex. Remaining
+is left out, unless the two species are in a configured complex. The first
+try used 99%, which missed two *Ae. albopictus* records (MF148262.1 and
+MF148266.1) that are 98.4-98.7% identical to the *Ae. aegypti* RefSeq COI
+and 89% to the *Ae. albopictus* one: a species can differ from its single
+RefSeq mitogenome by 1-3% (wild *Ae. aegypti* barcodes are about 97.7%
+identical to the lab strain NC_035159), so 99% was too strict. Remaining
 errors found later are listed by hand in the config, with reasons.
 
 Possible next steps:

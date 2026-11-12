@@ -339,10 +339,13 @@ species_synonyms = { "Ochlerotatus berlandi" = "Ochlerotatus brelandi" }
 # Check named references against the COI genes of NCBI RefSeq mitogenomes
 # (curated): a record nearly identical to another species' RefSeq COI but
 # far from its own species' is left out. Fetched and committed with
-# `pixi run dnabarcode-culicidae-anchors`
+# `pixi run dnabarcode-culicidae-anchors`. The "other" limit is 97%, not
+# 99%, because a species can differ from its one RefSeq mitogenome by 1-3%
+# (wild Ae. aegypti barcodes are about 97.7% identical to the lab-strain
+# NC_035159); the "own" limit (under 95%) keeps sister species safe
 anchors = "apps/dnabarcode/reference/culicidae-refseq-cox1.fasta"
 anchor_taxon = "Culicidae"
-anchor_other_identity = 0.99
+anchor_other_identity = 0.97
 anchor_own_identity = 0.95
 
 [specialists.culicidae.genus_groups]
