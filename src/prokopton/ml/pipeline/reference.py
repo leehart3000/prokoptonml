@@ -27,10 +27,12 @@ Outputs ``<models_dir>/specialists/<name>/reference.parquet``,
 """
 
 import hashlib
+import json
 import logging
 from array import array
 from collections import Counter
 from collections.abc import Iterator
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -50,6 +52,7 @@ from prokopton.ml.specialists.identify import (
 )
 
 __all__ = [
+    "CONTRADICTED_NAME",
     "REFERENCE_NAME",
     "REFERENCE_SCHEMA",
     "REPORT_NAME",
@@ -66,6 +69,7 @@ logger = logging.getLogger(__name__)
 
 REFERENCE_NAME = "reference.parquet"
 REPORT_NAME = "_reference_report.json"
+CONTRADICTED_NAME = "_contradicted.json"
 SERVING_SPLITS = ("train", "val_known", "val_novel", "test_known", "test_novel")
 """The splits a serving reference set is drawn from (all of them)."""
 BATCH_SIZE = 100_000
@@ -119,6 +123,9 @@ class ReferenceReport(BaseModel):
     background_families: int
     close_relative_records: int
     duplicates_skipped: int
+    contradicted_skipped: int = 0
+    """Named references left out because they look like another species
+    (listed in ``_contradicted.json``)."""
     species_with_neighbours: int
     species_within_species_identity: int
     """Named species whose nearest other species is at least
@@ -297,6 +304,27 @@ def build_reference(
         raise ReferenceStageError(msg)
     partial.replace(output)
 
+    # Leave out references that look mislabelled
+    contradicted = []
+    if rules.curate:
+        contradicted = Specialist.from_parquet(output, rules).contradicted()
+        dropped = {c.record_id for c in contradicted}
+        if dropped:
+            kept = [
+                row
+                for row in pq.read_table(output).to_pylist()
+                if row["record_id"] not in dropped
+            ]
+            with pq.ParquetWriter(output, REFERENCE_SCHEMA, compression="zstd") as out:
+                out.write_table(pa.Table.from_pylist(kept, schema=REFERENCE_SCHEMA))
+            counts["target"] -= len(dropped)
+        (output.parent / CONTRADICTED_NAME).write_text(
+            json.dumps([asdict(c) for c in contradicted], indent=1) + "\n", "utf-8"
+        )
+        logger.info(
+            "Left out %d references that look like another species", len(dropped)
+        )
+
     # The barcode gap of each named target species
     logger.info("Finding the nearest other species for %d species", len(named_species))
     neighbours = Specialist.from_parquet(output, rules).find_neighbours()
@@ -319,6 +347,7 @@ def build_reference(
         background_families=len(families),
         close_relative_records=counts["close"],
         duplicates_skipped=duplicates,
+        contradicted_skipped=len(contradicted),
         species_with_neighbours=len(neighbours),
         species_within_species_identity=sum(
             n.identity >= rules.species_identity for n in neighbours.values()

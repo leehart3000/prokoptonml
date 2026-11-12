@@ -78,9 +78,9 @@ def test_says_when_a_limit_was_missed(tmp_path: Path) -> None:
     config = AppConfig.model_validate(data)
     neighbours = reference_path(config, "culicidae").parent / "_reference_report.json"
     neighbours.write_text(
-        neighbours.read_text().replace(
-            '"species_with_neighbours": 0', '"species_with_neighbours": 3'
-        )
+        neighbours.read_text()
+        .replace('"species_with_neighbours": 0', '"species_with_neighbours": 3')
+        .replace('"contradicted_skipped": 0', '"contradicted_skipped": 2')
     )
     path = reference_path(config, "culicidae").parent / REPORT_NAME
     path.write_text(
@@ -93,6 +93,7 @@ def test_says_when_a_limit_was_missed(tmp_path: Path) -> None:
 
     assert "known species limit met: False" in text
     assert "**0 of 3 named species** have another named species" in text
+    assert "2 records labelled as one species but far more like another" in text
     assert "- **Aedes test complex** (2 names): Use a nuclear assay." in text
 
 

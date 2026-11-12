@@ -509,6 +509,12 @@ class SpecialistConfig(ConfigModel):
     router_label: str = ""
     """The router's label for this specialist's group (such as "Diptera");
     empty if the specialist is not consulted at serving."""
+    curate: bool = True
+    """Leave out named references that look mislabelled (see
+    ``Specialist.contradicted``)."""
+    curation_neighbours: int = Field(default=10, ge=1)
+    curation_share: float = Field(default=0.7, gt=0.0, le=1.0)
+    curation_min_support: int = Field(default=5, ge=1)
     placeholders_need_genus: bool = True
     genus_groups: dict[str, str] = Field(default_factory=dict)
     genus_groups_note: str = ""

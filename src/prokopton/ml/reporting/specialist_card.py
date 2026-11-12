@@ -213,6 +213,12 @@ def _sections(
         f"{rules.background} in {_count(reference.background_families, 'family')} "
         "as the background."
     )
+    if reference.contradicted_skipped:
+        data += (
+            f" {_count(reference.contradicted_skipped, 'record')} labelled as one "
+            "species but far more like another were left out as likely "
+            "mislabelled (listed with the reference set)."
+        )
     if reference.species_with_neighbours:
         data += (
             f"\n\n**{reference.species_within_species_identity} of "
