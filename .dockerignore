@@ -1,0 +1,8 @@
+# Only the package source, its metadata and the serving bundle go into the image
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+!bundle/
+**/__pycache__

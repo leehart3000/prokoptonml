@@ -4,12 +4,14 @@ import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 
 from fakes import FakeTracker
 from inference_world import FakeMarker, FakeRouter
 from prokopton.ml import cli
 from prokopton.ml.config import AppConfig
+from prokopton.ml.inference import bundle
 from prokopton.ml.inference.bundle import (
     MANIFEST_NAME,
     BundleError,
@@ -54,6 +56,7 @@ def test_builds_a_bundle_with_checksums(tmp_path: Path) -> None:
 
     assert set(manifest.files) == {
         "config.json",
+        "requirements.txt",
         "marker.joblib",
         "router.joblib",
         "specialists/culicidae/reference.parquet",
@@ -64,6 +67,26 @@ def test_builds_a_bundle_with_checksums(tmp_path: Path) -> None:
     assert manifest.versions["culicidae"].startswith("GB999, ")
     assert manifest.specialists == ("culicidae",)
     assert not bundle_path(config).with_name("bundle.part").exists()
+    assert manifest.runtime["numpy"] == np.__version__
+    requirements = (bundle_path(config) / "requirements.txt").read_text()
+    assert f"numpy=={np.__version__}\n" in requirements
+
+
+def test_skips_packages_that_are_not_installed() -> None:
+    assert bundle._installed(("numpy", "not-a-real-package")) == {
+        "numpy": np.__version__
+    }
+
+
+def test_refuses_models_saved_with_other_package_versions(tmp_path: Path) -> None:
+    _, folder = built(tmp_path)
+    path = folder / MANIFEST_NAME
+    manifest = json.loads(path.read_text())
+    manifest["runtime"]["numpy"] = "0.0.1"
+    path.write_text(json.dumps(manifest))
+
+    with pytest.raises(BundleError, match=r"saved with numpy 0\.0\.1"):
+        load_bundle(folder)
 
 
 def test_loads_a_bundle_and_identifies(tmp_path: Path) -> None:

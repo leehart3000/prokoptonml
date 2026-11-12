@@ -9,8 +9,14 @@ Serving should not need MLflow, the split data or minutes of indexing, so
 - ``specialists/<name>/``: each serving specialist's reference set, drawn
   from **every** split (more species than the training-only set used to
   evaluate it), with its barcode-gap table and a pre-built k-mer index;
+- ``requirements.txt``: the exact versions of the packages the models were
+  saved with, for the serving image to install;
 - ``manifest.json``: model versions, the SHA-256 of every file, and when
   and with what the bundle was made.
+
+A pickled scikit-learn model is only safe to load with the scikit-learn (and
+NumPy and SciPy) it was saved with, so ``load_bundle`` refuses to load a
+bundle when those versions differ.
 
 The models are saved with joblib, which uses pickle: loading a pickle can
 run code, so ``load_bundle`` only loads files whose SHA-256 matches the
@@ -23,6 +29,7 @@ import logging
 import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime
+from importlib import metadata
 from pathlib import Path
 
 import joblib
@@ -53,6 +60,22 @@ logger = logging.getLogger(__name__)
 
 MANIFEST_NAME = "manifest.json"
 INDEX_NAME = "index.npz"
+RUNTIME_PACKAGES = (
+    "prokopton",
+    "numpy",
+    "scipy",
+    "scikit-learn",
+    "joblib",
+    "threadpoolctl",
+    "pyarrow",
+    "pandas",
+    "pydantic",
+    "fastapi",
+    "uvicorn",
+)
+"""Packages serving needs, pinned in the bundle's ``requirements.txt``."""
+MUST_MATCH = ("numpy", "scipy", "scikit-learn")
+"""Packages that must be the same version to load the pickled models."""
 
 
 class BundleError(RuntimeError):
@@ -72,6 +95,18 @@ class BundleManifest(BaseModel):
     specialists: tuple[str, ...]
     files: dict[str, str]
     """Path within the bundle -> SHA-256."""
+    runtime: dict[str, str] = {}
+    """Package -> the version installed when the bundle was built."""
+
+
+def _installed(names: tuple[str, ...]) -> dict[str, str]:
+    found = {}
+    for name in names:
+        try:
+            found[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            continue
+    return found
 
 
 def bundle_path(config: AppConfig) -> Path:
@@ -108,6 +143,11 @@ def build_bundle(
     shutil.rmtree(folder, ignore_errors=True)
     folder.mkdir(parents=True)
     (folder / "config.json").write_text(config.model_dump_json(indent=2), "utf-8")
+    runtime = _installed(RUNTIME_PACKAGES)
+    (folder / "requirements.txt").write_text(
+        "".join(f"{name}=={version}\n" for name, version in runtime.items()),
+        "utf-8",
+    )
 
     versions = {}
     for name in ("marker", "router"):
@@ -146,6 +186,7 @@ def build_bundle(
         versions=versions,
         specialists=tuple(serving),
         files=files,
+        runtime=runtime,
     )
     (folder / MANIFEST_NAME).write_text(manifest.model_dump_json(indent=2), "utf-8")
     shutil.rmtree(final, ignore_errors=True)
@@ -158,8 +199,9 @@ def load_bundle(folder: Path) -> Loaded:
     """Load a serving bundle, checking every file against its manifest.
 
     Raises:
-        BundleError: If the manifest is missing, or a file is missing or
-            does not match its checksum.
+        BundleError: If the manifest is missing, a file is missing or does
+            not match its checksum, or NumPy, SciPy or scikit-learn are not
+            the versions the models were saved with.
     """
     manifest_path = folder / MANIFEST_NAME
     if not manifest_path.exists():
@@ -170,6 +212,16 @@ def load_bundle(folder: Path) -> Loaded:
         path = folder / name
         if not path.exists() or _sha256(path) != expected:
             msg = f"{path} is missing or does not match the bundle's manifest"
+            raise BundleError(msg)
+    installed = _installed(MUST_MATCH)
+    for name in MUST_MATCH:
+        built = manifest.runtime.get(name)
+        if built is not None and installed.get(name) != built:
+            msg = (
+                f"The bundle's models were saved with {name} {built}, but "
+                f"{installed.get(name)} is installed; install the bundle's "
+                "requirements.txt"
+            )
             raise BundleError(msg)
     config = AppConfig.model_validate(
         json.loads((folder / "config.json").read_text("utf-8"))

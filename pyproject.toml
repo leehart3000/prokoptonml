@@ -17,6 +17,11 @@ dependencies = [
     "scipy>=1.13",
 ]
 
+[project.optional-dependencies]
+# The HTTP API (see Dockerfile); the image pins exact versions from the
+# serving bundle's requirements.txt
+serve = ["fastapi>=0.115", "uvicorn>=0.30"]
+
 [project.scripts]
 prokopton-ml = "prokopton.ml.cli:main"
 
@@ -47,6 +52,9 @@ pyarrow = ">=19"
 mlflow = ">=3.1,<4"
 scikit-learn = ">=1.6"
 scipy = ">=1.13"
+fastapi = ">=0.162.4,<0.163"
+uvicorn = ">=0.54.0,<0.55"
+httpx = ">=0.28.1,<0.29"
 
 [tool.pixi.pypi-dependencies]
 prokopton-ml = { path = ".", editable = true }
@@ -84,6 +92,7 @@ dnabarcode-culicidae-reference = "prokopton-ml reference apps/dnabarcode/dnabarc
 dnabarcode-culicidae-evaluate = "prokopton-ml evaluate apps/dnabarcode/dnabarcode.toml --specialist culicidae"
 dnabarcode-culicidae-card = "prokopton-ml card apps/dnabarcode/dnabarcode.toml --specialist culicidae"
 dnabarcode-bundle = "prokopton-ml bundle apps/dnabarcode/dnabarcode.toml"
+dnabarcode-serve = { cmd = "uvicorn --factory prokopton.ml.serving.app:create_app_from_env --port 8080", env = { PROKOPTON_BUNDLE = "data/models/dnabarcode/bundle" } }
 
 [tool.pixi.environments]
 default = { features = ["dev"], solve-group = "default" }
