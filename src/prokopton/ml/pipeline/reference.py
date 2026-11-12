@@ -7,7 +7,8 @@ keeps:
 
 - **target** records (for example, family Culicidae): up to ``per_species``
   per species, including placeholder names such as "Aedes sp. BIOUG...",
-  which are reported as unidentified specimens rather than species;
+  which are reported as records labelled only to genus (placeholders
+  without a genus are left out if ``placeholders_need_genus`` is on);
 - **background** records from the wider group (for example, order Diptera),
   so the specialist can tell when a sequence is not in its group: up to
   ``per_species`` per species for close relatives, and up to
@@ -171,6 +172,13 @@ def _rows(path: Path, rules: SpecialistConfig) -> Iterator[dict[str, Any]]:
             if row["ambiguous_fraction"] > rules.max_ambiguous_fraction:
                 continue
             role = _role(row, rules)
+            if (
+                role == "target"
+                and rules.placeholders_need_genus
+                and not row["species_named"]
+                and not row["genus"]
+            ):
+                continue
             if role is not None:
                 row["role"] = role
                 yield row

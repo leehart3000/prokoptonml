@@ -13,6 +13,8 @@ from prokopton.ml.specialists.identify import (
     Neighbour,
     Reference,
     Specialist,
+    canonical_genus,
+    canonical_species,
     write_neighbours,
 )
 
@@ -324,3 +326,56 @@ def test_queries_are_compared_in_batches(
     monkeypatch.setattr("prokopton.ml.specialists.identify.QUERY_BATCH", 2)
 
     assert specialist.candidates(queries) == whole
+
+
+GROUPED = RULES.model_copy(
+    update={
+        "genus_groups": {"Ochlerotatus": "Aedes"},
+        "genus_groups_note": "Aedes in the broad sense.",
+        "species_synonyms": {"Ochlerotatus berlandi": "Ochlerotatus brelandi"},
+    }
+)
+
+
+def test_canonical_names() -> None:
+    assert canonical_genus("Ochlerotatus", GROUPED) == "Aedes"
+    assert canonical_genus("Culex", GROUPED) == "Culex"
+    assert canonical_genus(None, GROUPED) is None
+    assert canonical_species("Ochlerotatus berlandi", GROUPED) == "Aedes brelandi"
+    assert canonical_species("Ochlerotatus sp. X1", GROUPED) == "Aedes sp. X1"
+    assert canonical_species("Ochlerotatus", GROUPED) == "Ochlerotatus"
+    assert canonical_species("", GROUPED) == ""
+
+
+def test_grouped_genera_are_one_genus_with_a_note() -> None:
+    # Two references 4% from the query, filed under Aedes and Ochlerotatus:
+    # one genus once grouped, so the answer is a genus, not just the family
+    query = random_sequence()
+    references = [
+        ref("a", mutate(query, 0.04), "Aedes alpha", "Aedes"),
+        ref("o", mutate(query, 0.04), "Ochlerotatus omega", "Ochlerotatus"),
+        REFERENCES[8],
+    ]
+    specialist = Specialist(references, GROUPED)
+
+    found = specialist.identify(query)
+
+    assert specialist.references[1].species == "Aedes omega"
+    assert (found.outcome, found.label) == ("genus", "Aedes")
+    assert found.notes[-1] == "Aedes in the broad sense."
+    assert Specialist(references, RULES).identify(query).outcome == "family"
+
+
+def test_grouped_species_and_genus_only_answers_carry_the_note() -> None:
+    query = random_sequence()
+    named = Specialist(
+        [ref("n", query, "Ochlerotatus x", "Ochlerotatus"), REFERENCES[8]], GROUPED
+    )
+    unnamed = ref("u", query, "Ochlerotatus sp. Y", "Ochlerotatus", named=False)
+    placeholder = Specialist([unnamed, REFERENCES[8]], GROUPED)
+
+    assert named.identify(query).notes[-1] == "Aedes in the broad sense."
+    found = placeholder.identify(query)
+    assert (found.outcome, found.label) == ("genus_label_only", "Aedes")
+    assert found.notes[-1] == "Aedes in the broad sense."
+    assert Specialist([unnamed, REFERENCES[8]], RULES).identify(query).notes[1:] == ()

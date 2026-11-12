@@ -39,7 +39,7 @@ and checked.
 import json
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Literal
 
@@ -60,6 +60,8 @@ __all__ = [
     "Outcome",
     "Reference",
     "Specialist",
+    "canonical_genus",
+    "canonical_species",
     "read_neighbours",
     "write_neighbours",
 ]
@@ -130,6 +132,36 @@ def _key(reference: Reference) -> str:
     return reference.species or reference.record_id
 
 
+def canonical_genus(genus: str | None, rules: SpecialistConfig) -> str | None:
+    """The genus to report (see ``SpecialistConfig.genus_groups``)."""
+    return rules.genus_groups.get(genus, genus) if genus else genus
+
+
+def canonical_species(species: str | None, rules: SpecialistConfig) -> str | None:
+    """The species name to use: synonyms first, then the genus group."""
+    if not species:
+        return species
+    species = rules.species_synonyms.get(species, species)
+    genus, _, rest = species.partition(" ")
+    grouped = rules.genus_groups.get(genus)
+    return f"{grouped} {rest}" if grouped and rest else species
+
+
+def _canonical(reference: Reference, rules: SpecialistConfig) -> Reference:
+    return replace(
+        reference,
+        genus=canonical_genus(reference.genus, rules),
+        species=canonical_species(reference.species, rules),
+    )
+
+
+def _group_note(name: str | None, rules: SpecialistConfig) -> tuple[str, ...]:
+    """The genus-group note, if ``name`` (a genus or species) uses one."""
+    genus = (name or "").partition(" ")[0]
+    used = rules.genus_groups_note and genus in rules.genus_groups.values()
+    return (rules.genus_groups_note,) if used else ()
+
+
 class Specialist:
     """Matches queries against a reference set (see the module docstring)."""
 
@@ -142,7 +174,7 @@ class Specialist:
         if not references:
             msg = "A specialist needs at least one reference sequence"
             raise ValueError(msg)
-        self.references = list(references)
+        self.references = [_canonical(r, rules) for r in references]
         self.rules = rules
         self.neighbours = dict(neighbours or {})
         self.vectorizer = KmerVectorizer(k=rules.k).fit()
@@ -426,6 +458,7 @@ class Specialist:
                 notes=(
                     f"The closest matches in our reference data are {genera[0]} "
                     f"({best.identity:.1%} identical). {missing}",
+                    *_group_note(genera[0], rules),
                 ),
             )
         return Identification(
@@ -499,7 +532,7 @@ class Specialist:
                 identity=top.identity,
                 species=(name,),
                 matches=shown,
-                notes=tuple(notes),
+                notes=(*notes, *_group_note(name, rules)),
             )
         notes.insert(
             0,
@@ -511,7 +544,7 @@ class Specialist:
             identity=top.identity,
             species=(name,),
             matches=shown,
-            notes=tuple(notes),
+            notes=(*notes, *_group_note(name, rules)),
         )
 
 
@@ -531,6 +564,7 @@ def _genus_label_only(
             f"{best.reference.record_id}), {best.identity:.1%} identical. "
             f"Our reference data has no species name for it; the organism "
             f"may still belong to a named {level} species.",
+            *_group_note(best.reference.genus, rules),
         ),
     )
 

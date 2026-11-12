@@ -51,7 +51,7 @@ def records() -> list[dict[str, Any]]:
                     "split": fields.get("split", "train"),
                     "order": order,
                     "family": family,
-                    "genus": species.split()[0],
+                    "genus": fields.get("genus", species.split()[0]),
                     "species": species,
                     "species_named": fields.get("named", True),
                     "ambiguous_fraction": fields.get("ambiguous", 0.0),
@@ -69,6 +69,8 @@ def records() -> list[dict[str, Any]]:
     add(4, "Diptera", "Culicidae", "Aedes aegypti", split="test_known")
     add(2, "Diptera", "Culicidae", "Aedes vexans", ambiguous=0.5)
     add(3, "Diptera", "Culicidae", "Anopheles gambiae", sequence="ACGT" * 50)
+    # A placeholder without a genus is left out
+    add(2, "Diptera", "Culicidae", "Culicidae sp. BOLD1", named=False, genus=None)
     return rows
 
 
