@@ -40,9 +40,9 @@ Every answer describes our reference data and this marker, never the organism's 
 
 ## Reference data
 
-From the training split only: 13,675 records of Culicidae (953 named species, up to 50 distinct sequences each; 76,479 repeated sequences skipped), and 10,095 records of other Diptera in 141 families as the background. 63 records labelled as one species but far more like another were left out as likely mislabelled (listed with the reference set).
+From the training split only: 13,710 records of Culicidae (953 named species, up to 50 distinct sequences each; 76,479 repeated sequences skipped), and 10,095 records of other Diptera in 141 families as the background. 28 records labelled as one species but far more like another were left out as likely mislabelled (listed with the reference set).
 
-**185 of 949 named species** have another named species at least 99.5% identical in the reference set: COI does not separate them well. Such species are reported as a group or a closest match, not alone.
+**194 of 949 named species** have another named species at least 99.5% identical in the reference set: COI does not separate them well. Such species are reported as a group or a closest match, not alone.
 
 Species complexes, reported as the complex with how to resolve it:
 
@@ -63,19 +63,19 @@ Measured once, with the tuned thresholds. Rates are shares of records (in bracke
 
 | Set | Records | Species | Right | Wrongly named | Exact |
 |---|---|---|---|---|---|
-| Known species | 998 | 508 | 97.3% (96.4%) | 1.9% (2.6%) | 53.9% (52.5%) |
+| Known species | 998 | 508 | 97.2% (96.3%) | 1.9% (2.6%) | 51.7% (50.9%) |
 | Held-out species, no near-copy in training | 108 | 45 | 94.4% (93.3%) | 0.0% (0.0%) | 0.0% (0.0%) |
 | Held-out species with a near-copy in training | 58 | 29 | 62.1% (63.2%) | 37.9% (36.8%) | 3.4% (4.6%) |
 | Held-out species (all) | 166 | 56 | 83.1% (82.6%) | 13.3% (12.1%) | 1.2% (2.4%) |
-| Other flies (should be kept out) | 1,500 | 1,300 | 99.9% (99.9%) | 0.1% (0.1%) | 0.0% (0.0%) |
+| Other flies (should be kept out) | 1,500 | 1,300 | 100.0% (100.0%) | 0.0% (0.0%) | 0.0% (0.0%) |
 
-Answers for known species: species 547, genus 201, species_group 142, closest_species 40, complex 34, family 21, genus_label_only 10, not_member 3.
+Answers for known species: species 523, genus 202, species_group 162, closest_species 42, complex 34, family 20, genus_label_only 12, not_member 3.
 
 ## Limitations
 
 - **Our reference data names 953 of about 3,729 described mosquito species.** A sequence from a species missing from it can be given the name of a close relative. On the test set, this happened mostly to held-out records that have a near-copy (at least 99% identical) of another species in training; see the test results.
 - **COI does not separate many mosquito species.** About a third of named species in the reference set have another species at least 98% identical; these are reported as groups, complexes or closest matches.
-- **Public records include mislabelled and contaminated sequences**, such as a *Haemagogus* record 99.8% identical to *Mansonia titillans*; these cause some wrong names.
+- **Public records include mislabelled and contaminated sequences.** Records nearly identical to another genus, and records that contradict the curated NCBI RefSeq mitogenome of their own species, are left out automatically (counted under Reference data). Species without a RefSeq mitogenome rely on the other checks and a hand-kept list, so some errors remain.
 - **Poorly sampled genera can fall below the membership threshold** (88–90% identity for some *Toxorhynchites*, *Tripteroides*, *Heizmannia* and *Zeugnomyia* records), and are then reported as not mosquitoes.
 - *Aedes* is used in its broad sense (Wilkerson et al. 2015), including groups such as *Ochlerotatus* that some classifications treat as genera.
 - Only the **COI** barcode region is supported. A sequence must overlap the references by at least 100 bases and cover 80% of the shorter sequence.
@@ -83,7 +83,7 @@ Answers for known species: species 547, genus 201, species_group 142, closest_sp
 
 ## Development notes
 
-The specialist was developed in six rounds, each run on the same validation
+The specialist was developed in six rounds, followed by curation of the reference data, each run on the same validation
 data. Trials 1 and 2 are recorded in `analysis/README.md`
 (`05_specialist_trial.py`); the evaluations used `prokopton-ml evaluate
 --specialist culicidae`.
@@ -146,17 +146,41 @@ exactly (on validation, averaged over species: 51.0% against 56.9%), but
 held-out species are wrongly named less often (17.8% against 23.2%), and
 known species too (2.5% against 3.2%).
 
+### Curation: leaving out mislabelled records
+
+Raising the serving reference to 200 records per species drew in records
+such as KP896564.1, labelled *Aedes albopictus* but 99.6% identical to
+*Ae. aegypti*. Two automatic rules were tried. The first (a majority vote of
+the closest records) missed groups of mislabels that vouch for each other,
+and removed sister species. The second (unlike the species as a whole by
+median k-mer similarity) removed 690 records, mostly real sister and cryptic
+species, probably because k-mer similarity also falls when records cover
+different stretches of COI. The rule kept judges only near-identity to
+**another genus**, which is almost always an error. Within a genus,
+records are checked against an authoritative source instead: the COI genes
+of NCBI's curated RefSeq mitogenomes (one or more for about 170 mosquito
+species). A record at least 97% identical (by alignment) to another
+species' RefSeq COI, but under 95% to every RefSeq COI of its own species,
+is left out, unless the two species are in a configured complex. The first
+try used 99%, which missed two *Ae. albopictus* records (MF148262.1 and
+MF148266.1) that are 98.4-98.7% identical to the *Ae. aegypti* RefSeq COI
+and 89% to the *Ae. albopictus* one: a species can differ from its single
+RefSeq mitogenome by 1-3% (wild *Ae. aegypti* barcodes are about 97.7%
+identical to the lab strain NC_035159), so 99% was too strict. Remaining
+errors found later are listed by hand in the config, with reasons.
+
 Possible next steps:
 comparing the best mosquito match with the best other-fly match, rather
-than a fixed membership threshold; flagging reference records that are
-near-identical to another genus; and adding BOLD data and BINs.
+than a fixed membership threshold; checking each record against its own
+species by alignment rather than k-mers, to find errors within a genus
+automatically; and adding BOLD data and BINs.
 
 ## Provenance
 
 |  |  |
 |---|---|
-| Evaluation run | `8df0dbca3340408098f6daee4a501b4b` |
-| Reference set SHA-256 | `63dbba688003de82…` |
+| Evaluation run | `d081c5f9e7e04fe2a3463fc68a42e353` |
+| Reference set SHA-256 | `96990fdb34950582…` |
 | Split data SHA-256 | `4ff0d2754dbecd18…` |
-| Evaluated | 2026-11-12 14:39 UTC |
+| Evaluated | 2026-11-12 18:12 UTC |
 | prokopton-ml | 0.1.0 |
