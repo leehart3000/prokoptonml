@@ -301,6 +301,9 @@ background = "Diptera"
 close_relatives = ["Chaoboridae", "Dixidae", "Corethrellidae"]
 # Up to 50 distinct sequences per species (identical copies are kept once)
 per_species = 50
+# Serving keeps more variants of widely sampled species (such as Aedes
+# aegypti), so a sequence is more likely to meet its own haplotype
+serving_per_species = 200
 background_per_family = 100
 max_ambiguous_fraction = 0.10
 salt = "dnabarcode-culicidae-v1"

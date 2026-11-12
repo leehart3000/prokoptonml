@@ -231,6 +231,9 @@ def build_reference(
     caps = array("q")
     priority = array("d")
     splits = frozenset(SERVING_SPLITS if serving else ("train",))
+    per_species = (
+        rules.serving_per_species or rules.per_species if serving else rules.per_species
+    )
     for row in _rows(path, rules, splits):
         by_species = row["role"] == "target" or row["family"] in rules.close_relatives
         key = (
@@ -250,7 +253,7 @@ def build_reference(
             continue
         seen.add((key_id, digest))
         keys.append(key_id)
-        caps.append(rules.per_species if by_species else rules.background_per_family)
+        caps.append(per_species if by_species else rules.background_per_family)
         priority.append(hash_fraction(row["record_id"], rules.salt))
     chosen = first_per_key(
         np.frombuffer(keys, dtype=np.int64),
