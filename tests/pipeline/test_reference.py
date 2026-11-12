@@ -183,6 +183,19 @@ def test_serving_reference_uses_every_split(tmp_path: Path) -> None:
     assert not reference_path(config, "culicidae").exists()
 
 
+def test_serving_can_keep_more_per_species(tmp_path: Path) -> None:
+    write_records(tmp_path)
+    data = config_dict(tmp_path)
+    data["specialists"]["culicidae"]["serving_per_species"] = 25
+    config = AppConfig.model_validate(data)
+
+    build_reference(config, "culicidae", serving=True)
+
+    rows = pq.read_table(serving_reference_path(config, "culicidae")).to_pylist()
+    # 25 of the 29 Ae. aegypti records, instead of 20
+    assert sum(r["species"] == "Aedes aegypti" for r in rows) == 25
+
+
 def test_reference_requires_split_data(tmp_path: Path) -> None:
     config = AppConfig.model_validate(config_dict(tmp_path))
 

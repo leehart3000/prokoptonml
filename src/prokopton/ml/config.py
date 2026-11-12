@@ -488,6 +488,10 @@ class SpecialistConfig(ConfigModel):
     background: str = Field(min_length=1)
     close_relatives: tuple[str, ...] = ()
     per_species: int = Field(default=20, ge=1)
+    serving_per_species: int | None = Field(default=None, ge=1)
+    """Distinct sequences per species in the serving reference set (default
+    ``per_species``). Widely sampled species vary a lot, so serving can keep
+    more of their variants than evaluation needs."""
     background_per_family: int = Field(default=100, ge=1)
     max_ambiguous_fraction: float = Field(default=0.10, ge=0.0, le=1.0)
     salt: str = Field(default="prokopton-specialist-v1", min_length=1)

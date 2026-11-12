@@ -140,3 +140,12 @@ def test_logs_the_specialist_outcome(
     assert lines[0]["event"] == "started"
     line: dict[str, Any] = lines[-1]
     assert (line["specialist_outcome"], line["identity"]) == ("species", 1.0)
+
+
+def test_the_docs_show_a_real_example(tmp_path: Path) -> None:
+    with client(tmp_path) as api:
+        schema = api.get("/openapi.json").json()
+
+    request = schema["components"]["schemas"]["IdentifyRequest"]
+    assert request["examples"] == [{"sequence": serving.EXAMPLE}]
+    assert serving.EXAMPLE.startswith(">HQ945416.1")
