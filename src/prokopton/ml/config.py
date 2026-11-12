@@ -396,6 +396,14 @@ class MlflowConfig(ConfigModel):
     artifact_dir: Path = Path("data/mlflow/artifacts")
 
 
+class ExcludedRecord(ConfigModel):
+    """A reference record left out by hand, with the reason."""
+
+    accession: str = Field(min_length=1)
+    """The GenBank accession with its version, such as "KP896564.1"."""
+    reason: str = Field(min_length=1)
+
+
 class ComplexConfig(ConfigModel):
     """A group of species that one marker cannot tell apart.
 
@@ -512,9 +520,12 @@ class SpecialistConfig(ConfigModel):
     curate: bool = True
     """Leave out named references that look mislabelled (see
     ``Specialist.contradicted``)."""
-    curation_other_similarity: float = Field(default=0.9, gt=0.0, le=1.0)
+    excluded: tuple[ExcludedRecord, ...] = ()
+    """Records left out by hand: errors the automatic check cannot catch
+    safely, such as a sequence filed under a species of the same genus."""
+    curation_other_similarity: float = Field(default=0.95, gt=0.0, le=1.0)
     curation_own_similarity: float = Field(default=0.6, ge=0.0, le=1.0)
-    """k-mer cosine similarities (k = 8): about 0.9 is within 1-2% sequence
+    """k-mer cosine similarities (k = 8): 0.95 is within about 1% sequence
     divergence, and 0.6 is about 5% or more."""
     curation_min_support: int = Field(default=5, ge=1)
     placeholders_need_genus: bool = True

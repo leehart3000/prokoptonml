@@ -375,20 +375,21 @@ class Specialist:
         """Find named target references that look mislabelled.
 
         A reference is contradicted when it is nearly identical to a record
-        of another named species (k-mer similarity at least
+        of a named species **in another genus** (k-mer similarity at least
         ``curation_other_similarity``), but unlike most records of its own
         species (median similarity to them at most
         ``curation_own_similarity``), and its own species has more than
-        ``curation_min_support`` other references. Members of one configured
-        complex are not judged against each other.
+        ``curation_min_support`` other references.
 
-        Comparing with the species' records as a whole (the median) means a
-        group of mislabelled records cannot vouch for each other, and sister
-        species that genuinely share sequences are kept, since they also
-        resemble their own species.
+        Only other genera are judged: near-identity across genera is almost
+        always a labelling error or contamination, while within a genus it
+        is often real (sister or cryptic species that share sequences), and
+        k-mer similarity cannot tell the two apart reliably. Errors within a
+        genus are listed by hand instead (``excluded``).
         """
         rules = self.rules
         species = np.array([r.species or "" for r in self.references], dtype=object)
+        genera = np.array([r.genus or "" for r in self.references], dtype=object)
         named = np.array(
             [
                 r.role == "target" and r.species_named and bool(r.species)
@@ -413,16 +414,12 @@ class Specialist:
                 own_similarity = float(np.median(similarity[row, same]))
                 if own_similarity > rules.curation_own_similarity:
                     continue
-                other = named & ~same
-                other[number] = False
+                other = named & (genera != genera[number])
                 masked = np.where(other, similarity[row], -1.0)
                 best = int(np.argmax(masked))
                 if masked[best] < rules.curation_other_similarity:
                     continue
                 looks_like = str(species[best])
-                shared = _complex_of(str(own), rules)
-                if shared is not None and looks_like in shared.members:
-                    continue
                 found.append(
                     Contradiction(
                         record_id=self.references[number].record_id,

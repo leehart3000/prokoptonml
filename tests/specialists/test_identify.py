@@ -400,45 +400,47 @@ CURATED = RULES.model_copy(update={"curation_min_support": 5})
 
 
 def curation_world() -> list[Reference]:
-    aegypti, albopictus = random_sequence(), random_sequence()
+    aegypti, pipiens = random_sequence(), random_sequence()
     references = [
-        ref(f"a{i}", mutate(aegypti, 0.005), "Aedes aegypti", "Aedes") for i in range(6)
+        ref(f"a{i}", mutate(aegypti, 0.002), "Aedes aegypti", "Aedes") for i in range(6)
     ]
     references += [
-        ref(f"b{i}", mutate(albopictus, 0.005), "Aedes albopictus", "Aedes")
-        for i in range(6)
+        ref(f"b{i}", mutate(pipiens, 0.002), "Culex pipiens", "Culex") for i in range(6)
     ]
-    # Labelled Ae. albopictus, but an Ae. aegypti sequence
-    references.append(ref("x", mutate(aegypti, 0.005), "Aedes albopictus", "Aedes"))
+    # Labelled Cx. pipiens, but an Ae. aegypti sequence
+    references.append(ref("x", mutate(aegypti, 0.002), "Culex pipiens", "Culex"))
     return references
 
 
-def test_finds_references_that_look_like_another_species() -> None:
+def test_finds_references_that_look_like_another_genus() -> None:
     [found] = Specialist(curation_world(), CURATED).contradicted()
 
     assert (found.record_id, found.species, found.looks_like) == (
         "x",
-        "Aedes albopictus",
+        "Culex pipiens",
         "Aedes aegypti",
     )
-    assert 0.9 < found.similarity <= 1.0
+    assert 0.95 < found.similarity <= 1.0
     assert found.own_similarity < 0.6
 
 
-def test_members_of_one_complex_are_not_contradicted() -> None:
-    complex_ = ComplexConfig(
-        name="Test complex",
-        members=("Aedes aegypti", "Aedes albopictus"),
-        resolve="Use a nuclear assay.",
-        reference="Someone (2020)",
+def test_errors_within_a_genus_are_left_to_the_hand_list() -> None:
+    # Labelled Ae. albopictus, but an Ae. aegypti sequence: the same genus
+    references = [r for r in curation_world() if r.record_id != "x"]
+    albopictus = random_sequence()
+    references += [
+        ref(f"c{i}", mutate(albopictus, 0.002), "Aedes albopictus", "Aedes")
+        for i in range(6)
+    ]
+    references.append(
+        ref("y", mutate(references[0].sequence, 0.002), "Aedes albopictus", "Aedes")
     )
-    rules = CURATED.model_copy(update={"complexes": (complex_,)})
 
-    assert Specialist(curation_world(), rules).contradicted() == []
+    assert Specialist(references, CURATED).contradicted() == []
 
 
 def test_species_with_few_references_and_unnamed_neighbours_are_not_judged() -> None:
-    # Ae. albopictus has 7 references, so it needs more than 7 to be judged
+    # Cx. pipiens has 7 references, so it needs more than 7 to be judged
     few = CURATED.model_copy(update={"curation_min_support": 7})
     assert Specialist(curation_world(), few).contradicted() == []
 
