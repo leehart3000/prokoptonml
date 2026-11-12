@@ -318,3 +318,49 @@ def test_reference_leaves_out_records_listed_by_hand(tmp_path: Path) -> None:
 
     kept = pq.read_table(reference_path(config, "culicidae")).column("record_id")
     assert "r0" not in kept.to_pylist()
+
+
+def test_reference_leaves_out_records_that_contradict_refseq(tmp_path: Path) -> None:
+    aegypti, albopictus = ("".join(rng.choice(list("ACGT"), 300)) for _ in range(2))
+    rows = [
+        {
+            "record_id": f"r{n}",
+            "split": "train",
+            "order": "Diptera",
+            "family": "Culicidae",
+            "genus": "Aedes",
+            "species": species,
+            "species_named": True,
+            "ambiguous_fraction": 0.0,
+            "sequence": sequence,
+        }
+        for n, (species, sequence) in enumerate(
+            [
+                ("Aedes aegypti", aegypti),
+                ("Aedes albopictus", albopictus),
+                # Labelled Ae. albopictus, but the Ae. aegypti sequence
+                ("Aedes albopictus", aegypti[:200]),
+            ]
+        )
+    ]
+    path = tmp_path / "splits" / "midori2_gb999" / "gene=CO1" / "records.parquet"
+    path.parent.mkdir(parents=True)
+    pq.write_table(pa.Table.from_pylist(rows), path)
+    anchors = tmp_path / "anchors.fasta"
+    data = config_dict(tmp_path)
+    data["specialists"]["culicidae"].update(curate=True, anchors=str(anchors))
+    config = AppConfig.model_validate(data)
+
+    with pytest.raises(ReferenceStageError, match="fetch the RefSeq anchors"):
+        build_reference(config, "culicidae")
+
+    anchors.write_text(
+        f">NC_A.1 Aedes aegypti\n{aegypti}\n>NC_B.1 Aedes albopictus\n{albopictus}\n"
+    )
+    report = build_reference(config, "culicidae")
+
+    assert report.contradicted_skipped == 1
+    listed = json.loads(
+        (reference_path(config, "culicidae").parent / CONTRADICTED_NAME).read_text()
+    )
+    assert (listed[0]["record_id"], listed[0]["basis"]) == ("r2", "RefSeq NC_A.1")

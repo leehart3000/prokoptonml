@@ -71,8 +71,13 @@ and removed sister species. The second (unlike the species as a whole by
 median k-mer similarity) removed 690 records, mostly real sister and cryptic
 species, probably because k-mer similarity also falls when records cover
 different stretches of COI. The rule kept judges only near-identity to
-**another genus**, which is almost always an error; errors within a genus
-are listed by hand in the config, with reasons.
+**another genus**, which is almost always an error. Within a genus,
+records are checked against an authoritative source instead: the COI genes
+of NCBI's curated RefSeq mitogenomes (one or more for about 170 mosquito
+species). A record at least 99% identical (by alignment) to another
+species' RefSeq COI, but under 95% to every RefSeq COI of its own species,
+is left out, unless the two species are in a configured complex. Remaining
+errors found later are listed by hand in the config, with reasons.
 
 Possible next steps:
 comparing the best mosquito match with the best other-fly match, rather

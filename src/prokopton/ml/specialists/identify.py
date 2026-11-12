@@ -127,7 +127,10 @@ class Contradiction:
     similarity: float
     """k-mer cosine similarity to the closest record of the other species."""
     own_similarity: float
-    """Median k-mer cosine similarity to the records of its own species."""
+    """Median k-mer cosine similarity to the records of its own species, or
+    (for RefSeq) identity to its own species' RefSeq COI."""
+    basis: str = "k-mer similarity to another genus"
+    """Why it was left out."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -430,6 +433,75 @@ class Specialist:
                     )
                 )
         return found
+
+    def anchor_contradictions(
+        self, anchors: Sequence[tuple[str, str, str]]
+    ) -> list[Contradiction]:
+        """Find named target references that contradict RefSeq.
+
+        ``anchors`` are (accession, species, COI sequence) from curated
+        RefSeq mitogenomes. A reference of a species with an anchor is left
+        out when it is at least ``anchor_other_identity`` identical (by
+        alignment) to another species' anchor, but under
+        ``anchor_own_identity`` to every anchor of its own species, unless
+        the two species are in one configured complex. Only references that
+        look more like another species' anchor than their own by k-mers are
+        aligned, which keeps this fast.
+        """
+        rules = self.rules
+        anchor_species = np.array(
+            [canonical_species(s, rules) or "" for _, s, _ in anchors], dtype=object
+        )
+        vectors = normalize(self.vectorizer.transform([seq for _, _, seq in anchors]))
+        columns = self.index.T.tocsr()
+        checked = [
+            n
+            for n, r in enumerate(self.references)
+            if r.role == "target"
+            and r.species_named
+            and r.species in set(anchor_species)
+        ]
+        found: list[Contradiction] = []
+        for start in range(0, len(checked), QUERY_BATCH):
+            numbers = checked[start : start + QUERY_BATCH]
+            similarity = np.asarray((columns[numbers] @ vectors.T).todense())
+            for row, number in enumerate(numbers):
+                reference = self.references[number]
+                own = anchor_species == reference.species
+                best = int(np.argmax(np.where(~own, similarity[row], -1.0)))
+                if similarity[row, best] <= similarity[row, own].max():
+                    continue
+                other = self._anchor_identity(reference.sequence, anchors[best][2])
+                if other < rules.anchor_other_identity:
+                    continue
+                own_identity = max(
+                    self._anchor_identity(reference.sequence, anchors[n][2])
+                    for n in np.flatnonzero(own).tolist()
+                )
+                if own_identity >= rules.anchor_own_identity:
+                    continue
+                shared = _complex_of(str(reference.species), rules)
+                if shared is not None and anchor_species[best] in shared.members:
+                    continue
+                found.append(
+                    Contradiction(
+                        record_id=reference.record_id,
+                        species=str(reference.species),
+                        looks_like=str(anchor_species[best]),
+                        similarity=other,
+                        own_similarity=own_identity,
+                        basis=f"RefSeq {anchors[best][0]}",
+                    )
+                )
+        return found
+
+    def _anchor_identity(self, sequence: str, anchor: str) -> float:
+        found = align(sequence, anchor)
+        usable = (
+            found.coverage >= self.rules.min_coverage
+            and found.aligned >= self.rules.min_aligned
+        )
+        return found.identity if usable else 0.0
 
     def find_neighbours(self, candidates: int = 5) -> dict[str, Neighbour]:
         """Find each named target species' nearest other named species.

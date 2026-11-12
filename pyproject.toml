@@ -91,6 +91,7 @@ dnabarcode-marker-card = "prokopton-ml card apps/dnabarcode/dnabarcode.toml --mo
 dnabarcode-culicidae-reference = "prokopton-ml reference apps/dnabarcode/dnabarcode.toml --specialist culicidae"
 dnabarcode-culicidae-evaluate = "prokopton-ml evaluate apps/dnabarcode/dnabarcode.toml --specialist culicidae"
 dnabarcode-culicidae-card = "prokopton-ml card apps/dnabarcode/dnabarcode.toml --specialist culicidae"
+dnabarcode-culicidae-anchors = "prokopton-ml anchors apps/dnabarcode/dnabarcode.toml --specialist culicidae"
 dnabarcode-bundle = "prokopton-ml bundle apps/dnabarcode/dnabarcode.toml"
 dnabarcode-serve = { cmd = "uvicorn --factory prokopton.ml.serving.app:create_app_from_env --port 8080", env = { PROKOPTON_BUNDLE = "data/models/dnabarcode/bundle" } }
 

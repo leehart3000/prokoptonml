@@ -520,6 +520,14 @@ class SpecialistConfig(ConfigModel):
     curate: bool = True
     """Leave out named references that look mislabelled (see
     ``Specialist.contradicted``)."""
+    anchors: Path | None = None
+    """COI genes of RefSeq mitogenomes (written by ``prokopton-ml anchors``),
+    to leave out references that contradict them (see
+    ``Specialist.anchor_contradictions``)."""
+    anchor_taxon: str = ""
+    """The taxon whose RefSeq mitogenomes are fetched (such as "Culicidae")."""
+    anchor_other_identity: float = Field(default=0.99, gt=0.0, le=1.0)
+    anchor_own_identity: float = Field(default=0.95, gt=0.0, le=1.0)
     excluded: tuple[ExcludedRecord, ...] = ()
     """Records left out by hand: errors the automatic check cannot catch
     safely, such as a sequence filed under a species of the same genus."""
