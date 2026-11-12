@@ -24,6 +24,7 @@ __all__ = [
     "ComplexConfig",
     "DataConfig",
     "DataPathsConfig",
+    "InferenceConfig",
     "LeakageConfig",
     "Midori2SourceConfig",
     "MlflowConfig",
@@ -501,6 +502,9 @@ class SpecialistConfig(ConfigModel):
     species_identity: float = Field(default=0.98, gt=0.0, le=1.0)
     group_margin: float = Field(default=0.01, ge=0.0, le=0.1)
     complexes: tuple[ComplexConfig, ...] = ()
+    router_label: str = ""
+    """The router's label for this specialist's group (such as "Diptera");
+    empty if the specialist is not consulted at serving."""
     placeholders_need_genus: bool = True
     genus_groups: dict[str, str] = Field(default_factory=dict)
     genus_groups_note: str = ""
@@ -522,6 +526,31 @@ class UnknownClassifierError(ValueError):
     """Raised when an app has no classifier of the name asked for."""
 
 
+class InferenceConfig(ConfigModel):
+    """How a submitted sequence is checked and identified.
+
+    A submission is one DNA sequence (plain, or one FASTA record) of at most
+    ``max_length`` bases, with at most ``max_ambiguous_fraction`` ambiguous
+    bases. The marker classifier checks it is ``barcode_gene`` and finds its
+    strand. A sequence longer than ``long_input`` bases (such as a whole
+    mitochondrial genome) is searched for the barcode gene first: windows of
+    ``window`` bases, every ``step`` bases on both strands, are scored, and
+    the longest run of windows with at least ``region_probability`` for the
+    gene is used. Each specialist is consulted when the router gives its
+    ``router_label`` at least ``route_threshold`` (so a likely group is
+    checked even when the router is unsure).
+    """
+
+    barcode_gene: str = Field(default="CO1", min_length=1)
+    max_length: int = Field(default=20_000, ge=1)
+    max_ambiguous_fraction: float = Field(default=0.10, ge=0.0, le=1.0)
+    long_input: int = Field(default=1_000, ge=1)
+    window: int = Field(default=600, ge=1)
+    step: int = Field(default=60, ge=1)
+    region_probability: float = Field(default=0.9, gt=0.0, le=1.0)
+    route_threshold: float = Field(default=0.10, gt=0.0, le=1.0)
+
+
 class AppConfig(ConfigModel):
     """Top-level configuration for a ProkoptonML application."""
 
@@ -534,6 +563,7 @@ class AppConfig(ConfigModel):
     router: ClassifierConfig = Field(default_factory=ClassifierConfig)
     marker: ClassifierConfig | None = None
     specialists: dict[str, SpecialistConfig] = Field(default_factory=dict)
+    inference: InferenceConfig = Field(default_factory=InferenceConfig)
     mlflow: MlflowConfig = Field(default_factory=MlflowConfig)
 
     def classifier(self, name: str) -> ClassifierConfig:

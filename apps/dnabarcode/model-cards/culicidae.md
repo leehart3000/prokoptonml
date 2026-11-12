@@ -7,7 +7,7 @@
 - **Task:** Identify a mosquito (Culicidae) COI barcode to species, complex, group, genus or family, or say that it is not a mosquito
 - **Input:** A COI sequence on the right strand that the router has placed in Diptera (at least 100 bases)
 - **Method:** the query is compared with every reference sequence by k-mer similarity (k = 8); the 30 closest (at most 3 per species) are aligned, and percent identity decides the outcome. There is no trained model: the reference set and the thresholds are the model.
-- **Thresholds (tuned):** species 99.0%, group margin 1.0%, membership 90.0%; genus 95.0%.
+- **Thresholds (tuned):** species 99.5%, group margin 0.5%, membership 90.0%; genus 95.0%.
 - **Data:** MIDORI2 GB273, gene CO1.
 
 ## Intended use
@@ -53,7 +53,7 @@ Species complexes, reported as the complex with how to resolve it:
 
 ## Tuning
 
-Up to 3 records per species were drawn from the validation sets. Each was aligned once, then 45 threshold combinations were scored. In order, the rule prefers: letting in at most 0.5% of other flies; wrongly naming known species at most 3.5% of the time (averaged over species); the most known species named exactly minus held-out species wrongly named; and then the most held-out species right. Both limits were met.
+Up to 3 records per species were drawn from the validation sets. Each was aligned once, then 45 threshold combinations were scored. In order, the rule prefers: letting in at most 0.5% of other flies; wrongly naming known species at most 3.0% of the time (averaged over species); the most known species named exactly minus held-out species wrongly named; and then the most held-out species right. Both limits were met.
 
 ![Species threshold trade-off](culicidae-thresholds.svg)
 
@@ -63,17 +63,17 @@ Measured once, with the tuned thresholds. Rates are shares of records (in bracke
 
 | Set | Records | Species | Right | Wrongly named | Exact |
 |---|---|---|---|---|---|
-| Known species | 998 | 508 | 97.1% (96.0%) | 2.3% (3.1%) | 58.5% (56.6%) |
+| Known species | 998 | 508 | 97.2% (96.3%) | 1.9% (2.6%) | 51.5% (50.8%) |
 | Held-out species, no near-copy in training | 108 | 45 | 94.4% (93.3%) | 0.0% (0.0%) | 0.0% (0.0%) |
-| Held-out species with a near-copy in training | 58 | 29 | 41.4% (44.8%) | 58.6% (55.2%) | 3.4% (4.6%) |
-| Held-out species (all) | 166 | 56 | 75.9% (79.5%) | 20.5% (15.2%) | 1.2% (2.4%) |
+| Held-out species with a near-copy in training | 58 | 29 | 62.1% (63.2%) | 37.9% (36.8%) | 3.4% (4.6%) |
+| Held-out species (all) | 166 | 56 | 83.1% (82.6%) | 13.3% (12.1%) | 1.2% (2.4%) |
 | Other flies (should be kept out) | 1,500 | 1,300 | 99.9% (99.9%) | 0.1% (0.1%) | 0.0% (0.0%) |
 
-Answers for known species: species 592, species_group 229, genus 72, closest_species 39, complex 38, family 19, genus_label_only 6, not_member 3.
+Answers for known species: species 521, genus 202, species_group 166, closest_species 42, complex 34, family 20, genus_label_only 10, not_member 3.
 
 ## Limitations
 
-- **Our reference data names 953 of about 3,729 described mosquito species.** A sequence from a species missing from it can be given the name of a close relative: on the test set, this happened to about 55% of held-out records that have a near-copy (at least 99% identical) of another species in training, and to none of the others.
+- **Our reference data names 953 of about 3,729 described mosquito species.** A sequence from a species missing from it can be given the name of a close relative. On the test set, this happened mostly to held-out records that have a near-copy (at least 99% identical) of another species in training; see the test results.
 - **COI does not separate many mosquito species.** About a third of named species in the reference set have another species at least 98% identical; these are reported as groups, complexes or closest matches.
 - **Public records include mislabelled and contaminated sequences**, such as a *Haemagogus* record 99.8% identical to *Mansonia titillans*; these cause some wrong names.
 - **Poorly sampled genera can fall below the membership threshold** (88–90% identity for some *Toxorhynchites*, *Tripteroides*, *Heizmannia* and *Zeugnomyia* records), and are then reported as not mosquitoes.
@@ -82,7 +82,7 @@ Answers for known species: species 592, species_group 229, genus 72, closest_spe
 
 ## Development notes
 
-The specialist was developed in five rounds, each run on the same validation
+The specialist was developed in six rounds, each run on the same validation
 data. Trials 1 and 2 are recorded in `analysis/README.md`
 (`05_specialist_trial.py`); the evaluations used `prokopton-ml evaluate
 --specialist culicidae`.
@@ -135,8 +135,17 @@ a near-copy rose to 94.4% right, but known species were still wrongly named
 3.2% of the time (by species): the remaining errors are sister species and
 mislabelled records that names cannot fix.
 
-The known-species limit was therefore raised from 1% (never reached) to
-3.5%, and the thresholds chosen under it are used. Possible next steps:
+### Evaluation 4: choosing caution
+
+The known-species limit was raised from 1%, which no threshold reached.
+At 3.5% the rule chose a species threshold of 99.0%; at 3% it chooses
+99.5%. We chose 3%: a confident wrong name costs a user more than a less
+specific answer. At 99.5%, about 6 points fewer known species are named
+exactly (on validation, averaged over species: 51.0% against 56.9%), but
+held-out species are wrongly named less often (17.8% against 23.2%), and
+known species too (2.5% against 3.2%).
+
+Possible next steps:
 comparing the best mosquito match with the best other-fly match, rather
 than a fixed membership threshold; flagging reference records that are
 near-identical to another genus; and adding BOLD data and BINs.
@@ -145,8 +154,8 @@ near-identical to another genus; and adding BOLD data and BINs.
 
 |  |  |
 |---|---|
-| Evaluation run | `ca1370eed9634ad3a71797d784fc4612` |
+| Evaluation run | `6dde0d157c90427da46cf362d559f99f` |
 | Reference set SHA-256 | `1e0b7ee2b9829474…` |
 | Split data SHA-256 | `4ff0d2754dbecd18…` |
-| Evaluated | 2026-11-12 10:44 UTC |
+| Evaluated | 2026-11-12 11:20 UTC |
 | prokopton-ml | 0.1.0 |

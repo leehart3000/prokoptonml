@@ -1,7 +1,9 @@
 """Command-line interface for ProkoptonML: ``prokopton-ml <command> <config>``."""
 
 import argparse
+import json
 import logging
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -11,6 +13,7 @@ from prokopton.ml.config import AppConfig, UnknownClassifierError
 from prokopton.ml.data.checksums import ChecksumManifestError, ChecksumMismatchError
 from prokopton.ml.data.download import DownloadError
 from prokopton.ml.data.taxonomy import ReferenceDataError
+from prokopton.ml.inference.load import LoadError, load_identifier
 from prokopton.ml.pipeline.calibrate import CalibrationStageError, calibrate
 from prokopton.ml.pipeline.evaluate import EvaluationStageError, evaluate
 from prokopton.ml.pipeline.ingest import IngestError, ingest
@@ -56,6 +59,10 @@ _COMMANDS = {
         "specialist's (with --specialist)."
     ),
     "reference": "Build a specialist's reference set from the training split.",
+    "identify": (
+        "Identify one sequence with the registered models and print the "
+        "result, with its decision trace, as JSON."
+    ),
 }
 _CLASSIFIER_COMMANDS = {"sample", "train", "calibrate", "evaluate", "card"}
 
@@ -76,6 +83,13 @@ def _build_parser() -> argparse.ArgumentParser:
                 default="router",
                 help="Which classifier to work on (default: router).",
             )
+        if name == "identify":
+            command.add_argument(
+                "--input",
+                type=Path,
+                required=True,
+                help="A file with one sequence (plain or FASTA); '-' for stdin.",
+            )
         if name in ("reference", "evaluate", "card"):
             command.add_argument(
                 "--specialist",
@@ -86,10 +100,25 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _identify(config: AppConfig, source: Path) -> str:
+    text = sys.stdin.read() if str(source) == "-" else source.read_text("utf-8")
+    loaded = load_identifier(config)
+    result = loaded.identifier.identify(text)
+    output = {"versions": loaded.versions, **result.model_dump(mode="json")}
+    print(json.dumps(output, indent=2))
+    return f"{result.status}: {result.answer.text if result.answer else result.reason}"
+
+
 def _run(
-    command: str, config: AppConfig, model: str = "router", specialist: str = ""
+    command: str,
+    config: AppConfig,
+    model: str = "router",
+    specialist: str = "",
+    source: Path | None = None,
 ) -> str:
     """Run one pipeline stage and return a one-line summary."""
+    if command == "identify" and source is not None:
+        return _identify(config, source)
     if command == "reference":
         reference = build_reference(config, specialist)
         return (
@@ -169,6 +198,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             config,
             getattr(args, "model", "router"),
             getattr(args, "specialist", ""),
+            getattr(args, "input", None),
         )
     except (
         ConfigError,
@@ -189,6 +219,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         ReferenceStageError,
         SpecialistEvaluationError,
         SpecialistCardError,
+        LoadError,
+        OSError,
     ) as error:
         logger.error("%s", error)
         return 1
