@@ -508,6 +508,7 @@ class SpecialistConfig(ConfigModel):
     evaluation: SpecialistEvaluationConfig = Field(
         default_factory=SpecialistEvaluationConfig
     )
+    card: ClassifierCardConfig = Field(default_factory=ClassifierCardConfig)
 
     @model_validator(mode="after")
     def _check_identities(self) -> "SpecialistConfig":
