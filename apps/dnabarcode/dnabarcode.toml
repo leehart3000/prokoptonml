@@ -288,6 +288,8 @@ limitations = [
 # Specialists identify species within one group, by comparing sequences with
 # a reference set (nearest neighbours, then alignment for percent identity)
 [specialists.culicidae]
+# Consulted when the router gives Diptera at least the route threshold
+router_label = "Diptera"
 gene = "CO1"
 target_rank = "family"
 target = "Culicidae"
@@ -448,3 +450,17 @@ reference = "Koekemoer et al. (2002), American Journal of Tropical Medicine and 
 # folder. Both are inside the git-ignored data/ folder.
 tracking_uri = "sqlite:///data/mlflow/mlflow.db"
 artifact_dir = "data/mlflow/artifacts"
+
+# How submitted sequences are checked and identified (see InferenceConfig)
+[inference]
+barcode_gene = "CO1"
+# Up to about a whole mitochondrial genome
+max_length = 20000
+max_ambiguous_fraction = 0.10
+# Longer inputs are searched for the COI region first
+long_input = 1000
+window = 600
+step = 60
+region_probability = 0.9
+# Rule B: consult a specialist if the router gives its group at least 10%
+route_threshold = 0.10
