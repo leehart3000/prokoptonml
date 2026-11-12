@@ -1,4 +1,4 @@
-The specialist was developed in five rounds, each run on the same validation
+The specialist was developed in six rounds, each run on the same validation
 data. Trials 1 and 2 are recorded in `analysis/README.md`
 (`05_specialist_trial.py`); the evaluations used `prokopton-ml evaluate
 --specialist culicidae`.
@@ -51,8 +51,17 @@ a near-copy rose to 94.4% right, but known species were still wrongly named
 3.2% of the time (by species): the remaining errors are sister species and
 mislabelled records that names cannot fix.
 
-The known-species limit was therefore raised from 1% (never reached) to
-3.5%, and the thresholds chosen under it are used. Possible next steps:
+### Evaluation 4: choosing caution
+
+The known-species limit was raised from 1%, which no threshold reached.
+At 3.5% the rule chose a species threshold of 99.0%; at 3% it chooses
+99.5%. We chose 3%: a confident wrong name costs a user more than a less
+specific answer. At 99.5%, about 6 points fewer known species are named
+exactly (on validation, averaged over species: 51.0% against 56.9%), but
+held-out species are wrongly named less often (17.8% against 23.2%), and
+known species too (2.5% against 3.2%).
+
+Possible next steps:
 comparing the best mosquito match with the best other-fly match, rather
 than a fixed membership threshold; flagging reference records that are
 near-identical to another genus; and adding BOLD data and BINs.
