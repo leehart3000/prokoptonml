@@ -1,0 +1,9 @@
+{
+  "name": "dnabarcode-site",
+  "private": true,
+  "type": "module",
+  "description": "dnabarcode.org website and API gateway (Cloudflare Worker)",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
