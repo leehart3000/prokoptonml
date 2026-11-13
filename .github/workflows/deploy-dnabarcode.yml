@@ -1,0 +1,152 @@
+name: Deploy dnabarcode
+
+# Builds the dnabarcode API image with the serving bundle named in
+# infra/deploy/dnabarcode.env, tests it, pushes it and deploys it to Cloud
+# Run. Run by hand from main (Actions > Deploy dnabarcode > Run workflow);
+# Google only trusts runs from main of this repository.
+on:
+  workflow_dispatch:
+    inputs:
+      check_public:
+        description: "Check the live service after deploying (leave off for the very first deploy, before the service is made public)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer run waits rather than cancelling a deploy
+concurrency:
+  group: deploy-dnabarcode
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build, test and deploy
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # To sign in to Google with Workload Identity Federation
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the deploy settings
+        run: grep -E '^[A-Z_]+=' infra/deploy/dnabarcode.env >> "$GITHUB_ENV"
+
+      - name: Sign in to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Download the serving bundle
+        run: gcloud storage rsync "$BUNDLE" bundle --recursive
+
+      - name: Check the bundle against its manifest
+        shell: python3 {0}
+        run: |
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path("bundle")
+          manifest = json.loads((root / "manifest.json").read_text("utf-8"))
+          listed = set(manifest["files"])
+          present = {
+              str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()
+          } - {"manifest.json"}
+          wrong = sorted(
+              name
+              for name, digest in manifest["files"].items()
+              if name not in present
+              or hashlib.sha256((root / name).read_bytes()).hexdigest() != digest
+          )
+          extra = sorted(present - listed)
+          if wrong or extra:
+              sys.exit(f"Bundle does not match its manifest: wrong {wrong}, extra {extra}")
+          print(f"Bundle OK: {len(listed)} files, {manifest['versions']}")
+
+      - name: Build the image
+        run: >-
+          docker build
+          --label "org.opencontainers.image.revision=$GITHUB_SHA"
+          --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          --label "org.prokopton.bundle=$BUNDLE"
+          --tag "$IMAGE:$GITHUB_SHA" .
+
+      - name: Test the image
+        run: |
+          docker run --detach --name api --publish 8080:8080 \
+            --env PROKOPTON_API_KEY=ci-test-key "$IMAGE:$GITHUB_SHA"
+          for attempt in $(seq 1 60); do
+            curl --silent --fail http://localhost:8080/health > /dev/null && break
+            sleep 2
+          done
+          curl --silent --show-error --fail http://localhost:8080/version
+          echo
+          # Without the key, /identify must refuse
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header 'Content-Type: application/json' \
+            --data '{"sequence": "ACGT"}' http://localhost:8080/identify)"
+          test "$status" = 401 || { echo "Expected 401 without a key, got $status"; exit 1; }
+          # Each known sequence must give its expected answer
+          for request in apps/dnabarcode/checks/*.json; do
+            expected="$(cat "${request%.json}.expected")"
+            answer="$(curl --silent --show-error --fail \
+              --header 'Content-Type: application/json' \
+              --header 'X-Prokopton-Key: ci-test-key' \
+              --data @"$request" http://localhost:8080/identify | jq -r '.answer.text')"
+            echo "$(basename "$request"): $answer"
+            case "$answer" in
+              "$expected"*) ;;
+              *) echo "Expected an answer starting '$expected'"; exit 1 ;;
+            esac
+          done
+
+      - name: Show the service log if the test failed
+        if: failure()
+        run: docker logs api || true
+
+      - name: Push the image
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker push "$IMAGE:$GITHUB_SHA"
+          echo "IMAGE_DIGEST=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$GITHUB_SHA")" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run
+        run: >-
+          gcloud run deploy "$SERVICE"
+          --image "$IMAGE_DIGEST"
+          --region "$REGION"
+          --service-account "$RUNTIME_SA"
+          --set-secrets "PROKOPTON_API_KEY=${SECRET}:latest"
+          --cpu "$CPU"
+          --memory "$MEMORY"
+          --concurrency "$CONCURRENCY"
+          --min-instances 0
+          --max-instances "$MAX_INSTANCES"
+          --timeout "$TIMEOUT"
+          --ingress all
+          --labels "app=dnabarcode,commit=${GITHUB_SHA::12}"
+          --quiet
+
+      - name: Check the live service
+        if: inputs.check_public
+        run: |
+          url="$(gcloud run services describe "$SERVICE" --region "$REGION" --format 'value(status.url)')"
+          curl --silent --show-error --fail --retry 5 --retry-all-errors "$url/health"
+          echo
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header 'Content-Type: application/json' \
+            --data '{"sequence": "ACGT"}' "$url/identify")"
+          test "$status" = 401 || { echo "Expected 401 without a key, got $status"; exit 1; }
+          echo "Live at $url: healthy, and /identify refuses requests without the key"
