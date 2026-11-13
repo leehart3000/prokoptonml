@@ -18,7 +18,7 @@ concurrency:
 jobs:
   check:
     name: Format, lint, type-check and test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Pinned; move to a newer image on purpose
     timeout-minutes: 15
     steps:
       - name: Check out repository
