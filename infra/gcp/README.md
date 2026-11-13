@@ -51,6 +51,15 @@ gcloud storage rsync data/models/dnabarcode/bundle \
     gs://prokoptonml-bundles/dnabarcode/2026-11-12 --recursive
 ```
 
+Old bundles are not deleted automatically: a lifecycle rule cannot tell
+which bundle `infra/deploy/<app>.env` still names, and each one costs well
+under 1p a month. Remove unused ones by hand, never the one in use:
+
+```bash
+gcloud storage ls gs://prokoptonml-bundles/dnabarcode/
+gcloud storage rm --recursive gs://prokoptonml-bundles/dnabarcode/<date>/
+```
+
 ## 4. Service accounts and Workload Identity Federation
 
 **One Cloud Run service, and one runtime service account, per app.** CI
@@ -120,3 +129,30 @@ settings in `infra/deploy/dnabarcode.env`. It downloads and checks the
 bundle, builds the image, tests it (health, key required, and the known
 answers in `apps/dnabarcode/checks/`), pushes it, deploys it by digest and
 checks the live service.
+
+The first deploy is run with `check_public` off: the service starts
+private, because the deployer cannot change who may call it. Then, once:
+
+```bash
+DEPLOYER="github-deployer@prokoptonml.iam.gserviceaccount.com"
+# Anyone may reach the service; /identify still needs the API key
+gcloud run services add-iam-policy-binding dnabarcode-api --region europe-west2 \
+    --member=allUsers --role=roles/run.invoker
+# Narrow the deployer from the whole project to this one service
+gcloud run services add-iam-policy-binding dnabarcode-api --region europe-west2 \
+    --member="serviceAccount:$DEPLOYER" --role=roles/run.developer
+gcloud projects remove-iam-policy-binding prokoptonml \
+    --member="serviceAccount:$DEPLOYER" --role=roles/run.developer --condition=None
+```
+
+A new app's first deploy needs `run.developer` on the project for a moment
+(to create its service), then the same narrowing.
+
+A real call, with the key passed from Secret Manager without being shown:
+
+```bash
+URL="$(gcloud run services describe dnabarcode-api --region europe-west2 --format='value(status.url)')"
+curl --header 'Content-Type: application/json' \
+    --header @<(printf 'X-Prokopton-Key: %s\n' "$(gcloud secrets versions access latest --secret=dnabarcode-api-key)") \
+    --data @apps/dnabarcode/checks/aedes-aegypti-HQ945416.json "$URL/identify"
+```
