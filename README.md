@@ -1,86 +1,71 @@
 # ProkoptonML
 
 [![CI](https://github.com/leehart3000/prokoptonml/actions/workflows/ci.yml/badge.svg)](https://github.com/leehart3000/prokoptonml/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/prokopton-ml?include_prereleases)](https://pypi.org/project/prokopton-ml/)
 
-**ProkoptonML** is an end-to-end MLOps platform for building, deploying and
-monitoring scientific machine learning systems for data-driven bio apps.
+**ProkoptonML** is an end-to-end MLOps platform: a Python package and
+command-line tool for turning data into evaluated, documented and deployable
+models, used by separate products that pin it from PyPI.
 
-It covers the full lifecycle:
+It covers the lifecycle:
 
-1. Data ingestion
-2. Feature engineering
-3. Training and experiment tracking
-4. Model evaluation
-5. Packaging and deployment
-6. Monitoring
+1. Data ingestion, with checksums and validation
+2. Splitting and leakage checks
+3. Feature engineering
+4. Training and experiment tracking (MLflow), with a model registry
+5. Calibration and evaluation, with thresholds chosen by the evaluation
+6. Model cards
+7. Serving bundles (models, reference data, config, pinned versions,
+   checksums) and a FastAPI service that serves them
 
-The platform is designed to be repeatable: each application is defined by a
-configuration and a small data adapter, and reuses the same pipeline.
+Each product is defined by a configuration file and runs the platform's
+stages on it; the product owns its data, decisions, website and deployment.
 
 ## Package
 
-ProkoptonML is published as the `prokopton-ml` package and imported as
-`prokopton.ml`, part of the wider `prokopton` namespace:
+Published as [`prokopton-ml`](https://pypi.org/project/prokopton-ml/) and
+imported as `prokopton.ml`, part of the `prokopton` namespace; it builds on
+the [`prokopton`](https://pypi.org/project/prokopton/) core package
+(`prokopton.core`).
+
+```bash
+pip install "prokopton-ml[serve]==0.1.0a2"
+prokopton-ml --help
+```
 
 ```python
 import prokopton.ml
 ```
 
-It builds on the [`prokopton`](https://pypi.org/project/prokopton/) core
-package (`prokopton.core`), which provides shared foundations such as
-configuration loading.
+Releases are made by tagging `v*`: the Release workflow publishes to TestPyPI
+and then, after approval, to PyPI, with Trusted Publishing.
 
-## Applications
+## Products built with ProkoptonML
 
-| Application | Domain | Status |
-|---|---|---|
-| [DNAbarcode.org](https://dnabarcode.org) | Identifying animals from COI DNA barcodes; species-level for mosquitoes | Live |
-| [pepbarcode.org](https://pepbarcode.org) | Peptide barcoding | Planned |
+| Product | Domain | Repository | Status |
+|---|---|---|---|
+| [DNAbarcode.org](https://dnabarcode.org) | Identifying animals from COI DNA barcodes; species-level for mosquitoes | [leehart3000/dnabarcode](https://github.com/leehart3000/dnabarcode) | Live |
+| [pepbarcode.org](https://pepbarcode.org) | Peptide barcoding | | Planned |
 
-## How DNAbarcode.org is built
-
-```
-MIDORI2 + NCBI RefSeq ─► pipeline (ingest → validate → split → leakage → sample
-                         → train → calibrate → evaluate → model cards)
-                       ─► serving bundle (models, curated references, config,
-                          pinned versions, checksums) ─► Cloud Storage
-                       ─► CI: check bundle → build image → test → deploy to Cloud Run
-Visitor ─► DNAbarcode.org (Cloudflare Worker: pages, firewall rate limit,
-           Turnstile) ─► API key ─► Cloud Run (FastAPI) ─► answer + decision trace
-```
-
-- **Models:** a marker classifier (is this COI, which strand?), a router
-  (which group?) and a mosquito specialist that aligns the query to curated
-  references and answers cautiously: a species, a complex, "one of", or a
-  genus. Experiments and model versions are tracked in MLflow.
-- **Evaluation:** held-out known and novel species, leakage-aware scores and
-  thresholds chosen by the evaluation; see the
-  [Culicidae model card](apps/dnabarcode/model-cards/culicidae.md).
-- **Serving:** a FastAPI app in a container on Cloud Run (scale to zero),
-  deployed by GitHub Actions with Workload Identity Federation (no stored
-  Google keys) and least-privilege service accounts; see
-  [`infra/gcp/`](infra/gcp/README.md).
-- **Website and gateway:** a Cloudflare Worker in
-  [`sites/dnabarcode/`](sites/dnabarcode/README.md), with unit and Playwright
-  browser tests.
-- **Releasing and operating:** [`docs/releasing-dnabarcode.md`](docs/releasing-dnabarcode.md).
-- **What's next:** [`ROADMAP.md`](ROADMAP.md).
+Each product has its own repository and its own cloud project, and pins an
+exact platform version.
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| `src/prokopton/ml/` | The platform: data, features, pipeline stages, training, specialists, inference, serving, reporting |
-| `apps/dnabarcode/` | DNAbarcode's config, reviewed reference files, model cards and known-answer checks |
-| `analysis/` | One-off analyses, with each question, finding and decision |
-| `infra/` | Google Cloud setup runbook and deploy settings |
-| `sites/dnabarcode/` | The website and API gateway |
-| `docs/` | Operating guides |
+| `src/prokopton/ml/` | The platform: data, features, pipeline stages, training, specialists, inference, serving, reporting, command-line tool |
+| `tests/` | Tests (100% coverage), with frozen fixtures in `tests/fixtures/` |
+| `.github/workflows/` | CI, secret scanning, lockfile updates and releases to PyPI |
 
-## Status
+## Working on it
 
-The first product, DNAbarcode.org, launched in November 2026. The platform
-is young and changing quickly; see [`ROADMAP.md`](ROADMAP.md).
+```bash
+pixi install
+pixi run check    # format, lint, type-check, test
+```
+
+What's next: [`ROADMAP.md`](ROADMAP.md).
 
 ## Licence
 
@@ -96,5 +81,5 @@ FOR A PARTICULAR PURPOSE. See the [LICENSE](https://github.com/leehart3000/proko
 
 SPDX-License-Identifier: `AGPL-3.0-only`
 
-Data and trained models may be subject to separate licences, which are
-documented alongside them.
+Data and trained models built with the platform belong to each product and
+are licensed there.

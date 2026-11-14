@@ -44,14 +44,3 @@ coverage.xml
 # --- MLflow (local tracking) ---
 mlruns/
 mlartifacts/
-
-# --- Node.js and Cloudflare ---
-node_modules/
-.wrangler/
-
-# --- Playwright ---
-test-results/
-playwright-report/
-
-# --- Serving bundle copied in for a Docker build ---
-/bundle/
