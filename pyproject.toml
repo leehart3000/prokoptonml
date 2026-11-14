@@ -1,6 +1,6 @@
 [project]
 name = "prokopton-ml"
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "An end-to-end MLOps platform for building, deploying and monitoring scientific machine learning systems"
 readme = "README.md"
 license = "AGPL-3.0-only"
