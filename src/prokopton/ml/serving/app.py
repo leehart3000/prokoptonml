@@ -47,6 +47,9 @@ MAX_SEQUENCE_CHARACTERS = 30_000
 in bases, after cleaning)."""
 
 
+DEFAULT_TITLE = "ProkoptonML identification API"
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     """How the service runs."""
@@ -54,15 +57,18 @@ class Settings:
     bundle: Path
     api_key: str = ""
     cache_size: int = 256
+    title: str = DEFAULT_TITLE
 
     @classmethod
     def from_env(cls) -> "Settings":
-        """Read ``PROKOPTON_BUNDLE`` (required), ``PROKOPTON_API_KEY`` and
-        ``PROKOPTON_CACHE_SIZE``."""
+        """Read ``PROKOPTON_BUNDLE`` (required), ``PROKOPTON_API_KEY``,
+        ``PROKOPTON_CACHE_SIZE`` and ``PROKOPTON_API_TITLE`` (the name shown in
+        the API docs, set by each product)."""
         return cls(
             bundle=Path(os.environ["PROKOPTON_BUNDLE"]),
             api_key=os.environ.get("PROKOPTON_API_KEY", ""),
             cache_size=int(os.environ.get("PROKOPTON_CACHE_SIZE", "256")),
+            title=os.environ.get("PROKOPTON_API_TITLE", DEFAULT_TITLE),
         )
 
 
@@ -170,11 +176,11 @@ def create_app(settings: Settings, loaded: Loaded | None = None) -> FastAPI:
         yield
 
     app = FastAPI(
-        title="dnabarcode API",
+        title=settings.title,
         version=__version__,
         description=(
-            "Identify a COI DNA barcode. Answers describe our reference data "
-            "and this marker, with a decision trace."
+            "Identify a DNA barcode. Answers describe the reference data and "
+            "marker behind them, with a decision trace."
         ),
         lifespan=lifespan,
     )

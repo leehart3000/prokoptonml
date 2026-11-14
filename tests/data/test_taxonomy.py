@@ -10,7 +10,7 @@ from prokopton.ml.data.taxonomy import (
     load_phylum_groups,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 HEADER = "phylum\tphylum_taxid\tco1_records\tall_records\tkingdom\tmajor_group\n"
 
 
@@ -33,9 +33,7 @@ def test_loads_groups_with_other_eukaryotes_fallback(tmp_path: Path) -> None:
 
 
 def test_real_reference_table_loads() -> None:
-    groups = load_phylum_groups(
-        REPO_ROOT / "apps/dnabarcode/reference/phylum_lineages_gb273.tsv"
-    )
+    groups = load_phylum_groups(FIXTURES / "phylum_lineages_gb273.tsv")
 
     assert len(groups) == 68
     assert groups[6656] == "Metazoa"
