@@ -129,6 +129,7 @@ def test_logs_the_specialist_outcome(
     build_bundle(config, lambda _c, _n: tracker)
     monkeypatch.setenv("PROKOPTON_BUNDLE", str(bundle_path(config)))
     monkeypatch.setenv("PROKOPTON_API_KEY", "")
+    monkeypatch.setenv("PROKOPTON_API_TITLE", "DNAbarcode.org API")
     caplog.set_level(logging.INFO, logger="prokopton.ml.serving")
 
     # The app from the environment loads the bundle at start-up
@@ -136,6 +137,7 @@ def test_logs_the_specialist_outcome(
         found = api.post("/identify", json={"sequence": AEGYPTI}).json()
 
     assert found["answer"]["name"] == "Aedes aegypti"
+    assert api.get("/openapi.json").json()["info"]["title"] == "DNAbarcode.org API"
     lines = [json.loads(r.message) for r in caplog.records if r.message.startswith("{")]
     assert lines[0]["event"] == "started"
     line: dict[str, Any] = lines[-1]

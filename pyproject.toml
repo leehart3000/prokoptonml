@@ -1,6 +1,6 @@
 [project]
 name = "prokopton-ml"
-version = "0.1.0"
+version = "0.1.0a1"
 description = "An end-to-end MLOps platform for building, deploying and monitoring scientific machine learning systems"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -35,6 +35,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/prokopton"]
+
+# The source distribution holds the package only (not apps, sites or infra)
+[tool.hatch.build.targets.sdist]
+include = ["src/prokopton", "LICENSE", "README.md"]
 
 # --- Pixi: environments and tasks ---
 

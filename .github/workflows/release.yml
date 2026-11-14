@@ -1,0 +1,87 @@
+name: Release
+
+# Publishes prokopton-ml when a version tag (v*) is pushed: builds once,
+# publishes to TestPyPI, then to PyPI after approval in the "pypi"
+# environment. Trusted Publishing (no tokens); PyPI attestations are made by
+# the publish action. The tag must match the version in pyproject.toml.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-24.04 # Pinned; move to a newer image on purpose
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check that the tag matches the package version
+        shell: python3 {0}
+        run: |
+          import os
+          import sys
+          import tomllib
+
+          with open("pyproject.toml", "rb") as handle:
+              version = tomllib.load(handle)["project"]["version"]
+          tag = os.environ["GITHUB_REF_NAME"]
+          if tag != f"v{version}":
+              sys.exit(f"Tag {tag} does not match the package version {version}")
+          print(f"Releasing prokopton-ml {version}")
+      - name: Build the sdist and wheel
+        run: |
+          python3 -m pip install --user build==1.2.2
+          python3 -m build
+          ls -l dist
+      - name: Keep the built files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    runs-on: ubuntu-24.04 # Pinned; move to a newer image on purpose
+    timeout-minutes: 10
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/prokopton-ml/
+    permissions:
+      id-token: write # Trusted Publishing
+    steps:
+      - name: Get the built files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@aef6c9b6e301dc803e1bc9133e9ce67ae9b0906b # v1.14.3
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  pypi:
+    name: Publish to PyPI
+    needs: testpypi
+    runs-on: ubuntu-24.04 # Pinned; move to a newer image on purpose
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/prokopton-ml/
+    permissions:
+      id-token: write # Trusted Publishing
+    steps:
+      - name: Get the built files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@aef6c9b6e301dc803e1bc9133e9ce67ae9b0906b # v1.14.3

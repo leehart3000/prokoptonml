@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.config, including the real app config files."""
+"""Tests for prokopton.ml.config, including a real app config (a fixture)."""
 
 from pathlib import Path
 
@@ -16,7 +16,7 @@ from prokopton.ml.config import (
     UnknownClassifierError,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 SOURCE_FIELDS: dict[str, object] = {
     "release": "GB273",
@@ -31,7 +31,7 @@ SOURCE_FIELDS: dict[str, object] = {
 
 
 def test_dnabarcode_config_is_valid() -> None:
-    config = load_config(REPO_ROOT / "apps/dnabarcode/dnabarcode.toml", AppConfig)
+    config = load_config(FIXTURES / "dnabarcode.toml", AppConfig)
 
     assert config.name == "dnabarcode"
     assert config.data.source.release == "GB273"
@@ -68,7 +68,7 @@ def test_env_override_changes_paths(tmp_path: Path) -> None:
     environ = {"PROKOPTON_DATA__PATHS__RAW_DIR": str(tmp_path)}
 
     config = load_config(
-        REPO_ROOT / "apps/dnabarcode/dnabarcode.toml",
+        FIXTURES / "dnabarcode.toml",
         AppConfig,
         env_prefix="PROKOPTON_",
         environ=environ,
@@ -106,9 +106,7 @@ def test_specialist_identities_must_be_in_order() -> None:
 
 
 def test_unknown_specialist(tmp_path: Path) -> None:
-    config = load_config(
-        REPO_ROOT / "apps" / "dnabarcode" / "dnabarcode.toml", AppConfig
-    )
+    config = load_config(FIXTURES / "dnabarcode.toml", AppConfig)
 
     assert config.specialist("culicidae").target == "Culicidae"
     with pytest.raises(UnknownClassifierError, match="sharks"):
