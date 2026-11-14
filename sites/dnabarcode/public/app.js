@@ -125,6 +125,7 @@ function appendNotes(box, notes) {
 function appendTrace(box, trace) {
   if (!trace || trace.length === 0) return;
   const details = element("details");
+  details.open = true;
   details.append(element("summary", "How this answer was reached"));
   const steps = element("ol", undefined, "trace");
   for (const step of trace) {
