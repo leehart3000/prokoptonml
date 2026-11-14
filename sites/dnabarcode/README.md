@@ -38,9 +38,21 @@ The pages are plain HTML, CSS and JavaScript (no framework or build step).
 
 Until both secrets are set, `/api/identify` answers 503.
 
+Browser tests (`e2e/`, Playwright) check the live site: every page loads
+without errors and fits an iPhone SE screen, links and the light/dark choice
+behave, the sequence checks work, an identification is shown correctly
+(with the service and Turnstile replaced by fakes, since a real
+identification needs a human check), and the live gateway is healthy and
+refuses identifications without the human check. They run in CI
+(`.github/workflows/site.yml`) on demand after each deploy, and weekly.
+
 ```bash
-# Tests (Node 22+)
+# Unit tests (Node 22+)
 node --test sites/dnabarcode/test/*.test.js
+# Browser tests of the live site (from sites/dnabarcode, after npm ci)
+npx playwright install chromium && npx playwright test
+# The same in CI, after deploying the site
+gh workflow run site.yml
 # Deploy, from the repository root
 npx --yes wrangler@4.162.0 deploy --config sites/dnabarcode/wrangler.jsonc
 # Set the API key without showing it
