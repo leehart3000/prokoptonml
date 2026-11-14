@@ -171,6 +171,7 @@ form.addEventListener("submit", async (event) => {
     return;
   }
   submit.disabled = true;
+  form.setAttribute("aria-busy", "true");
   setStatus("Checking that you are human…");
   let token;
   try {
@@ -178,7 +179,8 @@ form.addEventListener("submit", async (event) => {
   } catch {
     setStatus("");
     showError("The check that you are human did not complete. Please try again, or reload the page.");
-    submit.disabled = false;
+    form.removeAttribute("aria-busy");
+    updateCheck();
     if (widgetId !== null) window.turnstile.reset(widgetId);
     return;
   }
@@ -203,6 +205,7 @@ form.addEventListener("submit", async (event) => {
   } finally {
     clearTimeout(slow);
     setStatus("");
+    form.removeAttribute("aria-busy");
     updateCheck();
     // Each token works once: get a fresh one for the next identification
     if (widgetId !== null) window.turnstile.reset(widgetId);

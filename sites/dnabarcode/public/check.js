@@ -33,4 +33,3 @@ export function inspect(text) {
   }
   return { level: "ok", message: `${n} bases.` };
 }
-
