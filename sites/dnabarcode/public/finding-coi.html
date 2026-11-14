@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Finding the COI region · dnabarcode.org</title>
+  <meta name="description" content="Identify animals from COI DNA barcodes, with careful, explained answers. Species-level answers for mosquitoes.">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header>
+    <a class="brand" href="/">dna<span>barcode</span>.org</a>
+    <nav aria-label="Main">
+      <a href="/">Identify</a>
+      <a href="/submit">What can I submit?</a>
+      <a href="/finding-coi" aria-current="page">Finding the COI region</a>
+      <a href="/scope">Scope and limits</a>
+    </nav>
+  </header>
+  <main id="content">
+    <h1>Finding the COI region</h1>
+    <p class="lead">The barcode used here is the "Folmer region": roughly the first 650 bases of the mitochondrial COI gene, the stretch amplified by the widely used primers LCO1490 and HCO2198.</p>
+
+    <h2>If you sequenced a specimen</h2>
+    <p>If your lab used standard COI barcoding primers, your sequence is already the barcode. Trim low-quality ends, join the forward and reverse reads into one sequence if you have both, and paste the result.</p>
+
+    <h2>If you have a longer sequence</h2>
+    <p>A whole mitochondrial genome or a long contig is fine: paste all of it (up to 20,000 bases). The service slides along the sequence, finds the stretch that looks most like the COI barcode, and tells you where it was found.</p>
+
+    <h2>If you have a GenBank record</h2>
+    <p>In the record's features, look for a <code>gene</code> or <code>CDS</code> named <code>COX1</code>, <code>COI</code> or <code>CO1</code>. Copy that stretch as DNA (not the protein translation), or simply paste the whole mitochondrial genome.</p>
+
+    <h2>Checking a sequence first</h2>
+    <p>If in doubt, NCBI BLAST or the BOLD Systems identification engine will show whether a sequence is COI. dnabarcode.org also checks: if it doesn't find COI, it says so instead of guessing.</p>
+
+  </main>
+  <footer>
+    <p>dnabarcode.org is part of <a href="https://prokoptonml.org">ProkoptonML</a>, an open MLOps platform by <a href="https://hartsoft.dev">Lee Hart</a>.
+    Answers describe our reference data and this marker; they are not an expert identification.
+    <a href="https://github.com/leehart3000/prokoptonml/blob/main/apps/dnabarcode/model-cards/culicidae.md">Model card</a> · <a href="https://github.com/leehart3000/prokoptonml">Source code</a>.</p>
+    <p>Reference data: MIDORI2 (GenBank release 273; Leray et al. 2022; CC BY 4.0) and NCBI RefSeq.</p>
+  </footer>
+</body>
+</html>

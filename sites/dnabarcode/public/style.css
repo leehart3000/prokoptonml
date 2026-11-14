@@ -1,0 +1,150 @@
+:root {
+  --ink: #1d2521;
+  --muted: #56615b;
+  --line: #d7ddd8;
+  --paper: #fbfcfa;
+  --panel: #ffffff;
+  --accent: #1f6f50;
+  --accent-ink: #ffffff;
+  --warn: #8a5a00;
+  --warn-bg: #fff6e0;
+  --bad: #9b2c2c;
+  --bad-bg: #fdecec;
+  --good-bg: #e9f5ee;
+  --radius: 8px;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e6ebe7;
+    --muted: #a3aea7;
+    --line: #36403b;
+    --paper: #141917;
+    --panel: #1b211e;
+    --accent: #5cc195;
+    --accent-ink: #0d1a14;
+    --warn: #f0c060;
+    --warn-bg: #2e2612;
+    --bad: #f19a9a;
+    --bad-bg: #321b1b;
+    --good-bg: #17291f;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skip { position: absolute; left: -999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--panel); padding: .5rem; }
+
+header, main, footer { max-width: 48rem; margin: 0 auto; padding: 0 1.25rem; }
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .5rem 1.5rem;
+  padding-top: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { font-weight: 700; font-size: 1.2rem; color: var(--ink); text-decoration: none; }
+.brand span { color: var(--accent); }
+
+nav { display: flex; flex-wrap: wrap; gap: .25rem 1.1rem; font-size: .95rem; }
+nav a { color: var(--muted); text-decoration: none; }
+nav a:hover, nav a[aria-current="page"] { color: var(--ink); text-decoration: underline; }
+
+main { padding-top: 1.5rem; padding-bottom: 3rem; }
+h1 { font-size: 1.75rem; line-height: 1.25; margin: .25rem 0 .75rem; }
+h2 { font-size: 1.2rem; margin: 2rem 0 .5rem; }
+.lead { font-size: 1.1rem; color: var(--muted); margin-top: 0; }
+
+label { display: block; font-weight: 600; margin-bottom: .35rem; }
+.hint { color: var(--muted); font-size: .9rem; margin: .35rem 0 0; }
+
+textarea {
+  width: 100%;
+  min-height: 11rem;
+  padding: .75rem;
+  font: .85rem/1.45 var(--mono);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  resize: vertical;
+}
+
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; }
+
+button {
+  font: inherit;
+  padding: .55rem 1.1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+button.secondary { background: transparent; color: var(--accent); }
+button:disabled { opacity: .55; cursor: wait; }
+
+#turnstile { min-height: 65px; margin-top: 1rem; }
+
+.status { margin-top: 1rem; color: var(--muted); min-height: 1.6em; }
+
+.result {
+  margin-top: 1.5rem;
+  padding: 1.1rem 1.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.result.identified { background: var(--good-bg); }
+.result.declined { background: var(--warn-bg); }
+.result.error { background: var(--bad-bg); color: var(--bad); }
+.result .answer { font-size: 1.3rem; font-weight: 650; margin: 0 0 .4rem; }
+.result .meta { color: var(--muted); font-size: .92rem; margin: 0; }
+.result ul { margin: .5rem 0 0; padding-left: 1.2rem; }
+
+details { margin-top: 1rem; }
+summary { cursor: pointer; font-weight: 600; }
+ol.trace { padding-left: 1.3rem; margin: .5rem 0 0; }
+ol.trace li { margin: .3rem 0; }
+ol.trace .step { font-family: var(--mono); font-size: .85rem; color: var(--muted); }
+
+.callout {
+  border-left: 4px solid var(--accent);
+  padding: .6rem 1rem;
+  background: var(--panel);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+
+code { font-family: var(--mono); font-size: .9em; }
+
+footer {
+  padding-top: 1rem;
+  padding-bottom: 2rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .88rem;
+}

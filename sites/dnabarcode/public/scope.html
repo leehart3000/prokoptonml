@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scope and limits · dnabarcode.org</title>
+  <meta name="description" content="Identify animals from COI DNA barcodes, with careful, explained answers. Species-level answers for mosquitoes.">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header>
+    <a class="brand" href="/">dna<span>barcode</span>.org</a>
+    <nav aria-label="Main">
+      <a href="/">Identify</a>
+      <a href="/submit">What can I submit?</a>
+      <a href="/finding-coi">Finding the COI region</a>
+      <a href="/scope" aria-current="page">Scope and limits</a>
+    </nav>
+  </header>
+  <main id="content">
+    <h1>Scope and limits</h1>
+    <p class="lead">dnabarcode.org is careful by design: when our data can't tell species apart, it says so instead of guessing.</p>
+
+    <h2>What it covers</h2>
+    <ul>
+      <li><strong>Mosquitoes (Culicidae):</strong> answers down to species, where our reference data and this marker can separate them. About 1,100 named mosquito species are in the reference set, out of roughly 3,700 described.</li>
+      <li><strong>Other animals:</strong> a broad group only, such as an insect order. Species-level answers for other groups are planned.</li>
+      <li><strong>Other markers</strong> (plant rbcL, fungal ITS, bacterial 16S) are planned, not yet available.</li>
+    </ul>
+
+    <h2>Kinds of answer</h2>
+    <table>
+      <thead><tr><th>Answer</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>A species, with % identity</td><td>The sequence is very close to references of one species, and no other species in our data is as close.</td></tr>
+        <tr><td>"One of: …"</td><td>Several species are equally close. COI can't separate them in our data.</td></tr>
+        <tr><td>A species complex</td><td>A known group of species (for example the <em>Anopheles gambiae</em> complex) that COI can't tell apart. Other markers are needed.</td></tr>
+        <tr><td>A genus or family</td><td>No species in our data is close enough to name. The specimen may be a species we don't have, or a variant we haven't seen.</td></tr>
+        <tr><td>"Not identified"</td><td>The input couldn't be used, for example because it isn't COI or is too short. The answer explains why.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>How well it works</h2>
+    <p>Measured on held-out mosquito sequences (details in the <a href="https://github.com/leehart3000/prokoptonml/blob/main/apps/dnabarcode/model-cards/culicidae.md">model card</a>):</p>
+    <ul>
+      <li>Species in our data: wrongly named for 2.6% of species.</li>
+      <li>Species <em>not</em> in our data, with no near-identical relative in it: never named as a species (0% wrong); answered at genus level instead.</li>
+      <li>Species not in our data but with a near-identical relative in it: often given the relative's name (about 37% wrong). COI alone can't avoid this.</li>
+      <li>Other flies (not mosquitoes): none of 1,500 were taken for a mosquito.</li>
+    </ul>
+
+    <h2>Important limits</h2>
+    <ul>
+      <li>Answers describe <strong>our reference data and this marker</strong>, not the organism's scientific status. They are not an expert identification. For decisions that matter (public health, biosecurity), confirm with an expert or other markers.</li>
+      <li>Public sequence databases contain mislabelled records. We remove the ones we can detect, checking against NCBI's curated RefSeq genomes, but some will remain.</li>
+      <li>The service is a free demonstration, with limits on how often it can be used.</li>
+    </ul>
+
+    <h2>Data and credits</h2>
+    <p>Reference sequences come from MIDORI2 (GenBank release 273; Leray, M. et al., 2022; licensed CC BY 4.0), checked against NCBI RefSeq mitochondrial genomes. Mosquito genera follow Wilkerson et al. (2015).</p>
+
+  </main>
+  <footer>
+    <p>dnabarcode.org is part of <a href="https://prokoptonml.org">ProkoptonML</a>, an open MLOps platform by <a href="https://hartsoft.dev">Lee Hart</a>.
+    Answers describe our reference data and this marker; they are not an expert identification.
+    <a href="https://github.com/leehart3000/prokoptonml/blob/main/apps/dnabarcode/model-cards/culicidae.md">Model card</a> · <a href="https://github.com/leehart3000/prokoptonml">Source code</a>.</p>
+    <p>Reference data: MIDORI2 (GenBank release 273; Leray et al. 2022; CC BY 4.0) and NCBI RefSeq.</p>
+  </footer>
+</body>
+</html>
