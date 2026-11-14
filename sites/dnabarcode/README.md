@@ -27,7 +27,14 @@ requests per 10 seconds; Block for 10 seconds.
 
 The Turnstile widget ("dnabarcode.org", Managed mode, hostname
 `dnabarcode.org` only) was created in the dashboard; its secret key was set
-with `wrangler secret put TURNSTILE_SECRET`.
+with `wrangler secret put TURNSTILE_SECRET`. The page runs it only when
+Identify is pressed (`execution: "execute"`) and keeps it hidden unless a
+visitor has to tick a box (`appearance: "interaction-only"`), so most
+visitors never see it, while doubtful ones can still prove themselves.
+
+The pages are plain HTML, CSS and JavaScript (no framework or build step).
+`theme.js` applies a saved light/dark choice before the page is drawn;
+`check.js` checks a pasted sequence as it is typed (tested in `test/`).
 
 Until both secrets are set, `/api/identify` answers 503.
 
