@@ -124,17 +124,14 @@ function appendNotes(box, notes) {
 
 function appendTrace(box, trace) {
   if (!trace || trace.length === 0) return;
-  const details = element("details");
-  details.open = true;
-  details.append(element("summary", "How this answer was reached"));
+  box.append(element("h2", "How this answer was reached", "trace-heading"));
   const steps = element("ol", undefined, "trace");
   for (const step of trace) {
     const item = element("li");
     item.append(element("span", `${step.name} `, "step"), step.summary);
     steps.append(item);
   }
-  details.append(steps);
-  box.append(details);
+  box.append(steps);
 }
 
 async function errorMessage(response) {
