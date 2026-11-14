@@ -1,8 +1,9 @@
 // dnabarcode.org identify page. No inline scripts (see the CSP in _headers).
-"use strict";
+import { inspect } from "./check.js";
 
 const TURNSTILE_SITE_KEY = "0x4AAAAAAGAqDhdbjAKn0ZJt";
 const SLOW_NOTICE_MS = 4000;
+const TOKEN_TIMEOUT_MS = 60_000;
 
 const form = document.getElementById("identify");
 const input = document.getElementById("sequence");
@@ -10,20 +11,57 @@ const submit = document.getElementById("submit");
 const exampleButton = document.getElementById("example");
 const statusLine = document.getElementById("status");
 const output = document.getElementById("result");
+const check = document.getElementById("sequence-check");
 let widgetId = null;
+let pendingToken = null;
 
 // Wake the service as soon as the page opens, so the first identification
 // does not wait for it to start
 fetch("/api/health").catch(() => {});
 
+// Turnstile runs only when Identify is pressed, and stays invisible unless
+// Cloudflare needs the visitor to tick a box
 window.onTurnstileLoad = () => {
   widgetId = window.turnstile.render("#turnstile", {
     sitekey: TURNSTILE_SITE_KEY,
     action: "identify",
-    callback: () => setStatus(""),
-    "error-callback": () => setStatus("The check that you are human could not load. Please reload the page."),
+    execution: "execute",
+    appearance: "interaction-only",
+    callback: (token) => settleToken(null, token),
+    "error-callback": () => settleToken(new Error("turnstile")),
+    "expired-callback": () => settleToken(new Error("expired")),
   });
 };
+
+function settleToken(error, token) {
+  if (!pendingToken) return;
+  const { resolve, reject, timer } = pendingToken;
+  pendingToken = null;
+  clearTimeout(timer);
+  if (error) reject(error);
+  else resolve(token);
+}
+
+function getToken() {
+  return new Promise((resolve, reject) => {
+    if (widgetId === null || !window.turnstile) {
+      reject(new Error("not loaded"));
+      return;
+    }
+    const timer = setTimeout(() => settleToken(new Error("timeout")), TOKEN_TIMEOUT_MS);
+    pendingToken = { resolve, reject, timer };
+    window.turnstile.execute(widgetId);
+  });
+}
+
+function updateCheck() {
+  const { level, message } = inspect(input.value);
+  check.textContent = message;
+  check.className = level ? `check ${level}` : "check";
+  submit.disabled = level === "bad";
+}
+
+input.addEventListener("input", updateCheck);
 
 function setStatus(text) {
   statusLine.textContent = text;
@@ -116,6 +154,7 @@ async function errorMessage(response) {
 exampleButton.addEventListener("click", async () => {
   const response = await fetch("/examples/aedes-aegypti-HQ945416.fasta");
   input.value = (await response.text()).trim();
+  updateCheck();
   input.focus();
 });
 
@@ -127,12 +166,22 @@ form.addEventListener("submit", async (event) => {
     input.focus();
     return;
   }
-  const token = widgetId === null ? "" : window.turnstile.getResponse(widgetId);
-  if (!token) {
-    setStatus("Please complete the check that you are human, then try again.");
+  if (inspect(sequence).level === "bad") {
+    input.focus();
     return;
   }
   submit.disabled = true;
+  setStatus("Checking that you are human…");
+  let token;
+  try {
+    token = await getToken();
+  } catch {
+    setStatus("");
+    showError("The check that you are human did not complete. Please try again, or reload the page.");
+    submit.disabled = false;
+    if (widgetId !== null) window.turnstile.reset(widgetId);
+    return;
+  }
   setStatus("Identifying…");
   const slow = setTimeout(
     () => setStatus("Identifying… The service may be waking up, which can take up to half a minute."),
@@ -154,7 +203,7 @@ form.addEventListener("submit", async (event) => {
   } finally {
     clearTimeout(slow);
     setStatus("");
-    submit.disabled = false;
+    updateCheck();
     // Each token works once: get a fresh one for the next identification
     if (widgetId !== null) window.turnstile.reset(widgetId);
   }

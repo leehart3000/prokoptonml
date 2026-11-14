@@ -4,24 +4,38 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scope and limits · dnabarcode.org</title>
-  <meta name="description" content="Identify animals from COI DNA barcodes, with careful, explained answers. Species-level answers for mosquitoes.">
+  <meta name="description" content="Identify animals from COI DNA barcodes, with cautious, explained answers. Species-level answers for mosquitoes.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
-  <link rel="icon" href="data:,">
+  <script src="/theme.js"></script>
 </head>
 <body>
   <a class="skip" href="#content">Skip to content</a>
   <header>
-    <a class="brand" href="/">dna<span>barcode</span>.org</a>
+    <a class="brand" href="/" aria-label="dnabarcode.org home">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <rect x="4" y="5" width="4" height="22" rx="1.5" fill="var(--base-a)"/>
+        <rect x="10" y="5" width="2" height="22" rx="1" fill="var(--base-c)"/>
+        <rect x="14" y="5" width="3" height="22" rx="1.5" fill="var(--base-g)"/>
+        <rect x="19" y="5" width="2" height="22" rx="1" fill="var(--base-t)"/>
+        <rect x="23" y="5" width="5" height="22" rx="1.5" fill="var(--base-c)"/>
+      </svg>
+      <span class="wordmark">dna<b>barcode</b><span class="tld">.org</span></span>
+    </a>
     <nav aria-label="Main">
       <a href="/">Identify</a>
       <a href="/submit">What can I submit?</a>
       <a href="/finding-coi">Finding the COI region</a>
       <a href="/scope" aria-current="page">Scope and limits</a>
     </nav>
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to dark mode">
+      <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
   </header>
   <main id="content">
     <h1>Scope and limits</h1>
-    <p class="lead">dnabarcode.org is careful by design: when our data can't tell species apart, it says so instead of guessing.</p>
+    <p class="lead">dnabarcode.org is cautious by design: when our data can't tell species apart, it says so instead of guessing.</p>
 
     <h2>What it covers</h2>
     <ul>
@@ -43,7 +57,7 @@
     </table>
 
     <h2>How well it works</h2>
-    <p>Measured on held-out mosquito sequences (details in the <a href="https://github.com/leehart3000/prokoptonml/blob/main/apps/dnabarcode/model-cards/culicidae.md">model card</a>):</p>
+    <p>Measured on held-out mosquito sequences (details in the <a href="https://github.com/leehart3000/prokoptonml/blob/main/apps/dnabarcode/model-cards/culicidae.md" target="_blank" rel="noopener noreferrer">model card<svg class="ext-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M4.5 2.5h-2v7h7v-2M7 2.5h2.5V5M9.5 2.5 5.5 6.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only"> (opens in a new tab)</span></a>):</p>
     <ul>
       <li>Species in our data: wrongly named for 2.6% of species.</li>
       <li>Species <em>not</em> in our data, with no near-identical relative in it: never named as a species (0% wrong); answered at genus level instead.</li>
@@ -63,10 +77,12 @@
 
   </main>
   <footer>
-    <p>dnabarcode.org is part of <a href="https://prokoptonml.org">ProkoptonML</a>, an open MLOps platform by <a href="https://hartsoft.dev">Lee Hart</a>.
+    <p>dnabarcode.org is a product of ProkoptonML, an open MLOps platform by <a href="https://hartsoft.dev" target="_blank" rel="noopener noreferrer">Lee Hart<svg class="ext-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M4.5 2.5h-2v7h7v-2M7 2.5h2.5V5M9.5 2.5 5.5 6.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only"> (opens in a new tab)</span></a>.
     Answers describe our reference data and this marker; they are not an expert identification.
-    <a href="https://github.com/leehart3000/prokoptonml/blob/main/apps/dnabarcode/model-cards/culicidae.md">Model card</a> · <a href="https://github.com/leehart3000/prokoptonml">Source code</a>.</p>
-    <p>Reference data: MIDORI2 (GenBank release 273; Leray et al. 2022; CC BY 4.0) and NCBI RefSeq.</p>
+    <a href="https://github.com/leehart3000/prokoptonml/blob/main/apps/dnabarcode/model-cards/culicidae.md" target="_blank" rel="noopener noreferrer">Model card<svg class="ext-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M4.5 2.5h-2v7h7v-2M7 2.5h2.5V5M9.5 2.5 5.5 6.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only"> (opens in a new tab)</span></a> · <a href="https://github.com/leehart3000/prokoptonml" target="_blank" rel="noopener noreferrer">Source code<svg class="ext-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M4.5 2.5h-2v7h7v-2M7 2.5h2.5V5M9.5 2.5 5.5 6.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only"> (opens in a new tab)</span></a></p>
+    <p>Reference data: MIDORI2 (GenBank release 273; Leray et al. 2022; CC BY 4.0) and NCBI RefSeq.
+    Identifications are protected by Cloudflare Turnstile.</p>
   </footer>
+  <script src="/theme-toggle.js" defer></script>
 </body>
 </html>
