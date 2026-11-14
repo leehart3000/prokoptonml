@@ -35,12 +35,21 @@ const ANSWER = {
   seconds: 1.04,
 };
 
+// True only for scripts served by Turnstile itself (an exact host match)
+function fromTurnstile(url) {
+  try {
+    return new URL(url).hostname === "challenges.cloudflare.com";
+  } catch {
+    return false;
+  }
+}
+
 // Console errors from our own pages (Turnstile's own messages are ignored)
 function watchErrors(page) {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
-    if (message.type() === "error" && !message.location().url.includes("challenges.cloudflare.com")) {
+    if (message.type() === "error" && !fromTurnstile(message.location().url)) {
       errors.push(message.text());
     }
   });
