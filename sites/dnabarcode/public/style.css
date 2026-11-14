@@ -1,20 +1,21 @@
 /* Colours: light by default, dark when the system asks for it, and either
    when chosen with the header button (data-theme on <html>). The four DNA
-   base colours (A green, C blue, G amber, T red) follow sequencing traces. */
+   base colours (A green, C blue, G amber, T red) follow sequencing traces;
+   the A green is also the site's accent colour. */
 :root {
   --ink: #1d2521;
   --muted: #56615b;
   --line: #d7ddd8;
   --paper: #fbfcfa;
   --panel: #ffffff;
-  --accent: #1f6f50;
+  --accent: #1e7d47;
   --accent-ink: #ffffff;
   --warn: #8a5a00;
   --warn-bg: #fff6e0;
   --bad: #9b2c2c;
   --bad-bg: #fdecec;
   --good-bg: #e9f5ee;
-  --base-a: #2e9d57;
+  --base-a: var(--accent);
   --base-c: #2f6fd6;
   --base-g: #e0a100;
   --base-t: #d64545;
@@ -31,14 +32,14 @@
     --line: #36403b;
     --paper: #141917;
     --panel: #1b211e;
-    --accent: #5cc195;
+    --accent: #4cc47a;
     --accent-ink: #0d1a14;
     --warn: #f0c060;
     --warn-bg: #2e2612;
     --bad: #f19a9a;
     --bad-bg: #321b1b;
     --good-bg: #17291f;
-    --base-a: #4cc47a;
+    --base-a: var(--accent);
     --base-c: #6b9cf0;
     --base-g: #f2c14e;
     --base-t: #f07070;
@@ -53,14 +54,14 @@
   --line: #36403b;
   --paper: #141917;
   --panel: #1b211e;
-  --accent: #5cc195;
+  --accent: #4cc47a;
   --accent-ink: #0d1a14;
   --warn: #f0c060;
   --warn-bg: #2e2612;
   --bad: #f19a9a;
   --bad-bg: #321b1b;
   --good-bg: #17291f;
-  --base-a: #4cc47a;
+  --base-a: var(--accent);
   --base-c: #6b9cf0;
   --base-g: #f2c14e;
   --base-t: #f07070;
@@ -179,6 +180,8 @@ button {
   cursor: pointer;
 }
 button.secondary { background: transparent; color: var(--accent); }
+#submit { display: inline-flex; align-items: center; gap: .45rem; }
+.search-icon { width: 1.05em; height: 1.05em; flex: none; }
 button:disabled { opacity: .55; cursor: not-allowed; }
 form[aria-busy="true"] button:disabled { cursor: progress; }
 
