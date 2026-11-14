@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What can I submit? · dnabarcode.org</title>
+  <meta name="description" content="Identify animals from COI DNA barcodes, with careful, explained answers. Species-level answers for mosquitoes.">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header>
+    <a class="brand" href="/">dna<span>barcode</span>.org</a>
+    <nav aria-label="Main">
+      <a href="/">Identify</a>
+      <a href="/submit" aria-current="page">What can I submit?</a>
+      <a href="/finding-coi">Finding the COI region</a>
+      <a href="/scope">Scope and limits</a>
+    </nav>
+  </header>
+  <main id="content">
+    <h1>What can I submit?</h1>
+    <p class="lead">dnabarcode.org identifies animals from the standard animal DNA barcode: a stretch of the mitochondrial <strong>COI</strong> gene (also written CO1 or COX1).</p>
+
+    <h2>Accepted</h2>
+    <ul>
+      <li><strong>One DNA sequence</strong>, pasted as FASTA (a line starting with <code>&gt;</code>, then the sequence) or as plain letters.</li>
+      <li><strong>100 to 20,000 bases.</strong> Under 300 bases works, but answers are less certain. A standard barcode is about 650 bases.</li>
+      <li><strong>Longer sequences that contain COI</strong>, such as a whole mitochondrial genome. The COI barcode region is found automatically.</li>
+      <li><strong>Either strand.</strong> If you paste the reverse complement, it is turned round for you.</li>
+      <li><strong>A few ambiguous bases</strong> (N, R, Y and so on), up to 10% of the sequence.</li>
+    </ul>
+
+    <h2>Not accepted</h2>
+    <table>
+      <thead><tr><th>Input</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Several sequences at once</td><td>Submit them one at a time.</td></tr>
+        <tr><td>Raw reads (FASTQ) or metabarcoding/metagenome data</td><td>These need read processing and mixtures, which this service does not do.</td></tr>
+        <tr><td>Protein sequences</td><td>Paste the DNA sequence instead.</td></tr>
+        <tr><td>Other genes or markers (16S, ITS, rbcL, nuclear genes)</td><td>Only COI is supported for now.</td></tr>
+        <tr><td>Random stretches of a nuclear genome</td><td>They don't contain the barcode.</td></tr>
+        <tr><td>Sequences with many ambiguous bases</td><td>More than 10% ambiguous bases can't be matched reliably.</td></tr>
+      </tbody>
+    </table>
+    <p>Not sure your sequence contains COI? See <a href="/finding-coi">Finding the COI region</a>.</p>
+
+    <h2>Privacy</h2>
+    <p>Sequences are used only to answer your request. They are held briefly in the service's memory (so a repeated request is answered quickly), never saved to disk, and never written to our logs.</p>
+
+  </main>
+  <footer>
+    <p>dnabarcode.org is part of <a href="https://prokoptonml.org">ProkoptonML</a>, an open MLOps platform by <a href="https://hartsoft.dev">Lee Hart</a>.
+    Answers describe our reference data and this marker; they are not an expert identification.
+    <a href="https://github.com/leehart3000/prokoptonml/blob/main/apps/dnabarcode/model-cards/culicidae.md">Model card</a> · <a href="https://github.com/leehart3000/prokoptonml">Source code</a>.</p>
+    <p>Reference data: MIDORI2 (GenBank release 273; Leray et al. 2022; CC BY 4.0) and NCBI RefSeq.</p>
+  </footer>
+</body>
+</html>

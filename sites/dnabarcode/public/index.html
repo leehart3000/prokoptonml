@@ -4,9 +4,49 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>dnabarcode.org</title>
+  <meta name="description" content="Identify animals from COI DNA barcodes, with careful, explained answers. Species-level answers for mosquitoes.">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:,">
 </head>
 <body>
-  <h1>dnabarcode.org</h1>
-  <p>Identify organisms from DNA barcodes. Coming very soon.</p>
+  <a class="skip" href="#content">Skip to content</a>
+  <header>
+    <a class="brand" href="/">dna<span>barcode</span>.org</a>
+    <nav aria-label="Main">
+      <a href="/" aria-current="page">Identify</a>
+      <a href="/submit">What can I submit?</a>
+      <a href="/finding-coi">Finding the COI region</a>
+      <a href="/scope">Scope and limits</a>
+    </nav>
+  </header>
+  <main id="content">
+    <h1>Identify an animal from its DNA barcode</h1>
+    <p class="lead">Paste a COI sequence. You get a careful answer, explained step by step: a species where our data can tell, or a broader group where it can't.</p>
+    <p class="callout">Species-level answers are for <strong>mosquitoes</strong> (family Culicidae) for now. Other animals get a broad group. <a href="/scope">Scope and limits</a></p>
+
+    <form id="identify" novalidate>
+      <label for="sequence">DNA sequence (FASTA or plain)</label>
+      <textarea id="sequence" name="sequence" spellcheck="false" autocomplete="off" maxlength="30000"
+        placeholder="&gt;my_specimen&#10;AACTTTATATTTCATTTTTGGAGTATGATCCGGAATAG…" aria-describedby="sequence-hint"></textarea>
+      <p class="hint" id="sequence-hint">One sequence, 100 to 20,000 bases. A whole mitochondrial genome is fine: the barcode region is found for you. <a href="/submit">What can I submit?</a></p>
+      <div id="turnstile"></div>
+      <div class="row">
+        <button type="submit" id="submit">Identify</button>
+        <button type="button" class="secondary" id="example">Load an example</button>
+      </div>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </form>
+
+    <section id="result" class="result" tabindex="-1" aria-live="polite" hidden></section>
+
+  </main>
+  <footer>
+    <p>dnabarcode.org is part of <a href="https://prokoptonml.org">ProkoptonML</a>, an open MLOps platform by <a href="https://hartsoft.dev">Lee Hart</a>.
+    Answers describe our reference data and this marker; they are not an expert identification.
+    <a href="https://github.com/leehart3000/prokoptonml/blob/main/apps/dnabarcode/model-cards/culicidae.md">Model card</a> · <a href="https://github.com/leehart3000/prokoptonml">Source code</a>.</p>
+    <p>Reference data: MIDORI2 (GenBank release 273; Leray et al. 2022; CC BY 4.0) and NCBI RefSeq.</p>
+  </footer>
+  <script src="/app.js" defer></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&amp;onload=onTurnstileLoad" defer></script>
 </body>
 </html>
