@@ -34,12 +34,53 @@ configuration loading.
 
 | Application | Domain | Status |
 |---|---|---|
-| [dnabarcode.org](https://dnabarcode.org) | DNA barcoding | Planned |
+| [DNAbarcode.org](https://dnabarcode.org) | Identifying animals from COI DNA barcodes; species-level for mosquitoes | Live |
 | [pepbarcode.org](https://pepbarcode.org) | Peptide barcoding | Planned |
+
+## How DNAbarcode.org is built
+
+```
+MIDORI2 + NCBI RefSeq ─► pipeline (ingest → validate → split → leakage → sample
+                         → train → calibrate → evaluate → model cards)
+                       ─► serving bundle (models, curated references, config,
+                          pinned versions, checksums) ─► Cloud Storage
+                       ─► CI: check bundle → build image → test → deploy to Cloud Run
+Visitor ─► DNAbarcode.org (Cloudflare Worker: pages, firewall rate limit,
+           Turnstile) ─► API key ─► Cloud Run (FastAPI) ─► answer + decision trace
+```
+
+- **Models:** a marker classifier (is this COI, which strand?), a router
+  (which group?) and a mosquito specialist that aligns the query to curated
+  references and answers cautiously: a species, a complex, "one of", or a
+  genus. Experiments and model versions are tracked in MLflow.
+- **Evaluation:** held-out known and novel species, leakage-aware scores and
+  thresholds chosen by the evaluation; see the
+  [Culicidae model card](apps/dnabarcode/model-cards/culicidae.md).
+- **Serving:** a FastAPI app in a container on Cloud Run (scale to zero),
+  deployed by GitHub Actions with Workload Identity Federation (no stored
+  Google keys) and least-privilege service accounts; see
+  [`infra/gcp/`](infra/gcp/README.md).
+- **Website and gateway:** a Cloudflare Worker in
+  [`sites/dnabarcode/`](sites/dnabarcode/README.md), with unit and Playwright
+  browser tests.
+- **Releasing and operating:** [`docs/releasing-dnabarcode.md`](docs/releasing-dnabarcode.md).
+- **What's next:** [`ROADMAP.md`](ROADMAP.md).
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `src/prokopton/ml/` | The platform: data, features, pipeline stages, training, specialists, inference, serving, reporting |
+| `apps/dnabarcode/` | DNAbarcode's config, reviewed reference files, model cards and known-answer checks |
+| `analysis/` | One-off analyses, with each question, finding and decision |
+| `infra/` | Google Cloud setup runbook and deploy settings |
+| `sites/dnabarcode/` | The website and API gateway |
+| `docs/` | Operating guides |
 
 ## Status
 
-This project is in early development.
+The first product, DNAbarcode.org, launched in November 2026. The platform
+is young and changing quickly; see [`ROADMAP.md`](ROADMAP.md).
 
 ## Licence
 
