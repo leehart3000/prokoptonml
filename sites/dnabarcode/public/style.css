@@ -18,9 +18,7 @@
   --base-c: #2f6fd6;
   --base-g: #e0a100;
   --base-t: #d64545;
-  --word-d: #23804a;
-  --word-n: #2a62c4;
-  --word-a: #c23b3b;
+  --word-dna: #2a62c4;
   --radius: 8px;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color-scheme: light;
@@ -44,12 +42,7 @@
     --base-c: #6b9cf0;
     --base-g: #f2c14e;
     --base-t: #f07070;
-    --word-d: #4cc47a;
-    --word-n: #7aa7f2;
-    --word-a: #f07a7a;
-  --word-d: #4cc47a;
-  --word-n: #7aa7f2;
-  --word-a: #f07a7a;
+    --word-dna: #7aa7f2;
     color-scheme: dark;
   }
 }
@@ -71,9 +64,7 @@
   --base-c: #6b9cf0;
   --base-g: #f2c14e;
   --base-t: #f07070;
-  --word-d: #4cc47a;
-  --word-n: #7aa7f2;
-  --word-a: #f07a7a;
+  --word-dna: #7aa7f2;
   color-scheme: dark;
 }
 
@@ -117,10 +108,8 @@ header nav { grid-column: 1 / -1; grid-row: 2; }
   justify-self: start;
 }
 .logo { width: 2rem; height: 2rem; flex: none; }
-.wordmark { font-size: 1.3rem; font-weight: 800; letter-spacing: -.01em; }
-.wordmark .dna-d { color: var(--word-d); }
-.wordmark .dna-n { color: var(--word-n); }
-.wordmark .dna-a { color: var(--word-a); }
+.wordmark { font-size: 1.65rem; line-height: 1; font-weight: 800; letter-spacing: -.01em; }
+.wordmark .dna { color: var(--word-dna); }
 .wordmark b { font-weight: 650; color: var(--ink); }
 .wordmark .tld { color: var(--muted); font-weight: 400; }
 
@@ -249,7 +238,8 @@ footer {
   header, main, footer { padding-left: 1rem; padding-right: 1rem; }
   h1 { font-size: 1.45rem; }
   .lead { font-size: 1.02rem; }
-  .wordmark { font-size: 1.15rem; }
+  .wordmark { font-size: 1.4rem; }
+  .logo { width: 1.75rem; height: 1.75rem; }
   nav { gap: .2rem .9rem; font-size: .92rem; }
   .result { padding: .9rem 1rem; }
   .result .answer { font-size: 1.15rem; }
