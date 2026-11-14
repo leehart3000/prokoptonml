@@ -35,8 +35,9 @@ samples_dir = "data/samples/dnabarcode"
 models_dir = "data/models/dnabarcode"
 
 [validation]
-# Reviewed phylum -> kingdom table (see apps/dnabarcode/reference/README.md)
-phylum_reference = "apps/dnabarcode/reference/phylum_lineages_gb273.tsv"
+# Reviewed phylum -> kingdom table (in DNAbarcode: apps/dnabarcode/reference/;
+# here, the fixture copy next to this file)
+phylum_reference = "tests/fixtures/phylum_lineages_gb273.tsv"
 min_length = 100
 max_length = 2000
 # 1.0 = keep all: the training stage applies its own (tunable) threshold to the

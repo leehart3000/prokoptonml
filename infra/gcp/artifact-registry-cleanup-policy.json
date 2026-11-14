@@ -1,4 +1,0 @@
-[
-  {"name": "keep-newest-5", "action": {"type": "Keep"}, "mostRecentVersions": {"keepCount": 5}},
-  {"name": "delete-older-than-7-days", "action": {"type": "Delete"}, "condition": {"olderThan": "7d"}}
-]

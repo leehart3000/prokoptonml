@@ -1,7 +1,8 @@
 # Test fixtures
 
 Frozen copies of real application files, so the platform's tests do not
-depend on any application living in this repository.
+depend on any application living in this repository. The config's
+`phylum_reference` points at the copy here, so the test can check it exists.
 
 | File | Copied from | Used by |
 |---|---|---|
