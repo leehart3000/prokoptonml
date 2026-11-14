@@ -209,8 +209,7 @@ form[aria-busy="true"] button:disabled { cursor: progress; }
 .result .meta { color: var(--muted); font-size: .92rem; margin: 0; }
 .result ul { margin: .5rem 0 0; padding-left: 1.2rem; }
 
-details { margin-top: 1rem; }
-summary { cursor: pointer; font-weight: 600; }
+.result .trace-heading { font-size: 1rem; margin: 1rem 0 0; }
 ol.trace { padding-left: 1.3rem; margin: .5rem 0 0; }
 ol.trace li { margin: .3rem 0; }
 ol.trace .step { font-family: var(--mono); font-size: .85rem; color: var(--muted); }
