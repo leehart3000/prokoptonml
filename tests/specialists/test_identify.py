@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.specialists.identify."""
+"""Tests for prokopton.ml.bio.specialists.identify."""
 
 from dataclasses import asdict
 from pathlib import Path
@@ -8,8 +8,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from prokopton.ml.config import ComplexConfig, SpecialistConfig
-from prokopton.ml.specialists.identify import (
+from prokopton.ml.bio.specialists.identify import (
     NEIGHBOURS_NAME,
     Neighbour,
     Reference,
@@ -18,6 +17,7 @@ from prokopton.ml.specialists.identify import (
     canonical_species,
     write_neighbours,
 )
+from prokopton.ml.config import ComplexConfig, SpecialistConfig
 
 rng = np.random.default_rng(7)
 
@@ -324,7 +324,7 @@ def test_queries_are_compared_in_batches(
 ) -> None:
     queries = [AEGYPTI, GAMBIAE, SHARED]
     whole = specialist.candidates(queries)
-    monkeypatch.setattr("prokopton.ml.specialists.identify.QUERY_BATCH", 2)
+    monkeypatch.setattr("prokopton.ml.bio.specialists.identify.QUERY_BATCH", 2)
 
     assert specialist.candidates(queries) == whole
 

@@ -1,8 +1,8 @@
-"""Tests for prokopton.ml.features.fragments."""
+"""Tests for prokopton.ml.bio.features.fragments."""
 
 import numpy as np
 
-from prokopton.ml.features.fragments import (
+from prokopton.ml.bio.features.fragments import (
     fragment,
     random_fragments,
     reverse_complement,

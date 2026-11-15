@@ -12,8 +12,8 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from prokopton.ml.bio.pipeline.reference import build_reference
 from prokopton.ml.config import AppConfig
-from prokopton.ml.pipeline.reference import build_reference
 
 __all__ = ["AEGYPTI", "config_dict", "prepared", "write_data"]
 

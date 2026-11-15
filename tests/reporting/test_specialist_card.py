@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.reporting.specialist_card."""
+"""Tests for prokopton.ml.bio.reporting.specialist_card."""
 
 from pathlib import Path
 from typing import Any
@@ -6,17 +6,17 @@ from typing import Any
 import pytest
 
 from fakes import FakeTracker
-from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig
-from prokopton.ml.pipeline.reference import reference_path
-from prokopton.ml.pipeline.specialist_evaluate import (
+from prokopton.ml.bio.pipeline.reference import reference_path
+from prokopton.ml.bio.pipeline.specialist_evaluate import (
     REPORT_NAME,
     evaluate_specialist,
 )
-from prokopton.ml.reporting.specialist_card import (
+from prokopton.ml.bio.reporting.specialist_card import (
     SpecialistCardError,
     build_specialist_card,
 )
+from prokopton.ml.cli import main
+from prokopton.ml.config import AppConfig
 from specialist_world import config_dict, prepared
 
 

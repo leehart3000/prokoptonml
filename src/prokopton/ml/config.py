@@ -468,7 +468,7 @@ class SpecialistConfig(ConfigModel):
     similar are aligned (at most ``candidates_per_species`` from any one
     species, so many copies of one species cannot crowd out the others),
     and the outcome follows from their percent identity (see
-    ``prokopton.ml.specialists.identify``). A match counts only if it covers
+    ``prokopton.ml.bio.specialists.identify``). A match counts only if it covers
     ``min_coverage`` of the query or the reference and aligns at least
     ``min_aligned`` bases. Species within ``group_margin`` of the best match
     are reported together.
@@ -517,6 +517,10 @@ class SpecialistConfig(ConfigModel):
     router_label: str = ""
     """The router's label for this specialist's group (such as "Diptera");
     empty if the specialist is not consulted at serving."""
+    member_name: str = ""
+    """How answers name a member of the group whose closest records have no
+    species or genus name (such as "A mosquito"); "A member of <target>" if
+    empty."""
     curate: bool = True
     """Leave out named references that look mislabelled (see
     ``Specialist.contradicted``)."""
@@ -580,6 +584,10 @@ class InferenceConfig(ConfigModel):
     step: int = Field(default=60, ge=1)
     region_probability: float = Field(default=0.9, gt=0.0, le=1.0)
     route_threshold: float = Field(default=0.10, gt=0.0, le=1.0)
+    unsupported_note: str = ""
+    """Added to the message when a sequence is declined as another marker, or
+    as a long sequence without the barcode gene (such as which other markers
+    are planned)."""
 
 
 class AppConfig(ConfigModel):

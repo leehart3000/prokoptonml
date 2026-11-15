@@ -41,11 +41,8 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.config import AppConfig, SpecialistConfig
-from prokopton.ml.data.checksums import sha256_of_file
-from prokopton.ml.pipeline.reference import reference_path
-from prokopton.ml.pipeline.split import hash_fraction
-from prokopton.ml.specialists.identify import (
+from prokopton.ml.bio.pipeline.reference import reference_path
+from prokopton.ml.bio.specialists.identify import (
     NEIGHBOURS_NAME,
     Identification,
     Match,
@@ -53,6 +50,9 @@ from prokopton.ml.specialists.identify import (
     canonical_genus,
     canonical_species,
 )
+from prokopton.ml.config import AppConfig, SpecialistConfig
+from prokopton.ml.data.checksums import sha256_of_file
+from prokopton.ml.pipeline.split import hash_fraction
 from prokopton.ml.training.tracking import Tracker, specialist_tracker
 
 __all__ = [

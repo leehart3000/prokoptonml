@@ -13,16 +13,16 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from prokopton.ml.config import AppConfig, SpecialistConfig
-from prokopton.ml.pipeline.reference import REPORT_NAME as REFERENCE_REPORT
-from prokopton.ml.pipeline.reference import ReferenceReport, reference_path
-from prokopton.ml.pipeline.specialist_evaluate import (
+from prokopton.ml.bio.pipeline.reference import REPORT_NAME as REFERENCE_REPORT
+from prokopton.ml.bio.pipeline.reference import ReferenceReport, reference_path
+from prokopton.ml.bio.pipeline.specialist_evaluate import (
     REPORT_NAME as EVALUATION_REPORT,
 )
-from prokopton.ml.pipeline.specialist_evaluate import (
+from prokopton.ml.bio.pipeline.specialist_evaluate import (
     SetScore,
     SpecialistEvaluationReport,
 )
+from prokopton.ml.config import AppConfig, SpecialistConfig
 from prokopton.ml.reporting.charts import Series, line_chart
 
 __all__ = ["SpecialistCardError", "SpecialistCardFiles", "build_specialist_card"]
@@ -47,7 +47,7 @@ _OUTCOMES = [
     ),
     (
         "complex",
-        "The best matches belong to a known species complex that COI cannot "
+        "The best matches belong to a known species complex that this marker cannot "
         "separate; the members and how to resolve them are given.",
     ),
     ("species_group", "Several named species match equally well."),
@@ -225,8 +225,8 @@ def _sections(
             f"{_count(reference.species_with_neighbours, 'named species')}** have "
             "another named species at least "
             f"{_pct(reference.rules.species_identity)} identical in the reference "
-            "set: COI does not separate them well. Such species are reported as a "
-            "group or a closest match, not alone."
+            f"set: {rules.gene} does not separate them well. Such species are "
+            "reported as a group or a closest match, not alone."
         )
     if rules.complexes:
         data += (
@@ -268,7 +268,8 @@ def _sections(
         "(in brackets: averaged over species). *Right* means right at the "
         "level given (a group or complex is right if it contains the species); "
         "*wrongly named* means a confident wrong species, group or complex (for "
-        "other flies: let in as mosquitoes); *exact* means named as exactly "
+        f"other {rules.background} records: let in as {rules.target}); *exact* "
+        "means named as exactly "
         "the right species.\n\n"
         + _table(["Set", "Records", "Species", "Right", "Wrongly named", "Exact"], rows)
         + (f"\n\nAnswers for known species: {mix}." if mix else "")

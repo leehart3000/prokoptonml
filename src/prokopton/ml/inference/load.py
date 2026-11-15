@@ -9,10 +9,10 @@ reference set.
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from prokopton.ml.bio.pipeline.reference import reference_path
+from prokopton.ml.bio.specialists.identify import Specialist
 from prokopton.ml.config import AppConfig
 from prokopton.ml.inference.identify import Identifier
-from prokopton.ml.pipeline.reference import reference_path
-from prokopton.ml.specialists.identify import Specialist
 from prokopton.ml.training.tracking import Tracker, mlflow_tracker
 
 __all__ = ["LoadError", "Loaded", "load_identifier"]

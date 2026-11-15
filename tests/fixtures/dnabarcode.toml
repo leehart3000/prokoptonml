@@ -291,6 +291,8 @@ limitations = [
 [specialists.culicidae]
 # Consulted when the router gives Diptera at least the route threshold
 router_label = "Diptera"
+# How answers name a mosquito whose closest records have no species or genus name
+member_name = "A mosquito"
 gene = "CO1"
 target_rank = "family"
 target = "Culicidae"
@@ -487,3 +489,5 @@ step = 60
 region_probability = 0.9
 # Rule B: consult a specialist if the router gives its group at least 10%
 route_threshold = 0.10
+# Added to declines for other markers, and long sequences without COI
+unsupported_note = "Support for other markers (plant rbcL, fungal ITS and bacterial 16S) is planned."

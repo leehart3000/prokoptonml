@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.features.kmers."""
+"""Tests for prokopton.ml.bio.features.kmers."""
 
 import random
 import time
@@ -8,7 +8,7 @@ import pytest
 from sklearn.base import clone
 from sklearn.pipeline import make_pipeline
 
-from prokopton.ml.features.kmers import (
+from prokopton.ml.bio.features.kmers import (
     AMINO_ACIDS,
     KmerVectorizer,
     reverse_complement,

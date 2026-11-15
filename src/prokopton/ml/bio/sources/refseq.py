@@ -22,7 +22,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from prokopton.ml.data.fasta import parse_fasta
+from prokopton.ml.bio.data.fasta import parse_fasta
 
 __all__ = [
     "COX1_NAMES",

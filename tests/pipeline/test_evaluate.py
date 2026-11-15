@@ -11,9 +11,9 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 
 from fakes import FakeTracker
+from prokopton.ml.bio.features.kmers import KmerVectorizer
 from prokopton.ml.cli import main
 from prokopton.ml.config import AppConfig
-from prokopton.ml.features.kmers import KmerVectorizer
 from prokopton.ml.pipeline.evaluate import (
     REPORT_NAME,
     EvaluationStageError,

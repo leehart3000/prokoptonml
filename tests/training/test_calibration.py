@@ -7,7 +7,7 @@ from scipy.special import log_softmax
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 
-from prokopton.ml.features.kmers import KmerVectorizer
+from prokopton.ml.bio.features.kmers import KmerVectorizer
 from prokopton.ml.training.calibration import (
     LengthCalibratedClassifier,
     fit_length_temperature,

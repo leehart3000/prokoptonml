@@ -25,10 +25,10 @@ from typing import Any, Literal, Protocol
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
-from prokopton.ml.config import AppConfig
-from prokopton.ml.features.fragments import reverse_complement
-from prokopton.ml.inference.inputs import InputError, Submission, parse_submission
-from prokopton.ml.specialists.identify import Identification, Specialist
+from prokopton.ml.bio.features.fragments import reverse_complement
+from prokopton.ml.bio.inference.inputs import InputError, Submission, parse_submission
+from prokopton.ml.bio.specialists.identify import Identification, Specialist
+from prokopton.ml.config import AppConfig, SpecialistConfig
 
 __all__ = [
     "Answer",
@@ -37,11 +37,8 @@ __all__ = [
     "Region",
     "Result",
     "Step",
+    "member_name",
 ]
-
-PLANNED_MARKERS = (
-    "Support for other markers (plant rbcL, fungal ITS and bacterial 16S) is planned."
-)
 
 
 class Classifier(Protocol):
@@ -191,9 +188,9 @@ class Identifier:
         if submission.length > rules.long_input:
             region = self._find_region(sequence)
             if region is None:
-                msg = (
+                msg = self._with_note(
                     f"No {rules.barcode_gene} region was found in this "
-                    f"{submission.length:,}-base sequence. {PLANNED_MARKERS}"
+                    f"{submission.length:,}-base sequence."
                 )
                 trace.add(Step(name="barcode", summary=msg))
                 return self._decline("no_barcode", msg, submission, trace)
@@ -222,10 +219,10 @@ class Identifier:
         )
         details = {"gene": gene, "probability": probability, "strand": strand}
         if gene != rules.barcode_gene:
-            msg = (
+            msg = self._with_note(
                 f"This looks like the {gene} gene (probability {probability:.2f}), "
                 f"not {rules.barcode_gene}, which is the only marker supported "
-                f"for now. {PLANNED_MARKERS}"
+                "for now."
             )
             trace.add(Step(name="marker", summary=msg, details=details))
             return self._decline("unsupported_marker", msg, submission, trace)
@@ -241,6 +238,11 @@ class Identifier:
         )
         oriented = sequence if strand == "given" else reverse_complement(sequence)
         return oriented, strand, None
+
+    def _with_note(self, message: str) -> str:
+        """A decline message, with the app's note about other markers, if any."""
+        note = self.rules.unsupported_note
+        return f"{message} {note}" if note else message
 
     def _find_region(self, sequence: str) -> Region | None:
         rules = self.rules
@@ -334,7 +336,7 @@ class Identifier:
             identification = specialist.identify(oriented)
             trace.add(_specialist_step(name, share, identification))
             if identification.outcome != "not_member":
-                answer = _specialist_answer(identification)
+                answer = _specialist_answer(identification, member_name(rules))
                 notes.extend(identification.notes)
                 break
         return Result(
@@ -387,7 +389,13 @@ _LEVELS = {
 }
 
 
-def _specialist_answer(found: Identification) -> Answer:
+def member_name(rules: SpecialistConfig) -> str:
+    """How answers name a member of a specialist's group with no species or
+    genus name."""
+    return rules.member_name or f"A member of {rules.target}"
+
+
+def _specialist_answer(found: Identification, member: str) -> Answer:
     names = ", ".join(found.species)
     texts = {
         "species": f"{found.label} ({found.identity:.1%} identical).",
@@ -401,7 +409,7 @@ def _specialist_answer(found: Identification) -> Answer:
         ),
         "species_group": f"One of: {names}.",
         "genus_label_only": (
-            f"{found.label or 'A mosquito'}: closest records have no species name."
+            f"{found.label or member}: closest records have no species name."
         ),
         "genus": f"{found.label} ({found.identity:.1%} identical).",
         "family": f"{found.label} ({found.identity:.1%} identical).",

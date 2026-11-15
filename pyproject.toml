@@ -1,6 +1,6 @@
 [project]
 name = "prokopton-ml"
-version = "0.1.0a2"
+version = "0.2.0a1"
 description = "An end-to-end MLOps platform for building, deploying and monitoring scientific machine learning systems"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -21,6 +21,9 @@ dependencies = [
 # The HTTP API. A product's image installs this package with --no-deps and
 # pins exact versions from its serving bundle's requirements.txt
 serve = ["fastapi>=0.115", "uvicorn>=0.30"]
+# Sequence-specific code (prokopton.ml.bio). It needs no packages beyond the
+# core's for now; the leakage stage also needs the vsearch program (conda)
+bio = []
 
 [project.scripts]
 prokopton-ml = "prokopton.ml.cli:main"

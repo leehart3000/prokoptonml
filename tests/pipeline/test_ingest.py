@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.pipeline.ingest, using a tiny fake MIDORI2 release."""
+"""Tests for prokopton.ml.bio.pipeline.ingest, using a tiny fake MIDORI2 release."""
 
 import gzip
 import hashlib
@@ -9,10 +9,10 @@ from pathlib import Path
 import pyarrow.parquet as pq
 import pytest
 
+from prokopton.ml.bio.pipeline.ingest import REPORT_NAME, IngestError, ingest
 from prokopton.ml.cli import main
 from prokopton.ml.config import AppConfig
 from prokopton.ml.data.checksums import ChecksumMismatchError
-from prokopton.ml.pipeline.ingest import REPORT_NAME, IngestError, ingest
 
 TEMPLATE = "SINTAX_sp/uniq/MIDORI2_UNIQ_NUC_SP_GB999_{gene}_SINTAX.fasta.gz"
 FASTA = {

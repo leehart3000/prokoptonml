@@ -1,8 +1,8 @@
-"""Tests for prokopton.ml.data.fasta."""
+"""Tests for prokopton.ml.bio.data.fasta."""
 
 import pytest
 
-from prokopton.ml.data.fasta import FastaFormatError, FastaRecord, parse_fasta
+from prokopton.ml.bio.data.fasta import FastaFormatError, FastaRecord, parse_fasta
 
 
 def test_parses_multiline_records() -> None:

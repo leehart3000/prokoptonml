@@ -1,11 +1,11 @@
-"""Tests for prokopton.ml.specialists.identity."""
+"""Tests for prokopton.ml.bio.specialists.identity."""
 
 import time
 
 import numpy as np
 import pytest
 
-from prokopton.ml.specialists.identity import align
+from prokopton.ml.bio.specialists.identity import align
 
 rng = np.random.default_rng(1)
 SEQUENCE = "".join(rng.choice(list("ACGT"), 600))

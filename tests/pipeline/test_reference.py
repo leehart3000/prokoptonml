@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.pipeline.reference."""
+"""Tests for prokopton.ml.bio.pipeline.reference."""
 
 import json
 from collections import Counter
@@ -10,9 +10,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig
-from prokopton.ml.pipeline.reference import (
+from prokopton.ml.bio.pipeline.reference import (
     CONTRADICTED_NAME,
     REPORT_NAME,
     SERVING_SPLITS,
@@ -22,7 +20,9 @@ from prokopton.ml.pipeline.reference import (
     reference_path,
     serving_reference_path,
 )
-from prokopton.ml.specialists.identify import NEIGHBOURS_NAME
+from prokopton.ml.bio.specialists.identify import NEIGHBOURS_NAME
+from prokopton.ml.cli import main
+from prokopton.ml.config import AppConfig
 
 
 def test_first_per_key_keeps_the_lowest_priorities_up_to_each_cap() -> None:
@@ -249,7 +249,7 @@ def test_reference_writes_in_batches(
     config = AppConfig.model_validate(config_dict(tmp_path))
     build_reference(config, "culicidae")
     whole = pq.read_table(reference_path(config, "culicidae")).to_pylist()
-    monkeypatch.setattr("prokopton.ml.pipeline.reference.BATCH_SIZE", 7)
+    monkeypatch.setattr("prokopton.ml.bio.pipeline.reference.BATCH_SIZE", 7)
 
     build_reference(config, "culicidae")
 
