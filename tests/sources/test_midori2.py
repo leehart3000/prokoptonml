@@ -1,9 +1,9 @@
-"""Tests for prokopton.ml.sources.midori2."""
+"""Tests for prokopton.ml.bio.sources.midori2."""
 
 import pytest
 
-from prokopton.ml.data.fasta import FastaRecord
-from prokopton.ml.sources.midori2 import (
+from prokopton.ml.bio.data.fasta import FastaRecord
+from prokopton.ml.bio.sources.midori2 import (
     RANKS,
     Midori2HeaderError,
     Taxon,

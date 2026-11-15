@@ -13,18 +13,18 @@ from inference_world import (
     FakeRouter,
     random_sequence,
 )
-from prokopton.ml.config import AppConfig
-from prokopton.ml.features.fragments import reverse_complement
-from prokopton.ml.inference.identify import (
-    PLANNED_MARKERS,
-    Identifier,
-    _specialist_answer,
-)
-from prokopton.ml.specialists.identify import (
+from prokopton.ml.bio.features.fragments import reverse_complement
+from prokopton.ml.bio.specialists.identify import (
     Identification,
     Outcome,
     Reference,
     Specialist,
+)
+from prokopton.ml.config import AppConfig
+from prokopton.ml.inference.identify import (
+    Identifier,
+    _specialist_answer,
+    member_name,
 )
 from specialist_world import config_dict
 
@@ -114,7 +114,18 @@ def test_declines_bad_input_and_other_markers() -> None:
     assert (other.status, other.reason) == ("declined", "unsupported_marker")
     assert other.message is not None
     assert "looks like the Cytb gene" in other.message
-    assert PLANNED_MARKERS in other.message
+    assert other.message.endswith("supported for now.")
+
+
+def test_declines_can_add_the_apps_note() -> None:
+    data = config_dict_with_marker()
+    data["inference"] = {"unsupported_note": "Other markers are planned."}
+    app = AppConfig.model_validate(data)
+
+    other = identifier(DIPTERA, app).identify(CYTB)
+
+    assert other.message is not None
+    assert other.message.endswith("for now. Other markers are planned.")
 
 
 def test_the_router_answer_stands_when_no_specialist_applies() -> None:
@@ -237,7 +248,7 @@ def test_specialist_answers(
         outcome=outcome, label=label, identity=0.991, species=species
     )
 
-    answer = _specialist_answer(found)
+    answer = _specialist_answer(found, "A mosquito")
 
     assert (answer.text, answer.level, answer.confident) == (text, level, confident)
 
@@ -249,3 +260,9 @@ def test_finds_a_barcode_at_the_end_of_a_long_sequence() -> None:
 
     assert result.region is not None
     assert result.region.end == len(genome)
+
+
+def test_member_name_comes_from_config_or_the_target() -> None:
+    assert member_name(config().specialist("culicidae")) == "A member of Culicidae"
+    named = config(member_name="A mosquito").specialist("culicidae")
+    assert member_name(named) == "A mosquito"

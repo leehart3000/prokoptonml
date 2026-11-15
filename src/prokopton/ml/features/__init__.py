@@ -1,1 +1,2 @@
-"""Feature engineering: turning sequences into numbers that models can use."""
+"""The old import path for k-mer features, kept so that saved models load
+(see ``kmers``)."""

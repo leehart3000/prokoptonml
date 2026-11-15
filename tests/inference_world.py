@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from prokopton.ml.features.fragments import reverse_complement
+from prokopton.ml.bio.features.fragments import reverse_complement
 
 __all__ = [
     "AEGYPTI",

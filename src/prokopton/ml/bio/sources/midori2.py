@@ -17,7 +17,7 @@ import re
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 
-from prokopton.ml.data.fasta import FastaRecord
+from prokopton.ml.bio.data.fasta import FastaRecord
 
 __all__ = [
     "RANKS",

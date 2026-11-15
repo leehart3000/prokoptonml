@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.pipeline.validate."""
+"""Tests for prokopton.ml.bio.pipeline.validate."""
 
 import json
 from collections.abc import Mapping, Sequence
@@ -7,16 +7,16 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig, ValidationConfig
-from prokopton.ml.data.taxonomy import NO_PHYLUM, OTHER_EUKARYOTES, UNMAPPED
-from prokopton.ml.pipeline.validate import (
+from prokopton.ml.bio.data.taxonomy import NO_PHYLUM, OTHER_EUKARYOTES, UNMAPPED
+from prokopton.ml.bio.pipeline.validate import (
     REASONS,
     REPORT_NAME,
     DataValidationError,
     validate,
     validate_gene,
 )
+from prokopton.ml.cli import main
+from prokopton.ml.config import AppConfig, ValidationConfig
 
 GROUPS = {6656: "Metazoa", 4890: "Fungi", 2763: OTHER_EUKARYOTES}
 GOOD = "ACGT" * 30  # 120 bases

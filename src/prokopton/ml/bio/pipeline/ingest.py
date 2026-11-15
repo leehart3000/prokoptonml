@@ -18,6 +18,8 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
+from prokopton.ml.bio.data.fasta import parse_fasta
+from prokopton.ml.bio.sources.midori2 import RANKS, parse_midori2_records, record_to_row
 from prokopton.ml.config import AppConfig
 from prokopton.ml.data.checksums import (
     parse_sha256_manifest,
@@ -25,8 +27,6 @@ from prokopton.ml.data.checksums import (
     verify_zip_member,
 )
 from prokopton.ml.data.download import download_file
-from prokopton.ml.data.fasta import parse_fasta
-from prokopton.ml.sources.midori2 import RANKS, parse_midori2_records, record_to_row
 
 __all__ = [
     "MIDORI2_SCHEMA",

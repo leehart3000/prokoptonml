@@ -20,7 +20,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 from sklearn.metrics import precision_recall_fscore_support
 
-from prokopton.ml.features.fragments import fragment
+from prokopton.ml.bio.features.fragments import fragment
 from prokopton.ml.training.metrics import TOP_K, metrics_from_ranks, top_ranks
 
 __all__ = [

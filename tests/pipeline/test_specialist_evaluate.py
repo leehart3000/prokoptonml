@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.pipeline.specialist_evaluate."""
+"""Tests for prokopton.ml.bio.pipeline.specialist_evaluate."""
 
 import json
 from pathlib import Path
@@ -7,10 +7,8 @@ from typing import Any
 import pytest
 
 from fakes import FakeTracker
-from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig
-from prokopton.ml.pipeline import specialist_evaluate
-from prokopton.ml.pipeline.specialist_evaluate import (
+from prokopton.ml.bio.pipeline import specialist_evaluate
+from prokopton.ml.bio.pipeline.specialist_evaluate import (
     REPORT_NAME,
     SetScore,
     SpecialistEvaluationError,
@@ -20,7 +18,9 @@ from prokopton.ml.pipeline.specialist_evaluate import (
     is_right,
     score_set,
 )
-from prokopton.ml.specialists.identify import Identification
+from prokopton.ml.bio.specialists.identify import Identification
+from prokopton.ml.cli import main
+from prokopton.ml.config import AppConfig
 from prokopton.ml.training import tracking
 from specialist_world import config_dict, prepared
 

@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.sources.refseq."""
+"""Tests for prokopton.ml.bio.sources.refseq."""
 
 import io
 import json
@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from prokopton.ml import cli
+from prokopton.ml.bio.sources import refseq
+from prokopton.ml.bio.sources.refseq import binomial, fetch_anchors, read_anchors
 from prokopton.ml.config import AppConfig
-from prokopton.ml.sources import refseq
-from prokopton.ml.sources.refseq import binomial, fetch_anchors, read_anchors
 from specialist_world import config_dict
 
 COI_A = "ATGC" * 30

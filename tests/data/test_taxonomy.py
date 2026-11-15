@@ -1,10 +1,10 @@
-"""Tests for prokopton.ml.data.taxonomy."""
+"""Tests for prokopton.ml.bio.data.taxonomy."""
 
 from pathlib import Path
 
 import pytest
 
-from prokopton.ml.data.taxonomy import (
+from prokopton.ml.bio.data.taxonomy import (
     OTHER_EUKARYOTES,
     ReferenceDataError,
     load_phylum_groups,

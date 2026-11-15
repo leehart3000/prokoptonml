@@ -1,10 +1,10 @@
 """The boundary between the generic core and sequence-specific code.
 
-Sequence-specific code is moving to ``prokopton.ml.bio``. Until it has moved,
-each module is listed here as core, bio or split (to be divided), and core
-modules may not import bio modules, except for the imports listed in
-``ALLOWED``, which are today's and may only shrink. A new module must be
-added to one of the lists.
+Sequence-specific code lives in ``prokopton.ml.bio``. Every other module is
+listed here as core, split (with both kinds of code, to be divided) or an
+old import path kept for saved models. Core modules may not import ``bio``,
+except for the imports listed in ``ALLOWED``, which may only shrink. A new
+module outside ``bio`` must be added to one of the lists.
 """
 
 import ast
@@ -23,7 +23,6 @@ CORE = frozenset(
         "data.checksums",
         "data.download",
         "evaluation",
-        "features",
         "inference",
         "inference.bundle",
         "inference.load",
@@ -32,8 +31,6 @@ CORE = frozenset(
         "reporting.charts",
         "serving",
         "serving.app",
-        "sources",
-        "specialists",
         "training",
         "training.calibration",
         "training.metrics",
@@ -42,26 +39,8 @@ CORE = frozenset(
 )
 """Generic modules (packages' ``__init__`` files are named by their package)."""
 
-BIO = frozenset(
-    {
-        "data.fasta",
-        "data.taxonomy",
-        "features.fragments",
-        "features.kmers",
-        "inference.inputs",
-        "pipeline.ingest",
-        "pipeline.leakage",
-        "pipeline.reference",
-        "pipeline.specialist_evaluate",
-        "pipeline.validate",
-        "reporting.specialist_card",
-        "sources.midori2",
-        "sources.refseq",
-        "specialists.identify",
-        "specialists.identity",
-    }
-)
-"""Sequence-specific modules, to move to ``prokopton.ml.bio``."""
+OLD_PATHS = frozenset({"features", "features.kmers"})
+"""Old import paths, kept so that models saved before 0.2.0 still load."""
 
 SPLIT = frozenset(
     {
@@ -81,18 +60,18 @@ SPLIT = frozenset(
 
 ALLOWED = frozenset(
     {
-        ("cli", "data.taxonomy"),
-        ("cli", "pipeline.ingest"),
-        ("cli", "pipeline.leakage"),
-        ("cli", "pipeline.reference"),
-        ("cli", "pipeline.specialist_evaluate"),
-        ("cli", "pipeline.validate"),
-        ("cli", "reporting.specialist_card"),
-        ("cli", "sources.refseq"),
-        ("inference.bundle", "pipeline.reference"),
-        ("inference.bundle", "specialists.identify"),
-        ("inference.load", "pipeline.reference"),
-        ("inference.load", "specialists.identify"),
+        ("cli", "bio.data.taxonomy"),
+        ("cli", "bio.pipeline.ingest"),
+        ("cli", "bio.pipeline.leakage"),
+        ("cli", "bio.pipeline.reference"),
+        ("cli", "bio.pipeline.specialist_evaluate"),
+        ("cli", "bio.pipeline.validate"),
+        ("cli", "bio.reporting.specialist_card"),
+        ("cli", "bio.sources.refseq"),
+        ("inference.bundle", "bio.pipeline.reference"),
+        ("inference.bundle", "bio.specialists.identify"),
+        ("inference.load", "bio.pipeline.reference"),
+        ("inference.load", "bio.specialists.identify"),
     }
 )
 """Core-to-bio imports that exist today, to be removed as code moves."""
@@ -131,17 +110,21 @@ def _imports(path: Path) -> set[str]:
 
 def _core_to_bio() -> set[tuple[str, str]]:
     modules = _modules()
+    bio = {name for name in modules if name == "bio" or name.startswith("bio.")}
     return {
         (name, imported)
         for name in CORE
         for imported in _imports(modules[name])
-        if imported in BIO
+        if imported in bio
     }
 
 
 def test_every_module_is_classified() -> None:
-    assert not (CORE & BIO or CORE & SPLIT or BIO & SPLIT)
-    assert set(_modules()) == CORE | BIO | SPLIT
+    assert not (CORE & SPLIT or CORE & OLD_PATHS or SPLIT & OLD_PATHS)
+    outside_bio = {
+        name for name in _modules() if name != "bio" and not name.startswith("bio.")
+    }
+    assert outside_bio == CORE | SPLIT | OLD_PATHS
 
 
 def test_core_imports_no_new_bio_modules() -> None:

@@ -29,7 +29,7 @@ the [`prokopton`](https://pypi.org/project/prokopton/) core package
 (`prokopton.core`).
 
 ```bash
-pip install "prokopton-ml[serve]==0.1.0a2"
+pip install "prokopton-ml[serve,bio]==0.2.0a1"
 prokopton-ml --help
 ```
 
@@ -56,7 +56,8 @@ exact platform version.
 
 | Path | Contents |
 |---|---|
-| `src/prokopton/ml/` | The platform: data, features, pipeline stages, training, specialists, inference, serving, reporting, command-line tool |
+| `src/prokopton/ml/` | The generic platform: pipeline stages, training, evaluation, model cards, bundles, serving, command-line tool |
+| `src/prokopton/ml/bio/` | Sequence-specific code: MIDORI2 and RefSeq sources, FASTA, k-mer features, specialists, sequence input checks (the `bio` extra) |
 | `tests/` | Tests (100% coverage), with frozen fixtures in `tests/fixtures/` |
 | `.github/workflows/` | CI, secret scanning, lockfile updates and releases to PyPI |
 

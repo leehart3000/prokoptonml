@@ -20,8 +20,8 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
+from prokopton.ml.bio.features.fragments import random_fragments
 from prokopton.ml.config import AppConfig, ClassifierCalibrationConfig
-from prokopton.ml.features.fragments import random_fragments
 from prokopton.ml.pipeline.train import read_sample
 from prokopton.ml.training.calibration import (
     LengthCalibratedClassifier,

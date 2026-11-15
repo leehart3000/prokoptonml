@@ -28,8 +28,8 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
+from prokopton.ml.bio.data.taxonomy import NO_PHYLUM, UNMAPPED, load_phylum_groups
 from prokopton.ml.config import AppConfig, ValidationConfig
-from prokopton.ml.data.taxonomy import NO_PHYLUM, UNMAPPED, load_phylum_groups
 
 __all__ = [
     "REASONS",

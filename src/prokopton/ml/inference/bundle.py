@@ -36,15 +36,15 @@ import joblib
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.config import AppConfig
-from prokopton.ml.inference.identify import Identifier
-from prokopton.ml.inference.load import Loaded
-from prokopton.ml.pipeline.reference import (
+from prokopton.ml.bio.pipeline.reference import (
     REFERENCE_NAME,
     build_reference,
     serving_reference_path,
 )
-from prokopton.ml.specialists.identify import NEIGHBOURS_NAME, Specialist
+from prokopton.ml.bio.specialists.identify import NEIGHBOURS_NAME, Specialist
+from prokopton.ml.config import AppConfig
+from prokopton.ml.inference.identify import Identifier
+from prokopton.ml.inference.load import Loaded
 from prokopton.ml.training.tracking import Tracker, mlflow_tracker
 
 __all__ = [
