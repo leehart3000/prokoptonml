@@ -3,7 +3,9 @@ name: Release
 # Publishes prokopton-ml when a version tag (v*) is pushed: builds once,
 # publishes to TestPyPI, then to PyPI after approval in the "pypi"
 # environment. Trusted Publishing (no tokens); PyPI attestations are made by
-# the publish action. The tag must match the version in pyproject.toml.
+# the publish action. The tag must match the version in pyproject.toml, be
+# on main, and not be on a commit that is already released. Start a release
+# with scripts/release.sh, which checks the same first.
 on:
   push:
     tags: ["v*"]
@@ -20,7 +22,16 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0 # The tags and main, for the checks below
           persist-credentials: false
+      # A release must be a commit on main that has not been released before
+      - name: Check the tag is new work on main
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$GITHUB_REF_NAME is not on main"; exit 1; }
+          others="$(git tag --points-at "$GITHUB_SHA" --list 'v*' | grep -vxF "$GITHUB_REF_NAME" || true)"
+          test -z "$others" \
+            || { echo "::error::This commit is already released as $others"; exit 1; }
       - name: Check that the tag matches the package version
         shell: python3 {0}
         run: |

@@ -37,7 +37,9 @@ prokopton-ml --help
 import prokopton.ml
 ```
 
-Releases are made by tagging `v*`: the Release workflow publishes to TestPyPI
+Releases are made with `scripts/release.sh vVERSION`, which checks that the
+version matches `pyproject.toml` and that the commit is new work on `main`,
+then tags it. The Release workflow checks the same, publishes to TestPyPI
 and then, after approval, to PyPI, with Trusted Publishing.
 
 ## Products built with ProkoptonML
