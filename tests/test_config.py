@@ -64,7 +64,7 @@ def test_source_config_rejects_invalid_fields(
 
 
 def test_env_override_changes_paths(tmp_path: Path) -> None:
-    environ = {"PROKOPTON_DATA__PATHS__RAW_DIR": str(tmp_path)}
+    environ = {"PROKOPTON_BIO__PATHS__RAW_DIR": str(tmp_path)}
 
     config = load_config(
         FIXTURES / "dnabarcode.toml",

@@ -12,6 +12,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from bio_app import CLASSIFIER, SPECIALIST, app_config, sequence_app
 from prokopton.ml.bio.pipeline.reference import build_reference
 from prokopton.ml.config import AppConfig
 
@@ -83,33 +84,19 @@ def records(*, mislabelled: bool = False) -> list[dict[str, Any]]:
 
 
 def config_dict(tmp_path: Path, **evaluation: Any) -> dict[str, Any]:
-    paths = ["raw", "interim", "processed", "splits", "leakage", "samples", "models"]
-    return {
-        "name": "testapp",
-        "title": "Test app",
-        "data": {
-            "source": {
-                "release": "GB999",
-                "doi": "10.0000/example",
-                "licence": "CC-BY-4.0",
-                "archive_url": "https://example.org/fake.zip",
-                "checksums_url": "https://example.org/sums.txt",
-                "archive_name": "fake.zip",
-                "member_template": "x/{gene}.fasta.gz",
-                "genes": ["CO1"],
-            },
-            "paths": {f"{name}_dir": str(tmp_path / name) for name in paths},
-        },
-        "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
-        "specialists": {
+    return sequence_app(
+        tmp_path,
+        models={
+            "router": {"kind": CLASSIFIER},
             "culicidae": {
+                "kind": SPECIALIST,
                 "target": "Culicidae",
                 "background": "Diptera",
                 "k": 6,
                 "evaluation": {"workers": 1, **evaluation},
-            }
+            },
         },
-    }
+    )
 
 
 def write_data(tmp_path: Path, *, mislabelled: bool = False) -> list[dict[str, Any]]:
@@ -129,6 +116,6 @@ def prepared(
     tmp_path: Path, *, mislabelled: bool = False, **evaluation: Any
 ) -> AppConfig:
     write_data(tmp_path, mislabelled=mislabelled)
-    config = AppConfig.model_validate(config_dict(tmp_path, **evaluation))
+    config = app_config(config_dict(tmp_path, **evaluation))
     build_reference(config, "culicidae")
     return config

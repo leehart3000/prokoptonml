@@ -13,10 +13,10 @@ model's or serving step's own settings, checked against those declared for
 its kind, and app-wide sections such as ``[bio]``, checked against the
 section of that name.
 
-Older files are converted when they are read: schema 1 (fixed ``[router]``,
-``[marker]`` and ``[specialists.<name>]``), schema 2 (``[inference]``) and
-schema 3 (sequence settings in ``[data.source]``, ``[validation]`` and so on);
-``prokopton-ml migrate-config`` rewrites them.
+Schema 3 files (sequence settings in ``[data.source]``, ``[validation]`` and
+so on) are converted when they are read, and ``prokopton-ml migrate-config``
+rewrites them. Schemas 1 and 2 are no longer read: prokopton-ml 0.2.0a7 was
+the last version to rewrite them.
 """
 
 from pathlib import Path
@@ -36,6 +36,7 @@ from pydantic import (
 from prokopton.ml.settings import Declared, declared
 
 __all__ = [
+    "CURRENT_SCHEMA",
     "AppConfig",
     "DataConfig",
     "MlflowConfig",
@@ -46,12 +47,14 @@ __all__ = [
     "StageConfig",
     "StepEntry",
     "UnknownClassifierError",
-    "convert_schema_1",
-    "convert_schema_2",
     "convert_schema_3",
-    "default_stages",
+    "old_schema_message",
+    "schema_of",
     "upgrade",
 ]
+
+CURRENT_SCHEMA = 4
+"""The config schema written; schema 3 is also read, by converting it."""
 
 
 class DataConfig(ConfigModel):
@@ -127,138 +130,6 @@ class ServingConfig(ConfigModel):
     steps: dict[str, StepEntry] = Field(default_factory=dict)
 
 
-_CLASSIFIER_STAGES = ("sample", "train", "calibrate", "evaluate", "card")
-_SPECIALIST_STAGES = ("reference", "evaluate", "card")
-
-
-def default_stages(models: dict[str, Any]) -> dict[str, dict[str, str]]:
-    """The stages a schema 1 app ran, in order, as schema 2 ``[stages]``.
-
-    ``models`` maps each model's name to its settings (with ``kind``).
-    """
-    stages: dict[str, dict[str, str]] = {
-        name: {"kind": f"bio.{name}"}
-        for name in ("ingest", "validate", "split", "leakage")
-    }
-    for name, settings in models.items():
-        if settings.get("kind") == "bio.kmer-classifier":
-            for step in _CLASSIFIER_STAGES:
-                kind = f"bio.classifier-{step}"
-                stages[f"{name}-{step}"] = {"kind": kind, "model": name}
-    for name, settings in models.items():
-        if settings.get("kind") == "bio.specialist":
-            steps = (
-                ("anchors", *_SPECIALIST_STAGES)
-                if settings.get("anchors")
-                else (_SPECIALIST_STAGES)
-            )
-            for step in steps:
-                kind = f"bio.specialist-{step}"
-                stages[f"{name}-{step}"] = {"kind": kind, "model": name}
-    stages["bundle"] = {"kind": "core.bundle"}
-    return stages
-
-
-def convert_schema_1(data: dict[str, Any]) -> dict[str, Any]:
-    """Convert a schema 1 config (as read from TOML or JSON) to schema 2.
-
-    ``[router]`` and ``[marker]`` become ``[models.router]`` and
-    ``[models.marker]``, each ``[specialists.<name>]`` becomes
-    ``[models.<name>]``, and the pipeline is the stages a schema 1 app ran.
-    """
-    converted = {
-        key: value
-        for key, value in data.items()
-        if key not in ("router", "marker", "specialists", "schema", "schema_version")
-    }
-    models: dict[str, Any] = {
-        "router": {"kind": "bio.kmer-classifier", **data.get("router", {})}
-    }
-    if data.get("marker") is not None:
-        models["marker"] = {"kind": "bio.kmer-classifier", **data["marker"]}
-    for name, settings in (data.get("specialists") or {}).items():
-        if not isinstance(settings, dict):
-            msg = f"[specialists.{name}] must be a table of settings"
-            raise ValueError(msg)
-        models[name] = {"kind": "bio.specialist", **settings}
-    stages = default_stages(models)
-    converted["schema"] = 2
-    converted["models"] = models
-    converted["pipeline"] = {"stages": list(stages)}
-    converted["stages"] = stages
-    return converted
-
-
-_SPECIALIST_KIND = "bio.specialist"
-
-
-_SCHEMA_2_DESCRIPTION = (
-    "Identify a DNA barcode. Answers describe the reference data and marker "
-    "behind them, with a decision trace."
-)
-_INPUT_KEYS = ("max_length", "max_ambiguous_fraction")
-_MARKER_KEYS = (
-    "barcode_gene",
-    "long_input",
-    "window",
-    "step",
-    "region_probability",
-    "unsupported_note",
-)
-_SPECIALIST_KEYS = ("route_threshold",)
-
-
-def convert_schema_2(data: dict[str, Any]) -> dict[str, Any]:
-    """Convert a schema 2 config to schema 3.
-
-    ``[inference]`` becomes the serving steps a schema 2 app ran: ``input``
-    (with the router's validated range), ``marker`` (if the app has one),
-    ``router``, then each specialist with a ``router_label``.
-    """
-    # A dumped config says schema_version, a written one schema: keep neither
-    converted = {
-        key: value
-        for key, value in data.items()
-        if key not in ("inference", "schema", "schema_version")
-    }
-    inference = data.get("inference") or {}
-
-    def take(keys: tuple[str, ...]) -> dict[str, Any]:
-        return {key: inference[key] for key in keys if key in inference}
-
-    models = data.get("models") or {}
-    steps: dict[str, dict[str, Any]] = {}
-    if "router" in models:
-        steps["input"] = {
-            "kind": "bio.sequence-input",
-            "model": "router",
-            **take(_INPUT_KEYS),
-        }
-        if "marker" in models:
-            steps["marker"] = {
-                "kind": "bio.marker",
-                "model": "marker",
-                **take(_MARKER_KEYS),
-            }
-        steps["router"] = {"kind": "bio.router", "model": "router"}
-    for name, settings in models.items():
-        if settings.get("kind") == _SPECIALIST_KIND and settings.get("router_label"):
-            steps[name] = {
-                "kind": "bio.specialist",
-                "model": name,
-                **take(_SPECIALIST_KEYS),
-            }
-    converted["schema"] = 3
-    converted["serving"] = {
-        # What schema 1 and 2 apps served
-        "endpoint": "identify",
-        "description": _SCHEMA_2_DESCRIPTION,
-        "chain": list(steps),
-        "steps": steps,
-    }
-    return converted
-
-
 def _pop_path(data: dict[str, Any], path: str) -> Any:
     """Remove and return the table at a dotted path (``None`` if absent)."""
     *parents, last = path.split(".")
@@ -321,18 +192,32 @@ def convert_schema_3(
     return converted
 
 
+def schema_of(data: dict[str, Any]) -> int:
+    """The schema of config data (as read from TOML or JSON): 1 if it doesn't
+    say, as schema 1 files didn't."""
+    found = data.get("schema", data.get("schema_version", 1))
+    return found if isinstance(found, int) else 1
+
+
+def old_schema_message(schema: int) -> str:
+    """Why a schema 1 or 2 config is refused, and what to do."""
+    return (
+        f"This config is schema {schema}, which is no longer read: rewrite it as "
+        f"schema {CURRENT_SCHEMA} with prokopton-ml 0.2.0a7 (prokopton-ml "
+        "migrate-config --write), the last version to read it"
+    )
+
+
 def upgrade(data: dict[str, Any]) -> dict[str, Any]:
-    """Convert config data of any older schema to the current one (4)."""
-    schema = data.get("schema", data.get("schema_version", 1))
-    if schema == 1:
-        data = convert_schema_1(data)
-        schema = 2
-    if schema == 2:
-        data = convert_schema_2(data)
-        schema = 3
-    if schema == 3:
-        data = convert_schema_3(data)
-    return data
+    """Convert schema 3 config data to the current schema (4).
+
+    Raises:
+        ValueError: If the data is schema 1 or 2, which are no longer read.
+    """
+    schema = schema_of(data)
+    if schema < 3:
+        raise ValueError(old_schema_message(schema))
+    return convert_schema_3(data) if schema == 3 else data
 
 
 def _settings_error(where: str, error: ValidationError) -> ValueError:

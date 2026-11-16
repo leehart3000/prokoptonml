@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from bio_app import app_config
 from prokopton.ml import cli
 from prokopton.ml.bio.sources import refseq
 from prokopton.ml.bio.sources.refseq import binomial, fetch_anchors, read_anchors
-from prokopton.ml.config import AppConfig
 from specialist_world import config_dict
 
 COI_A = "ATGC" * 30
@@ -81,16 +81,16 @@ def test_fetches_coi_anchors_and_lists_every_mitogenome(tmp_path: Path) -> None:
 
 def test_cli_fetches_anchors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     data = config_dict(tmp_path)
-    config = AppConfig.model_validate(data)
+    config = app_config(data)
     monkeypatch.setattr(cli, "load_config", lambda *_, **__: config)
 
     # Not configured
     assert cli.main(["--config", "app.toml", "run", "culicidae-anchors"]) == 1
 
-    data["specialists"]["culicidae"].update(
+    data["models"]["culicidae"].update(
         anchors=str(tmp_path / "anchors.fasta"), anchor_taxon="Culicidae"
     )
-    config = AppConfig.model_validate(data)
+    config = app_config(data)
     monkeypatch.setattr(
         "prokopton.ml.bio.stages.fetch_anchors",
         lambda taxon, path: fetch_anchors(taxon, path, fake_fetch),

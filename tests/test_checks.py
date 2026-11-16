@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ConfigDict
 
+from bio_app import minimal
 from prokopton.ml import checks, cli
 from prokopton.ml.checks import (
     Check,
@@ -28,7 +29,6 @@ from prokopton.ml.checks import (
 from prokopton.ml.cli import main
 from prokopton.ml.config import AppConfig
 from prokopton.ml.inference.chain import Answer, Result
-from test_schema_2 import minimal
 
 
 def write_check(folder: Path, name: str, request: object, expected: str) -> None:
@@ -275,7 +275,7 @@ def test_requests_are_sent_with_the_standard_library(
 
 
 def app_config(**extra: Any) -> AppConfig:
-    return AppConfig.model_validate(minimal(schema=3, **extra))
+    return AppConfig.model_validate(minimal(**extra))
 
 
 def write_bundle(folder: Path, config: AppConfig) -> Path:

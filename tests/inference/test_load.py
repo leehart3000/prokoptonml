@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from bio_app import CLASSIFIER, app_config
 from fakes import FakeTracker
 from inference_world import AEGYPTI, FakeMarker, FakeRouter
 from prokopton.ml import cli
@@ -17,12 +18,13 @@ from specialist_world import config_dict, prepared
 
 def app(tmp_path: Path, **specialist: Any) -> AppConfig:
     data = config_dict(tmp_path)
-    data["marker"] = {
+    data["models"]["marker"] = {
+        "kind": CLASSIFIER,
         "label": "gene",
         "training": {"reverse_label": "reverse", "registered_model": "marker"},
     }
-    data["specialists"]["culicidae"].update({"router_label": "Diptera", **specialist})
-    return AppConfig.model_validate(data)
+    data["models"]["culicidae"].update({"router_label": "Diptera", **specialist})
+    return app_config(data)
 
 
 def factory(tracker: FakeTracker) -> Any:
@@ -57,7 +59,7 @@ def test_skips_specialists_not_used_at_serving(tmp_path: Path) -> None:
 
 
 def test_loads_only_what_the_serving_steps_use(tmp_path: Path) -> None:
-    config = AppConfig.model_validate(config_dict(tmp_path))  # No marker
+    config = app_config(config_dict(tmp_path))  # No marker
 
     loaded = load_identifier(config, factory(models()))
 

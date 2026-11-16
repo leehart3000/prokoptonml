@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from bio_app import minimal
 from prokopton.ml.config import AppConfig
 from prokopton.ml.inference import models
 from prokopton.ml.inference.models import (
@@ -12,7 +13,6 @@ from prokopton.ml.inference.models import (
     model_entry_point_kinds,
     serving_models,
 )
-from test_schema_2 import minimal
 
 
 def kind(name: str) -> ModelKind:
@@ -42,7 +42,6 @@ def test_installed_packages_can_add_kinds(monkeypatch: pytest.MonkeyPatch) -> No
 def test_serving_uses_the_models_of_the_steps_in_its_chain() -> None:
     config = AppConfig.model_validate(
         minimal(
-            schema=3,
             models={
                 "a": {"kind": "bio.kmer-classifier"},
                 "b": {"kind": "bio.kmer-classifier"},

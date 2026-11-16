@@ -7,12 +7,12 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from bio_app import minimal
 from prokopton.ml import settings as module
 from prokopton.ml.bio.config import BioConfig, bio_section, bio_settings
 from prokopton.ml.config import AppConfig, convert_schema_3
 from prokopton.ml.settings import Declared, Settings, declared, entry_point_settings
 from prokopton.ml.training.tracking import _experiment
-from test_schema_2 import minimal
 
 
 class Thing(BaseModel):

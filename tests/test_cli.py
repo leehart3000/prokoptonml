@@ -16,12 +16,17 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 def app_toml(raw_dir: str = "r") -> str:
     phylum = (FIXTURES / "phylum_lineages_gb273.tsv").as_posix()
     return f"""\
-schema = 2
+schema = 4
 name = "testapp"
 title = "Test app"
 
-[data.source]
+[data]
 release = "GB999"
+
+[paths]
+models_dir = "m"
+
+[bio.source]
 doi = "10.0000/example"
 licence = "CC-BY-4.0"
 archive_url = "https://example.org/fake.zip"
@@ -30,16 +35,15 @@ archive_name = "fake.zip"
 member_template = "x/{{gene}}.fasta.gz"
 genes = ["CO1"]
 
-[data.paths]
+[bio.paths]
 raw_dir = "{raw_dir}"
 interim_dir = "i"
 processed_dir = "p"
 splits_dir = "s"
 leakage_dir = "l"
 samples_dir = "a"
-models_dir = "m"
 
-[validation]
+[bio.validation]
 phylum_reference = "{phylum}"
 
 [models.router]

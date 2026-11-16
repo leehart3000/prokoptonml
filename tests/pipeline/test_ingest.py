@@ -5,10 +5,12 @@ import hashlib
 import json
 import zipfile
 from pathlib import Path
+from typing import Any
 
 import pyarrow.parquet as pq
 import pytest
 
+from bio_app import app_config, sequence_app, write_config
 from prokopton.ml.bio.config import bio_section
 from prokopton.ml.bio.pipeline.ingest import REPORT_NAME, IngestError, ingest
 from prokopton.ml.cli import main
@@ -50,36 +52,19 @@ def make_release(folder: Path) -> tuple[Path, Path]:
     return archive, checksums
 
 
-def make_config(tmp_path: Path, genes: list[str]) -> AppConfig:
+def make_data(tmp_path: Path, genes: list[str]) -> dict[str, Any]:
     archive, checksums = make_release(tmp_path / "upstream")
-    return AppConfig.model_validate(
-        {
-            "name": "testapp",
-            "title": "Test app",
-            "data": {
-                "source": {
-                    "release": "GB999",
-                    "doi": "10.0000/example",
-                    "licence": "CC-BY-4.0",
-                    "archive_url": archive.as_uri(),
-                    "checksums_url": checksums.as_uri(),
-                    "archive_name": "fake.zip",
-                    "member_template": TEMPLATE,
-                    "genes": genes,
-                },
-                "paths": {
-                    "raw_dir": str(tmp_path / "raw"),
-                    "interim_dir": str(tmp_path / "interim"),
-                    "processed_dir": str(tmp_path / "processed"),
-                    "splits_dir": str(tmp_path / "splits"),
-                    "leakage_dir": str(tmp_path / "leakage"),
-                    "samples_dir": str(tmp_path / "samples"),
-                    "models_dir": str(tmp_path / "models"),
-                },
-            },
-            "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
-        }
+    data = sequence_app(tmp_path, genes=genes)
+    data["bio"]["source"].update(
+        archive_url=archive.as_uri(),
+        checksums_url=checksums.as_uri(),
+        member_template=TEMPLATE,
     )
+    return data
+
+
+def make_config(tmp_path: Path, genes: list[str]) -> AppConfig:
+    return app_config(make_data(tmp_path, genes))
 
 
 def test_ingest_writes_parquet_and_report(tmp_path: Path) -> None:
@@ -135,38 +120,9 @@ def test_ingest_rejects_tampered_file(tmp_path: Path) -> None:
 
 
 def test_cli_ingest_succeeds(tmp_path: Path) -> None:
-    config = make_config(tmp_path, ["CO1"])
-    source = bio_section(config).source
-    config_path = tmp_path / "app.toml"
-    config_path.write_text(
-        f"""
-name = "testapp"
-title = "Test app"
-
-[data.source]
-release = "{config.data.release}"
-doi = "{source.doi}"
-licence = "{source.licence}"
-archive_url = "{source.archive_url}"
-checksums_url = "{source.checksums_url}"
-archive_name = "{source.archive_name}"
-member_template = "{source.member_template}"
-genes = ["CO1"]
-
-[data.paths]
-raw_dir = "{bio_section(config).paths.raw_dir}"
-interim_dir = "{bio_section(config).paths.interim_dir}"
-processed_dir = "{bio_section(config).paths.processed_dir}"
-splits_dir = "{bio_section(config).paths.splits_dir}"
-leakage_dir = "{bio_section(config).paths.leakage_dir}"
-samples_dir = "{bio_section(config).paths.samples_dir}"
-models_dir = "{config.paths.models_dir}"
-
-[validation]
-phylum_reference = "{bio_section(config).validation.phylum_reference}"
-""",
-        encoding="utf-8",
-    )
+    data = make_data(tmp_path, ["CO1"])
+    config = app_config(data)
+    config_path = write_config(tmp_path / "app.toml", data)
 
     assert main(["--config", str(config_path), "run", "ingest"]) == 0
     assert (
@@ -179,36 +135,12 @@ def test_cli_returns_error_for_invalid_manifest(tmp_path: Path) -> None:
     raw_dir.mkdir()
     (raw_dir / "fake.zip").write_bytes(b"")
     (raw_dir / "release_sha256.txt").write_text("not a checksum\n", encoding="utf-8")
-    config_path = tmp_path / "app.toml"
-    config_path.write_text(
-        f"""
-name = "testapp"
-title = "Test app"
-
-[data.source]
-release = "GB999"
-doi = "10.0000/example"
-licence = "CC-BY-4.0"
-archive_url = "https://example.org/fake.zip"
-checksums_url = "https://example.org/release_sha256.txt"
-archive_name = "fake.zip"
-member_template = "{TEMPLATE}"
-genes = ["CO1"]
-
-[data.paths]
-raw_dir = "{raw_dir}"
-interim_dir = "{tmp_path / "interim"}"
-processed_dir = "{tmp_path / "processed"}"
-splits_dir = "{tmp_path / "splits"}"
-leakage_dir = "{tmp_path / "leakage"}"
-samples_dir = "{tmp_path / "samples"}"
-models_dir = "{tmp_path / "models"}"
-
-[validation]
-phylum_reference = "{tmp_path / "phyla.tsv"}"
-""",
-        encoding="utf-8",
+    data = sequence_app(tmp_path)
+    data["bio"]["source"].update(
+        checksums_url="https://example.org/release_sha256.txt",
+        member_template=TEMPLATE,
     )
+    config_path = write_config(tmp_path / "app.toml", data)
 
     assert main(["--config", str(config_path), "run", "ingest"]) == 1
 

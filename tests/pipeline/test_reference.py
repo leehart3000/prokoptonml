@@ -10,6 +10,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+from bio_app import CLASSIFIER, SPECIALIST, app_config, sequence_app, write_config
 from prokopton.ml.bio.pipeline.reference import (
     CONTRADICTED_NAME,
     REPORT_NAME,
@@ -22,7 +23,6 @@ from prokopton.ml.bio.pipeline.reference import (
 )
 from prokopton.ml.bio.specialists.identify import NEIGHBOURS_NAME
 from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig
 
 
 def test_first_per_key_keeps_the_lowest_priorities_up_to_each_cap() -> None:
@@ -82,36 +82,19 @@ SERVING_SPLITS_SORTED = tuple(sorted(SERVING_SPLITS))
 
 
 def config_dict(tmp_path: Path) -> dict[str, Any]:
-    paths = ["raw", "interim", "processed", "splits", "leakage", "samples", "models"]
-    return {
-        "name": "testapp",
-        "title": "Test app",
-        "data": {
-            "source": {
-                "release": "GB999",
-                "doi": "10.0000/example",
-                "licence": "CC-BY-4.0",
-                "archive_url": "https://example.org/fake.zip",
-                "checksums_url": "https://example.org/sums.txt",
-                "archive_name": "fake.zip",
-                "member_template": "x/{gene}.fasta.gz",
-                "genes": ["CO1"],
-            },
-            "paths": {f"{name}_dir": str(tmp_path / name) for name in paths},
-        },
-        "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
-        "specialists": {
-            "culicidae": {
-                "target": "Culicidae",
-                "background": "Diptera",
-                "close_relatives": ["Chaoboridae"],
-                "per_species": 20,
-                "background_per_family": 100,
-                # Random test sequences have no real neighbours to vote
-                "curate": False,
-            }
-        },
+    culicidae = {
+        "kind": SPECIALIST,
+        "target": "Culicidae",
+        "background": "Diptera",
+        "close_relatives": ["Chaoboridae"],
+        "per_species": 20,
+        "background_per_family": 100,
+        # Random test sequences have no real neighbours to vote
+        "curate": False,
     }
+    return sequence_app(
+        tmp_path, models={"router": {"kind": CLASSIFIER}, "culicidae": culicidae}
+    )
 
 
 def write_records(tmp_path: Path) -> None:
@@ -122,7 +105,7 @@ def write_records(tmp_path: Path) -> None:
 
 def test_reference_keeps_capped_targets_and_background(tmp_path: Path) -> None:
     write_records(tmp_path)
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
 
     report = build_reference(config, "culicidae")
 
@@ -153,7 +136,7 @@ def test_reference_keeps_capped_targets_and_background(tmp_path: Path) -> None:
 
 def test_reference_is_reproducible(tmp_path: Path) -> None:
     write_records(tmp_path)
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
     build_reference(config, "culicidae")
     first = (
         pq.read_table(reference_path(config, "culicidae"))
@@ -173,7 +156,7 @@ def test_reference_is_reproducible(tmp_path: Path) -> None:
 
 def test_serving_reference_uses_every_split(tmp_path: Path) -> None:
     write_records(tmp_path)
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
 
     report = build_reference(config, "culicidae", serving=True)
 
@@ -189,8 +172,8 @@ def test_serving_reference_uses_every_split(tmp_path: Path) -> None:
 def test_serving_can_keep_more_per_species(tmp_path: Path) -> None:
     write_records(tmp_path)
     data = config_dict(tmp_path)
-    data["specialists"]["culicidae"]["serving_per_species"] = 25
-    config = AppConfig.model_validate(data)
+    data["models"]["culicidae"]["serving_per_species"] = 25
+    config = app_config(data)
 
     build_reference(config, "culicidae", serving=True)
 
@@ -200,7 +183,7 @@ def test_serving_can_keep_more_per_species(tmp_path: Path) -> None:
 
 
 def test_reference_requires_split_data(tmp_path: Path) -> None:
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
 
     with pytest.raises(ReferenceStageError, match="run the split stage first"):
         build_reference(config, "culicidae")
@@ -209,8 +192,8 @@ def test_reference_requires_split_data(tmp_path: Path) -> None:
 def test_reference_needs_target_records(tmp_path: Path) -> None:
     write_records(tmp_path)
     data = config_dict(tmp_path)
-    data["specialists"]["culicidae"]["target"] = "Simuliidae"
-    config = AppConfig.model_validate(data)
+    data["models"]["culicidae"]["target"] = "Simuliidae"
+    config = app_config(data)
 
     with pytest.raises(ReferenceStageError, match="No records of Simuliidae"):
         build_reference(config, "culicidae")
@@ -218,20 +201,7 @@ def test_reference_needs_target_records(tmp_path: Path) -> None:
 
 
 def write_app_toml(tmp_path: Path) -> Path:
-    data = config_dict(tmp_path)
-    lines = [f'name = "{data["name"]}"', f'title = "{data["title"]}"']
-    for section, values in (
-        ("data.source", data["data"]["source"]),
-        ("data.paths", data["data"]["paths"]),
-        ("validation", data["validation"]),
-        ("specialists.culicidae", data["specialists"]["culicidae"]),
-    ):
-        lines.append(f"\n[{section}]")
-        # These values are written the same way in TOML and JSON
-        lines += [f"{key} = {json.dumps(value)}" for key, value in values.items()]
-    path = tmp_path / "app.toml"
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return path
+    return write_config(tmp_path / "app.toml", config_dict(tmp_path))
 
 
 def test_cli_reference(tmp_path: Path) -> None:
@@ -246,7 +216,7 @@ def test_reference_writes_in_batches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_records(tmp_path)
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
     build_reference(config, "culicidae")
     whole = pq.read_table(reference_path(config, "culicidae")).to_pylist()
     monkeypatch.setattr("prokopton.ml.bio.pipeline.reference.BATCH_SIZE", 7)
@@ -290,8 +260,8 @@ def test_reference_leaves_out_records_that_look_like_another_species(
     path.parent.mkdir(parents=True)
     pq.write_table(pa.Table.from_pylist(rows), path)
     data = config_dict(tmp_path)
-    data["specialists"]["culicidae"]["curate"] = True
-    config = AppConfig.model_validate(data)
+    data["models"]["culicidae"]["curate"] = True
+    config = app_config(data)
 
     report = build_reference(config, "culicidae")
 
@@ -309,10 +279,10 @@ def test_reference_leaves_out_records_that_look_like_another_species(
 def test_reference_leaves_out_records_listed_by_hand(tmp_path: Path) -> None:
     write_records(tmp_path)
     data = config_dict(tmp_path)
-    data["specialists"]["culicidae"]["excluded"] = [
+    data["models"]["culicidae"]["excluded"] = [
         {"accession": "r0", "reason": "A test of the list"}
     ]
-    config = AppConfig.model_validate(data)
+    config = app_config(data)
 
     build_reference(config, "culicidae")
 
@@ -348,8 +318,8 @@ def test_reference_leaves_out_records_that_contradict_refseq(tmp_path: Path) -> 
     pq.write_table(pa.Table.from_pylist(rows), path)
     anchors = tmp_path / "anchors.fasta"
     data = config_dict(tmp_path)
-    data["specialists"]["culicidae"].update(curate=True, anchors=str(anchors))
-    config = AppConfig.model_validate(data)
+    data["models"]["culicidae"].update(curate=True, anchors=str(anchors))
+    config = app_config(data)
 
     with pytest.raises(ReferenceStageError, match="fetch the RefSeq anchors"):
         build_reference(config, "culicidae")

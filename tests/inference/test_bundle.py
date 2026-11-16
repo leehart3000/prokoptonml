@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from bio_app import CLASSIFIER, app_config
 from fakes import FakeTracker
 from inference_world import FakeMarker, FakeRouter
 from prokopton.ml import cli
@@ -24,12 +25,13 @@ from specialist_world import AEGYPTI, config_dict, prepared
 
 def app(tmp_path: Path) -> AppConfig:
     data = config_dict(tmp_path)
-    data["marker"] = {
+    data["models"]["marker"] = {
+        "kind": CLASSIFIER,
         "label": "gene",
         "training": {"reverse_label": "reverse", "registered_model": "marker"},
     }
-    data["specialists"]["culicidae"]["router_label"] = "Diptera"
-    return AppConfig.model_validate(data)
+    data["models"]["culicidae"]["router_label"] = "Diptera"
+    return app_config(data)
 
 
 def factory() -> Any:
@@ -126,7 +128,7 @@ def test_refuses_a_missing_or_altered_bundle(tmp_path: Path) -> None:
 
 
 def test_needs_serving_steps(tmp_path: Path) -> None:
-    data = AppConfig.model_validate(config_dict(tmp_path)).model_dump(mode="json")
+    data = app_config(config_dict(tmp_path)).model_dump(mode="json")
     data["serving"] = {"chain": [], "steps": {}}
 
     with pytest.raises(BundleError, match="no serving steps"):
