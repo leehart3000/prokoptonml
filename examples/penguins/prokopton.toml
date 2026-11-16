@@ -1,0 +1,78 @@
+# Palmer Penguins: a small tabular app, the proof that ProkoptonML is not tied
+# to DNA. It predicts a penguin's species from its measurements, island and
+# sex. Run it from this folder (see README.md). It uses only the platform's
+# core: no prokopton.ml.bio.
+
+schema = 4
+
+name = "penguins"
+title = "Palmer Penguins"
+
+[data]
+# palmerpenguins 0.1.1 from CRAN (see data/README.md)
+release = "palmerpenguins-0.1.1"
+
+[paths]
+# Generated, and git-ignored
+models_dir = "models"
+
+[mlflow]
+tracking_uri = "sqlite:///mlflow/mlflow.db"
+artifact_dir = "mlflow/artifacts"
+
+[models.species]
+kind = "core.tabular-classifier"
+card = "model-card.md"
+
+[models.species.table]
+path = "data/penguins.csv"
+target = "species"
+numeric = ["bill_length_mm", "bill_depth_mm", "flipper_length_mm", "body_mass_g"]
+categorical = ["island", "sex"]
+
+[models.species.split]
+validation_fraction = 0.2
+test_fraction = 0.2
+seed = 42
+
+[models.species.training]
+c_values = [0.1, 1.0, 10.0]
+
+[pipeline]
+stages = ["split", "train", "evaluate", "card", "bundle"]
+
+[stages.split]
+kind = "core.tabular-split"
+model = "species"
+
+[stages.train]
+kind = "core.tabular-train"
+model = "species"
+
+[stages.evaluate]
+kind = "core.tabular-evaluate"
+model = "species"
+
+[stages.card]
+kind = "core.tabular-card"
+model = "species"
+
+[stages.bundle]
+kind = "core.bundle"
+
+# How an answer is made: POST /classify with one record
+[serving]
+endpoint = "classify"
+description = "Predict a penguin's species from its measurements, island and sex."
+chain = ["record", "species"]
+
+[serving.steps.record]
+kind = "core.record-input"
+model = "species"
+# Row 1 of the data: an Adélie penguin from Torgersen
+example = { bill_length_mm = 39.1, bill_depth_mm = 18.7, flipper_length_mm = 181, body_mass_g = 3750, island = "Torgersen", sex = "male" }
+
+[serving.steps.species]
+kind = "core.classifier"
+model = "species"
+threshold = 0.9

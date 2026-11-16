@@ -36,3 +36,49 @@ jobs:
 
       - name: Run checks
         run: pixi run check
+
+  penguins:
+    name: Palmer Penguins, without bio
+    runs-on: ubuntu-24.04 # Pinned; move to a newer image on purpose
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Pixi
+        uses: prefix-dev/setup-pixi@9936258fee697aff89b3fed6ca1f80a382ef694e # v0.11.3
+        with:
+          pixi-version: v0.84.1
+          locked: true
+          cache: true
+          cache-write: false
+
+      # The proof that the platform is general: install the package as a user
+      # would, from its wheel, then remove prokopton.ml.bio and its entry
+      # points, and run the example end to end
+      - name: Install the wheel, without bio
+        run: |
+          pixi run python -m venv "$RUNNER_TEMP/nobio"
+          "$RUNNER_TEMP/nobio/bin/pip" wheel --quiet --no-deps --wheel-dir dist .
+          "$RUNNER_TEMP/nobio/bin/pip" install --quiet dist/prokopton_ml-*.whl
+          site="$("$RUNNER_TEMP/nobio/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+          rm -r "$site/prokopton/ml/bio"
+          sed -i '/^bio = /d' "$site"/prokopton_ml-*.dist-info/entry_points.txt
+          "$RUNNER_TEMP/nobio/bin/python" -c "
+          import importlib.util
+          assert importlib.util.find_spec('prokopton.ml.bio') is None, 'bio is still installed'
+          print('prokopton.ml.bio is not installed')"
+
+      - name: Run the Palmer Penguins example
+        working-directory: examples/penguins
+        run: |
+          "$RUNNER_TEMP/nobio/bin/prokopton-ml" run --all
+          "$RUNNER_TEMP/nobio/bin/prokopton-ml" check models/bundle tests/known-answers
+          "$RUNNER_TEMP/nobio/bin/python" -c "
+          import sys
+          import prokopton.ml.cli
+          assert not [m for m in sys.modules if m.startswith('prokopton.ml.bio')]
+          print('Ran without importing prokopton.ml.bio')"
+          sed -n '/## Results on the test set/,/## Limits/p' model-card.md
