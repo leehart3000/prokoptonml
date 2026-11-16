@@ -181,7 +181,14 @@ class Chain:
         self.config = config
         self.steps: list[tuple[str, StepRunner]] = []
         for name in config.serving.chain:
-            kind = kinds[config.serving.steps[name].kind]
+            settings = config.serving.steps[name]
+            if settings.model is not None and settings.model not in models:
+                msg = (
+                    f"Serving step {name!r} uses the {settings.model!r} model, "
+                    "which is not loaded"
+                )
+                raise ValueError(msg)
+            kind = kinds[settings.kind]
             self.steps.append((name, kind.build(config, name, models)))
         first = config.serving.steps[config.serving.chain[0]].kind
         self.result_type = kinds[first].result

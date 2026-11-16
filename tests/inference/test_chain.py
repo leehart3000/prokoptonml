@@ -124,3 +124,19 @@ def test_installed_packages_can_add_kinds(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(chain, "entry_points", lambda group: [point])
 
     assert serving_entry_point_kinds() == [kind]
+
+
+def test_a_steps_model_must_be_loaded() -> None:
+    app = AppConfig.model_validate(
+        minimal(
+            schema=3,
+            models={"router": {"kind": "bio.kmer-classifier"}},
+            serving={
+                "chain": ["first"],
+                "steps": {"first": {"kind": "test.first", "model": "router"}},
+            },
+        )
+    )
+
+    with pytest.raises(ValueError, match="uses the 'router' model, which is not"):
+        Chain(app, KINDS, {})
