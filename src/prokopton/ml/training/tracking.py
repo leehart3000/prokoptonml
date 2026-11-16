@@ -14,6 +14,7 @@ from typing import Any, Protocol
 from prokopton.ml.config import AppConfig
 
 __all__ = [
+    "SAFE_TYPES",
     "MlflowTracker",
     "Tracker",
     "mlflow_tracker",
@@ -54,6 +55,12 @@ class Tracker(Protocol):
     def load_model(self, registered_name: str, alias: str) -> tuple[Any, str]:
         """Load the model version that ``alias`` points at, and its version."""
         ...
+
+
+SAFE_TYPES = ("numpy.dtype",)
+"""Types that skops does not trust by default but are safe to rebuild: some
+scikit-learn settings hold a NumPy dtype (such as ``OneHotEncoder``'s
+``dtype``)."""
 
 
 def own_types(model: Any) -> list[str]:
@@ -122,7 +129,7 @@ class MlflowTracker:
         options: dict[str, Any] = {}
         accepted = inspect.signature(self._mlflow.sklearn.log_model).parameters
         if "skops_trusted_types" in accepted:
-            options["skops_trusted_types"] = own_types(model)
+            options["skops_trusted_types"] = sorted({*own_types(model), *SAFE_TYPES})
         info = self._mlflow.sklearn.log_model(
             model,
             name="model",

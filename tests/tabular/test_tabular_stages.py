@@ -291,3 +291,27 @@ def test_the_stages_run_from_the_command_line(
     assert main(["stages"]) == 0
     assert "core.tabular-card (kind)  [last run" in capsys.readouterr().out
     assert (tmp_path / "models" / "kind" / "card.md").is_file()
+
+
+def test_the_classifier_is_registered_in_mlflow_and_loads_again(
+    tmp_path: Path,
+) -> None:
+    mlflow = pytest.importorskip("mlflow")
+    data = app_data(tmp_path)
+    tracking = f"sqlite:///{tmp_path / 'mlflow.db'}"
+    data["mlflow"] = {"tracking_uri": tracking, "artifact_dir": str(tmp_path / "art")}
+    config = AppConfig.model_validate(data)
+    split(config, "kind")
+
+    report = train(config, "kind")
+    tested = evaluate(config, "kind")
+
+    assert report.model_version == tested.model_version == "1"
+    mlflow.set_tracking_uri(tracking)
+    loaded = mlflow.sklearn.load_model("models:/things-kind@candidate")
+    record = read_split(config, "kind", "test").head(1)
+    assert loaded.predict(record[["size", "weight", "colour"]])[0] in {
+        "small",
+        "medium",
+        "large",
+    }

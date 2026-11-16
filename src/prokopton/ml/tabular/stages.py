@@ -407,7 +407,7 @@ def write_card(config: AppConfig, model: str) -> Path:
 def _split(context: StageContext) -> str:
     assert context.model is not None  # The registry checks this
     report = split(context.config, context.model)
-    return "split: " + ", ".join(f"{n} {report.records[n]}" for n in SPLITS)
+    return ", ".join(f"{n} {report.records[n]}" for n in SPLITS)
 
 
 def _train(context: StageContext) -> str:
