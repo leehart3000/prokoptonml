@@ -3,7 +3,7 @@
     prokopton-ml stages                      the pipeline, and when each stage ran
     prokopton-ml run STAGE [STAGE ...]       run stages (or --all, or --from STAGE)
     prokopton-ml identify --input FILE       identify one sequence
-    prokopton-ml migrate-config [--write]    rewrite a schema 1 config as schema 2
+    prokopton-ml migrate-config [--write]    rewrite an older config as schema 3
 
 The config is ``prokopton.toml`` in this folder or a parent folder, unless
 ``--config PATH`` is given.
@@ -24,7 +24,12 @@ from prokopton.ml.bio.stages import bio_kinds
 from prokopton.ml.config import AppConfig, UnknownClassifierError
 from prokopton.ml.inference.bundle import BundleError, load_bundle
 from prokopton.ml.inference.load import LoadError, load_identifier
-from prokopton.ml.migrate import MigrationError, is_schema_1, migrate_text
+from prokopton.ml.migrate import (
+    CURRENT_SCHEMA,
+    MigrationError,
+    migrate_text,
+    schema_of,
+)
 from prokopton.ml.stages import (
     Registry,
     StageError,
@@ -94,7 +99,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     migrate = commands.add_parser(
         "migrate-config",
-        help="Rewrite a schema 1 config file as schema 2, keeping its comments "
+        help="Rewrite an older config file as the current schema, keeping its "
+        "comments "
         "(prints it; --write replaces the file).",
     )
     migrate.add_argument("--write", action="store_true", help="Replace the file.")
@@ -167,13 +173,15 @@ def _identify(config: AppConfig | None, source: Path, bundle: Path | None) -> st
 
 
 def _migrate(path: Path, write: bool) -> str:
-    """Rewrite a schema 1 config as schema 2: print it, or replace the file."""
+    """Rewrite an older config as the current schema: print it, or replace
+    the file."""
     result = migrate_text(path.read_text("utf-8"))
+    done = f"{path} rewritten as schema {CURRENT_SCHEMA}"
     if not write:
         sys.stdout.write(result)
-        return f"{path} rewritten as schema 2 (printed; --write replaces the file)"
+        return f"{done} (printed; --write replaces the file)"
     path.write_text(result, "utf-8")
-    return f"{path} rewritten as schema 2"
+    return done
 
 
 def _warn_if_schema_1(path: Path) -> None:
@@ -181,12 +189,13 @@ def _warn_if_schema_1(path: Path) -> None:
         data = tomllib.loads(path.read_text("utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
         return  # load_config reports these
-    if is_schema_1(data):
+    schema = schema_of(data)
+    if schema < CURRENT_SCHEMA:
         logger.warning(
-            "%s is schema 1, read by converting it; this will stop working in "
-            "prokopton-ml 0.2.0. Run: prokopton-ml migrate-config %s --write",
+            "%s is schema %s, read by converting it; this will stop working in "
+            "prokopton-ml 0.2.0. Run: prokopton-ml migrate-config --write",
             path,
-            path,
+            schema,
         )
 
 

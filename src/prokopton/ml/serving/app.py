@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from prokopton.ml import __version__
@@ -147,9 +148,9 @@ def _log_line(result: Result, cached: bool) -> dict[str, Any]:
         "event": "identify",
         "status": result.status,
         "reason": result.reason,
-        "length": result.length,
-        "strand": result.strand,
-        "long_input": result.region is not None,
+        "length": getattr(result, "length", None),
+        "strand": getattr(result, "strand", None),
+        "long_input": getattr(result, "region", None) is not None,
         "level": result.answer.level if result.answer else None,
         "confident": result.answer.confident if result.answer else None,
         "router_label": top.get("label"),
@@ -208,8 +209,8 @@ def create_app(settings: Settings, loaded: Loaded | None = None) -> FastAPI:
             versions=found.versions,
         )
 
-    @app.post("/identify", dependencies=[Depends(check_key)])
-    def identify(body: IdentifyRequest) -> Result:
+    @app.post("/identify", dependencies=[Depends(check_key)], response_model=None)
+    def identify(body: IdentifyRequest) -> JSONResponse:
         key = hashlib.sha256(body.sequence.encode("utf-8")).hexdigest()
         result = cache.get(key)
         cached = result is not None
@@ -217,7 +218,8 @@ def create_app(settings: Settings, loaded: Loaded | None = None) -> FastAPI:
             result = state["loaded"].identifier.identify(body.sequence)
             cache.put(key, result)
         logger.info(json.dumps(_log_line(result, cached)))
-        return result
+        # The result's own type (with its kind's fields), not the base Result
+        return JSONResponse(result.model_dump(mode="json"))
 
     return app
 

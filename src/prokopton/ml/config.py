@@ -15,7 +15,14 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from prokopton.core.config import ConfigModel
-from pydantic import AliasChoices, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    Discriminator,
+    Field,
+    Tag,
+    field_validator,
+    model_validator,
+)
 
 __all__ = [
     "ALLOWED_URL_SCHEMES",
@@ -30,20 +37,28 @@ __all__ = [
     "ComplexConfig",
     "DataConfig",
     "DataPathsConfig",
-    "InferenceConfig",
     "LeakageConfig",
+    "MarkerStepConfig",
     "Midori2SourceConfig",
     "MlflowConfig",
     "ModelConfig",
+    "OtherStepConfig",
     "PipelineConfig",
+    "RouterStepConfig",
+    "SequenceInputStepConfig",
+    "ServingConfig",
+    "ServingStepConfig",
     "SpecialistConfig",
     "SpecialistEvaluationConfig",
+    "SpecialistStepConfig",
     "SplitConfig",
     "StageConfig",
     "UnknownClassifierError",
     "ValidationConfig",
     "convert_schema_1",
+    "convert_schema_2",
     "default_stages",
+    "upgrade",
 ]
 
 ALLOWED_URL_SCHEMES: tuple[str, ...] = ("https://", "file://")
@@ -656,40 +671,184 @@ def convert_schema_1(data: dict[str, Any]) -> dict[str, Any]:
     return converted
 
 
-class InferenceConfig(ConfigModel):
-    """How a submitted sequence is checked and identified.
+_CLASSIFIER_KIND = "bio.kmer-classifier"
+_SPECIALIST_KIND = "bio.specialist"
 
-    A submission is one DNA sequence (plain, or one FASTA record) of at most
-    ``max_length`` bases, with at most ``max_ambiguous_fraction`` ambiguous
-    bases. The marker classifier checks it is ``barcode_gene`` and finds its
-    strand. A sequence longer than ``long_input`` bases (such as a whole
-    mitochondrial genome) is searched for the barcode gene first: windows of
-    ``window`` bases, every ``step`` bases on both strands, are scored, and
-    the longest run of windows with at least ``region_probability`` for the
-    gene is used. Each specialist is consulted when the router gives its
-    ``router_label`` at least ``route_threshold`` (so a likely group is
-    checked even when the router is unsure).
-    """
 
-    barcode_gene: str = Field(default="CO1", min_length=1)
+class SequenceInputStepConfig(ConfigModel):
+    """Checks a submission: one DNA sequence (plain, or one FASTA record) of
+    at most ``max_length`` bases, with at most ``max_ambiguous_fraction``
+    ambiguous bases, and at least the ``model``'s serving ``min_length``."""
+
+    kind: Literal["bio.sequence-input"]
+    model: str
+    """The classifier whose validated range (its ``serving.min_length``) sets
+    the shortest sequence accepted."""
     max_length: int = Field(default=20_000, ge=1)
     max_ambiguous_fraction: float = Field(default=0.10, ge=0.0, le=1.0)
+    example: str = ""
+    """An example sequence, shown in the API's description."""
+
+
+class MarkerStepConfig(ConfigModel):
+    """Finds the barcode and its strand with a marker classifier (``model``).
+
+    A sequence that is not ``barcode_gene`` is declined, saying which gene it
+    looks like (with ``unsupported_note``, if set). A sequence longer than
+    ``long_input`` bases (such as a whole mitochondrial genome) is searched
+    for the barcode gene first: windows of ``window`` bases, every ``step``
+    bases on both strands, are scored, and the longest run of windows with at
+    least ``region_probability`` for the gene is used.
+    """
+
+    kind: Literal["bio.marker"]
+    model: str
+    barcode_gene: str = Field(default="CO1", min_length=1)
     long_input: int = Field(default=1_000, ge=1)
     window: int = Field(default=600, ge=1)
     step: int = Field(default=60, ge=1)
     region_probability: float = Field(default=0.9, gt=0.0, le=1.0)
-    route_threshold: float = Field(default=0.10, gt=0.0, le=1.0)
     unsupported_note: str = ""
     """Added to the message when a sequence is declined as another marker, or
     as a long sequence without the barcode gene (such as which other markers
     are planned)."""
 
 
+class RouterStepConfig(ConfigModel):
+    """Predicts the broad group with a classifier (``model``): the answer
+    unless a specialist gives a more specific one."""
+
+    kind: Literal["bio.router"]
+    model: str
+
+
+class SpecialistStepConfig(ConfigModel):
+    """Consults a specialist (``model``) when the router gives the
+    specialist's ``router_label`` at least ``route_threshold`` (so a likely
+    group is checked even when the router is unsure). A member answer is
+    final; otherwise the router's answer stands."""
+
+    kind: Literal["bio.specialist"]
+    model: str
+    route_threshold: float = Field(default=0.10, gt=0.0, le=1.0)
+
+
+class OtherStepConfig(ConfigModel):
+    """A serving step of a kind provided by another package."""
+
+    kind: str = Field(min_length=1)
+    model: str | None = None
+
+
+_STEP_TYPES: dict[str, type[ConfigModel]] = {
+    "bio.sequence-input": SequenceInputStepConfig,
+    "bio.marker": MarkerStepConfig,
+    "bio.router": RouterStepConfig,
+    "bio.specialist": SpecialistStepConfig,
+}
+_STEP_MODEL_KINDS = {
+    "bio.sequence-input": _CLASSIFIER_KIND,
+    "bio.marker": _CLASSIFIER_KIND,
+    "bio.router": _CLASSIFIER_KIND,
+    "bio.specialist": _SPECIALIST_KIND,
+}
+
+
+def _step_tag(value: Any) -> str:
+    kind = value.get("kind") if isinstance(value, dict) else getattr(value, "kind", "")
+    return kind if kind in _STEP_TYPES else "other"
+
+
+ServingStepConfig = Annotated[
+    Annotated[SequenceInputStepConfig, Tag("bio.sequence-input")]
+    | Annotated[MarkerStepConfig, Tag("bio.marker")]
+    | Annotated[RouterStepConfig, Tag("bio.router")]
+    | Annotated[SpecialistStepConfig, Tag("bio.specialist")]
+    | Annotated[OtherStepConfig, Tag("other")],
+    Discriminator(_step_tag),
+]
+"""One serving step's settings, chosen by its ``kind``."""
+
+
+class ServingConfig(ConfigModel):
+    """How the app answers a request: a chain of serving steps, in order
+    (``chain``), each configured under ``[serving.steps.<name>]``, served at
+    ``POST /<endpoint>``."""
+
+    endpoint: str = Field(default="predict", pattern=r"^[a-z][a-z0-9-]*$")
+    description: str = "Make a prediction, with a decision trace."
+    chain: tuple[str, ...] = ()
+    steps: dict[str, ServingStepConfig] = Field(default_factory=dict)
+
+
+_INPUT_KEYS = ("max_length", "max_ambiguous_fraction")
+_MARKER_KEYS = (
+    "barcode_gene",
+    "long_input",
+    "window",
+    "step",
+    "region_probability",
+    "unsupported_note",
+)
+_SPECIALIST_KEYS = ("route_threshold",)
+
+
+def convert_schema_2(data: dict[str, Any]) -> dict[str, Any]:
+    """Convert a schema 2 config to schema 3.
+
+    ``[inference]`` becomes the serving steps a schema 2 app ran: ``input``
+    (with the router's validated range), ``marker`` (if the app has one),
+    ``router``, then each specialist with a ``router_label``.
+    """
+    converted = {key: value for key, value in data.items() if key != "inference"}
+    inference = data.get("inference") or {}
+
+    def take(keys: tuple[str, ...]) -> dict[str, Any]:
+        return {key: inference[key] for key in keys if key in inference}
+
+    models = data.get("models") or {}
+    steps: dict[str, dict[str, Any]] = {}
+    if "router" in models:
+        steps["input"] = {
+            "kind": "bio.sequence-input",
+            "model": "router",
+            **take(_INPUT_KEYS),
+        }
+        if "marker" in models:
+            steps["marker"] = {
+                "kind": "bio.marker",
+                "model": "marker",
+                **take(_MARKER_KEYS),
+            }
+        steps["router"] = {"kind": "bio.router", "model": "router"}
+    for name, settings in models.items():
+        if settings.get("kind") == _SPECIALIST_KIND and settings.get("router_label"):
+            steps[name] = {
+                "kind": "bio.specialist",
+                "model": name,
+                **take(_SPECIALIST_KEYS),
+            }
+    converted["schema"] = 3
+    converted["serving"] = {"chain": list(steps), "steps": steps}
+    return converted
+
+
+def upgrade(data: dict[str, Any]) -> dict[str, Any]:
+    """Convert config data of any older schema to the current one (3)."""
+    schema = data.get("schema", data.get("schema_version", 1))
+    if schema == 1:
+        data = convert_schema_1(data)
+        schema = 2
+    if schema == 2:
+        data = convert_schema_2(data)
+    return data
+
+
 class AppConfig(ConfigModel):
     """Top-level configuration for a ProkoptonML application."""
 
-    schema_version: Literal[2] = Field(
-        default=2,
+    schema_version: Literal[3] = Field(
+        default=3,
         validation_alias=AliasChoices("schema", "schema_version"),
         serialization_alias="schema",
     )
@@ -702,15 +861,13 @@ class AppConfig(ConfigModel):
     models: dict[str, ModelConfig] = Field(default_factory=dict)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
     stages: dict[str, StageConfig] = Field(default_factory=dict)
-    inference: InferenceConfig = Field(default_factory=InferenceConfig)
+    serving: ServingConfig = Field(default_factory=ServingConfig)
     mlflow: MlflowConfig = Field(default_factory=MlflowConfig)
 
     @model_validator(mode="before")
     @classmethod
-    def _read_schema_1(cls, data: Any) -> Any:
-        if isinstance(data, dict) and not ({"schema", "schema_version"} & set(data)):
-            return convert_schema_1(data)
-        return data
+    def _read_older_schemas(cls, data: Any) -> Any:
+        return upgrade(data) if isinstance(data, dict) else data
 
     @model_validator(mode="after")
     def _check_pipeline(self) -> "AppConfig":
@@ -721,6 +878,24 @@ class AppConfig(ConfigModel):
         for name, stage in self.stages.items():
             if stage.model is not None and stage.model not in self.models:
                 msg = f"stage {name!r} acts on {stage.model!r}, which is not a model"
+                raise ValueError(msg)
+        for name in self.serving.chain:
+            if name not in self.serving.steps:
+                msg = f"serving step {name!r} has no [serving.steps.{name}] section"
+                raise ValueError(msg)
+        for name, step in self.serving.steps.items():
+            if step.model is None:
+                continue
+            if step.model not in self.models:
+                msg = f"serving step {name!r} uses {step.model!r}, which is not a model"
+                raise ValueError(msg)
+            needed = _STEP_MODEL_KINDS.get(step.kind)
+            found = self.models[step.model].kind
+            if needed is not None and found != needed:
+                msg = (
+                    f"serving step {name!r} ({step.kind}) needs a {needed} model, "
+                    f"but {step.model!r} is a {found}"
+                )
                 raise ValueError(msg)
         return self
 

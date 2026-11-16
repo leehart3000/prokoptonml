@@ -8,7 +8,13 @@ import pytest
 from prokopton.ml import migrate
 from prokopton.ml.cli import main
 from prokopton.ml.config import AppConfig
-from prokopton.ml.migrate import MigrationError, is_schema_1, migrate_text
+from prokopton.ml.migrate import (
+    MigrationError,
+    _to_schema_2,
+    is_schema_1,
+    migrate_text,
+    schema_of,
+)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 HEADER = """\
@@ -45,7 +51,7 @@ def test_the_dnabarcode_config_keeps_its_settings_and_comments() -> None:
     result = migrate_text(text)
 
     data = tomllib.loads(result)
-    assert data["schema"] == 2
+    assert data["schema"] == 3
     assert not is_schema_1(data)
     assert {"router", "marker", "specialists"}.isdisjoint(data)
     assert data["models"]["culicidae"]["kind"] == "bio.specialist"
@@ -99,8 +105,8 @@ def test_a_config_without_a_router_table_gets_the_default_router() -> None:
 
 
 def test_schema_2_is_not_rewritten() -> None:
-    with pytest.raises(MigrationError, match="already schema 2"):
-        migrate_text("schema = 2\n" + HEADER)
+    with pytest.raises(MigrationError, match="already schema 3"):
+        migrate_text("schema = 3\n" + HEADER)
 
 
 def test_invalid_files_are_refused() -> None:
@@ -133,11 +139,11 @@ def test_the_command_prints_or_writes(
     path.write_text(HEADER, "utf-8")
 
     assert main(["--config", str(path), "migrate-config"]) == 0
-    assert "schema = 2" in capsys.readouterr().out
+    assert "schema = 3" in capsys.readouterr().out
     assert path.read_text("utf-8") == HEADER
 
     assert main(["--config", str(path), "migrate-config", "--write"]) == 0
-    assert "schema = 2" in path.read_text("utf-8")
+    assert "schema = 3" in path.read_text("utf-8")
     assert main(["--config", str(path), "migrate-config"]) == 1
 
 
@@ -162,3 +168,60 @@ def test_commands_leave_unreadable_files_to_the_loader(
     assert main(["--config", str(path), "run", "nope-anchors"]) == 1
     assert main(["--config", str(tmp_path / "missing.toml"), "run", "x"]) == 1
     assert "is schema 1" not in caplog.text
+
+
+INFERENCE = """
+# How submissions are checked
+[inference]
+# The longest sequence
+max_length = 5000
+barcode_gene = "CO1"
+# Consult specialists at 20%
+route_threshold = 0.2
+# A comment at the end of the table
+
+# The next table's own comment
+[mlflow]
+tracking_uri = "sqlite:///x.db"
+"""
+TWO_SPECIALISTS = (
+    SPECIALIST.replace(
+        "[[specialists.f.complexes]]",
+        'router_label = "Diptera"\n\n[[specialists.f.complexes]]',
+    )
+    + """
+[specialists.g]
+target = "G"
+background = "B"
+router_label = "Diptera"
+"""
+)
+
+
+def test_inference_settings_move_with_their_comments() -> None:
+    text = HEADER + '\n[marker]\nlabel = "gene"\n' + TWO_SPECIALISTS + INFERENCE
+    schema_2 = _to_schema_2(text, tomllib.loads(text))
+    assert schema_of(tomllib.loads(schema_2)) == 2
+
+    result = migrate_text(schema_2)
+
+    data = tomllib.loads(result)
+    assert "inference" not in data
+    assert data["serving"]["chain"] == ["input", "marker", "router", "f", "g"]
+    assert data["serving"]["steps"]["input"]["max_length"] == 5000
+    assert data["serving"]["steps"]["marker"]["barcode_gene"] == "CO1"
+    assert data["serving"]["steps"]["g"]["route_threshold"] == 0.2
+    serving = result[result.index("[serving]") :]
+    assert serving.count("# Consult specialists at 20%") == 2
+    assert "# The longest sequence\nmax_length = 5000" in serving
+    head = result[: result.index("[serving]")]
+    assert "# How submissions are checked" in head[head.rindex("[stages.") :]
+    assert "# A comment at the end of the table" in head[head.rindex("[stages.") :]
+    assert "# The next table's own comment\n[mlflow]" in result
+    assert result.count("schema = 3") == 1
+
+
+def test_schema_numbers_are_read_as_written() -> None:
+    assert schema_of({"schema": 2}) == 2
+    assert schema_of({"schema_version": 3}) == 3
+    assert schema_of({"schema": "two"}) == 1

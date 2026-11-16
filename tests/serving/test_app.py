@@ -31,7 +31,11 @@ def app_config(tmp_path: Path) -> AppConfig:
 
 
 def fake_loaded(tmp_path: Path) -> Loaded:
-    config = app_config(tmp_path)
+    # Without the specialist step: these tests don't load a specialist
+    data = app_config(tmp_path).model_dump(mode="json")
+    data["serving"]["chain"].remove("culicidae")
+    del data["serving"]["steps"]["culicidae"]
+    config = AppConfig.model_validate(data)
     identifier = Identifier(
         config, FakeMarker(), FakeRouter(Diptera=0.2, Other=0.8), {}
     )

@@ -25,6 +25,7 @@ CORE = frozenset(
         "evaluation",
         "inference",
         "inference.bundle",
+        "inference.chain",
         "inference.load",
         "migrate",
         "pipeline",

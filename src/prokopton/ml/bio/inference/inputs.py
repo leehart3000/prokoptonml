@@ -11,7 +11,7 @@ not DNA, too many ambiguous bases, or a sequence that is too short or long.
 import re
 from dataclasses import dataclass, field
 
-from prokopton.ml.config import InferenceConfig
+from prokopton.ml.config import SequenceInputStepConfig
 
 __all__ = ["DNA", "InputError", "Submission", "parse_submission"]
 
@@ -60,12 +60,14 @@ def _records(text: str) -> tuple[str, str]:
     return "", "".join(lines)
 
 
-def parse_submission(text: str, rules: InferenceConfig, min_length: int) -> Submission:
+def parse_submission(
+    text: str, rules: SequenceInputStepConfig, min_length: int
+) -> Submission:
     """Clean a submission, or raise ``InputError`` explaining the problem.
 
     Args:
         text: What the person pasted or uploaded.
-        rules: The app's inference settings.
+        rules: The input step's settings.
         min_length: The shortest sequence accepted (the router's minimum).
     """
     stripped = text.strip()
