@@ -18,7 +18,7 @@ from prokopton.ml import cli
 from prokopton.ml import release as module
 from prokopton.ml.release import Release, ReleaseError, Tools, pypi_lists, release
 
-RUN_VIEW = ("gh", "run", "view", "42", "--json", "status,conclusion", "--jq")
+RUN_VIEW = ("gh", "run", "view", "42", "--json", "status,conclusion,jobs", "--jq")
 PENDING = "repos/leehart3000/prokoptonml/actions/runs/42/pending_deployments"
 
 
@@ -160,6 +160,43 @@ def test_a_product_release_checks_the_live_page() -> None:
     )
     assert fake.slept == [10]
     assert not any(command[:2] == ("gh", "api") for command in fake.commands)
+
+
+def test_each_job_is_shown_once_as_it_finishes() -> None:
+    fake = ready("v1.0.15")
+    later = "success Check the tag\nskipped Notes\nfailure Browser tests"
+    fake.answers[RUN_VIEW] = [
+        "in_progress \nsuccess Check the tag",
+        f"in_progress \n{later}",
+        f"completed success\n{later}",
+    ]
+
+    release(Release("v1.0.15", "app"), fake.tools())
+
+    assert [line for line in fake.said if line.startswith("  ")] == [
+        "  ✓ Check the tag",
+        "  - Notes (skipped)",
+        "  ✗ Browser tests (failure)",
+    ]
+
+
+def test_a_run_with_no_state_yet_is_waited_for() -> None:
+    fake = ready("v1.0.15")
+    fake.answers[RUN_VIEW] = ["", "completed success"]
+
+    release(Release("v1.0.15", "app"), fake.tools())
+
+    assert fake.slept == [10]
+
+
+def test_a_live_page_that_shows_another_version_is_an_error() -> None:
+    fake = ready("v1.0.15")
+    fake.pages["https://x.test/"] = [(200, "<span data-version>1.0.14/c6c9fc3</span>")]
+
+    with pytest.raises(
+        ReleaseError, match=re.escape("shows 1.0.14/c6c9fc3, not 1.0.15")
+    ):
+        release(Release("v1.0.15", "app", check_url="https://x.test/"), fake.tools())
 
 
 def test_a_waiting_run_is_not_offered_for_approval_without_pypi() -> None:
@@ -341,7 +378,8 @@ def test_a_live_page_without_the_new_version_is_an_error() -> None:
     fake.pages["https://x.test/"] = [(503, "")]
 
     with pytest.raises(
-        ReleaseError, match=re.escape("shows no version, not 1.0.15/abc1234")
+        ReleaseError,
+        match=re.escape("gave HTTP 503 with no version, not 1.0.15/abc1234"),
     ):
         release(Release("v1.0.15", "app", check_url="https://x.test/"), fake.tools())
 
@@ -374,8 +412,12 @@ class FakeResponse(io.BytesIO):
 def test_pages_are_fetched_with_the_standard_library(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def urlopen(url: str, timeout: float) -> FakeResponse:
+    def urlopen(request: urllib.request.Request, timeout: float) -> FakeResponse:
         assert timeout == 30
+        # Python's default user agent is refused by some sites
+        assert request.get_header("User-agent") == module.USER_AGENT
+        assert module.USER_AGENT.startswith("prokopton-ml/")
+        url = request.full_url
         if url.endswith("/missing"):
             raise urllib.error.HTTPError(url, 404, "Not Found", Message(), None)
         if url.endswith("/down"):
