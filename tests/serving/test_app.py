@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+import bio_app
+from bio_app import CLASSIFIER
 from fakes import FakeTracker
 from inference_world import AEGYPTI as BARCODE
 from inference_world import CYTB, FakeMarker, FakeRouter
@@ -23,12 +25,13 @@ from specialist_world import AEGYPTI, config_dict, prepared
 
 def app_config(tmp_path: Path) -> AppConfig:
     data = config_dict(tmp_path)
-    data["marker"] = {
+    data["models"]["marker"] = {
+        "kind": CLASSIFIER,
         "label": "gene",
         "training": {"reverse_label": "reverse", "registered_model": "marker"},
     }
-    data["specialists"]["culicidae"]["router_label"] = "Diptera"
-    return AppConfig.model_validate(data)
+    data["models"]["culicidae"]["router_label"] = "Diptera"
+    return bio_app.app_config(data)
 
 
 EXAMPLE = ">An example\n" + BARCODE

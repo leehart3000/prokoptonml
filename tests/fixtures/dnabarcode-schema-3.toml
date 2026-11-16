@@ -1,0 +1,616 @@
+# dnabarcode.org: DNA barcode identification, built on ProkoptonML.
+# Validated against prokopton.ml.config.AppConfig. Any value can be overridden
+# with an environment variable, e.g. PROKOPTON_DATA__PATHS__RAW_DIR=/some/folder
+
+schema = 3
+
+name = "dnabarcode"
+title = "DNA barcoding"
+
+[data.source]
+# MIDORI2 reference databases, GenBank release 273 (CC BY 4.0).
+# Cite: https://doi.org/10.5281/zenodo.22685701 and Leray et al. (2022),
+# Environmental DNA 4: 894-907, https://doi.org/10.1002/edn3.303
+type = "midori2"
+release = "GB273"
+doi = "10.5281/zenodo.22685701"
+licence = "CC-BY-4.0"
+archive_url = "https://zenodo.org/records/22685701/files/MIDORI2_GB273_SINTAX_sp.zip?download=1"
+checksums_url = "https://zenodo.org/records/22685701/files/release_sha256.txt?download=1"
+archive_name = "MIDORI2_GB273_SINTAX_sp.zip"
+member_template = "SINTAX_sp/uniq/MIDORI2_UNIQ_NUC_SP_GB273_{gene}_SINTAX.fasta.gz"
+# CO1 (COI) is the animal barcode; all 15 mitochondrial genes train the marker
+# classifier, which checks which gene a sequence is from.
+genes = [
+  "CO1", "CO2", "CO3", "Cytb", "A6", "A8",
+  "ND1", "ND2", "ND3", "ND4", "ND4L", "ND5", "ND6",
+  "lrRNA", "srRNA",
+]
+
+[data.paths]
+raw_dir = "data/raw/midori2_gb273"
+interim_dir = "data/interim/dnabarcode"
+processed_dir = "data/processed/dnabarcode"
+splits_dir = "data/splits/dnabarcode"
+leakage_dir = "data/leakage/dnabarcode"
+samples_dir = "data/samples/dnabarcode"
+models_dir = "data/models/dnabarcode"
+
+[validation]
+# Reviewed phylum -> kingdom table (in DNAbarcode: apps/dnabarcode/reference/;
+# here, the fixture copy next to this file)
+phylum_reference = "tests/fixtures/phylum_lineages_gb273.tsv"
+min_length = 100
+max_length = 2000
+# 1.0 = keep all: the training stage applies its own (tunable) threshold to the
+# training data only, so test sets still contain realistic, imperfect sequences
+max_ambiguous_fraction = 1.0
+ambiguity_report_thresholds = [0.0, 0.01, 0.05, 0.10]
+# Sequences shorter than this are counted separately in the conflict report
+short_length = 200
+top_shared_examples = 10
+
+[split]
+# Changing the salt reshuffles every split; record it with any published results
+salt = "dnabarcode-gb273-v1"
+# Whole named species held out, to measure performance on species not in training
+novel_val_fraction = 0.05
+novel_test_fraction = 0.05
+# The remaining records, split by sequence (identical sequences stay together)
+val_fraction = 0.10
+test_fraction = 0.10
+# Novel-species holdouts apply to COI only; other genes train the gene classifier
+novel_species_genes = ["CO1"]
+# Families reported separately, e.g. for planned specialists
+report_families = ["Culicidae"]
+
+[leakage]
+# List novel-set records that have a near-identical (>=99%) training sequence,
+# so evaluation can exclude them from novel-species scores. Settings were chosen
+# with analysis/03_leakage_audit.py (see analysis/README.md): about 95% recall
+# of a thorough search, in about a third of the time.
+genes = ["CO1"]
+query_splits = ["val_novel", "test_novel"]
+reference_split = "train"
+min_identity = 0.99
+maxaccepts = 1
+maxrejects = 8
+threads = 8
+chunk_size = 250000
+
+[models.router]
+kind = "bio.kmer-classifier"
+# The router predicts the order for animals, and the group for other eukaryotes
+label = "group_order"
+genes = ["CO1"]
+
+[models.router.sample]
+salt = "dnabarcode-sample-v1"
+# At most this many records per class, spread across as many species as possible
+train_cap = 2000
+eval_cap = 200
+# Classes with fewer training records than this are dropped (and reported)
+min_class_records = 20
+# The loosest ambiguity threshold training will try; stricter ones are applied
+# when training
+max_ambiguous_fraction = 0.10
+eval_splits = ["val_known", "val_novel"]
+# Leave out novel-set records that have a near-copy in training
+exclude_near_duplicates = true
+
+[models.router.training]
+# The search has been narrowed in rounds; every round is kept in MLflow.
+#   Round 1 (v1): NB best at alpha 0.01, the smallest tried; logistic
+#     regression poor on unscaled features.
+#   Round 2 (v2): NB best at k=8, alpha 1e-4 (0.888); logistic regression
+#     on rescaled features best overall at k=6, alpha 1e-7 (0.934), the
+#     smallest tried. The threshold made no real difference in either.
+#   Round 3 (v3): logistic regression best at k=8, alpha 1e-8 (0.949); NB
+#     best at k=9, alpha 3e-5 (0.901). Gains were shrinking, so the search
+#     stopped there. Test accuracy was 98.6% (known) and 96.7% (clean
+#     novel), but on fragments under 300 bases v3 was much less accurate
+#     and overconfident (100 bases: 41%, calibration error 0.21).
+#   Round 4: v3's best settings, trained with random fragments (below), and
+#     chosen on fragments as well as whole sequences. The NB baseline is at
+#     k=8 (sharing features) and the threshold is 0.10 (keeping every
+#     sampled record), so the doubled training data fits in memory.
+# Naive Bayes: every combination of these is tried. The features are
+# frequencies adding up to 1 per sequence, so useful smoothing is small.
+k_values = [8]
+ambiguity_thresholds = [0.10]
+naive_bayes_alphas = [1e-4]
+# Logistic regression (slower): a smaller, targeted set, on features
+# rescaled to unit length
+logistic_k_values = [8]
+logistic_ambiguity_threshold = 0.10
+logistic_alphas = [1e-8, 1e-7]
+logistic_max_iter = 15
+# Each training record also gives one random fragment of 75-600 bases;
+# validation samples get one each too
+fragments_per_record = 1
+fragment_min_length = 75
+fragment_max_length = 600
+threads = 8
+random_state = 273
+# MLflow experiment and registered model names, and the alias for the best model
+experiment = "dnabarcode-router"
+registered_model = "dnabarcode-router"
+alias = "candidate"
+
+[models.router.calibration]
+# Confidence is calibrated by length on the validation samples: whole
+# sequences plus one fragment per record (new fragments, not training's).
+# v4 (trained with fragments) was underconfident: on clean novel species,
+# mean confidence 0.935 for accuracy 0.975
+fragment_min_length = 75
+fragment_max_length = 600
+threads = 8
+
+[models.router.evaluation]
+splits = ["test_known", "test_novel"]
+# Also scored separately with and without a near-copy in training
+novel_splits = ["test_novel"]
+# "How short can you go?": a share of each split, cut to these lengths
+fragment_lengths = [50, 75, 100, 150, 200, 300, 400, 500]
+fragment_fraction = 0.10
+# Scores are also given for these ranges of ambiguous fraction
+ambiguity_edges = [0.0, 0.01, 0.03, 0.05, 0.10]
+confidence_thresholds = [0.5, 0.7, 0.8, 0.9, 0.95, 0.99]
+threads = 8
+
+[models.router.serving]
+# From v5's evaluation: at 100 bases, 65% accurate on novel species with
+# calibrated confidence; below that, confidence is too high. Under 300 bases
+# accuracy is noticeably lower, so users are told. At 0.9 confidence, 94% of
+# novel-species predictions are accepted, and 99.7% of those are right.
+min_length = 100
+short_length = 300
+confident_threshold = 0.9
+
+[models.router.card]
+output_dir = "apps/dnabarcode/model-cards"
+notes = "apps/dnabarcode/model-cards/router-notes.md"
+title = "router model card"
+task = "Predict the broad group (for animals, the order) of a COI barcode"
+# {min_length} and {short_length} are filled in from [router.serving]
+intended_use = """
+The router is the first step of identification: it decides which broad
+group (or, for animals, which order) a COI barcode most likely belongs to,
+so a specialist model can identify it further. It is meant for COI sequences
+of at least {min_length} bases; shorter sequences are declined, and
+sequences under {short_length} bases are shown with a note that accuracy is
+lower.
+
+It is not meant for identifying species on its own, for other genes or
+markers, for random stretches of a genome, for mixed samples, or for
+decisions with legal, medical or regulatory consequences without expert
+review.
+"""
+training_note = """
+This was the final round of the search; earlier rounds are described in the
+development notes.
+"""
+limitations = [
+  "**Only COI** sequences are supported for now (the marker classifier checks this first); plant rbcL, fungal ITS and bacterial 16S are planned.",
+]
+
+# The marker classifier: which of the 15 mitochondrial genes a sequence is
+# from. It runs first, and also finds which strand a sequence was given as
+# (by comparing confidence on both strands).
+[models.marker]
+kind = "bio.kmer-classifier"
+label = "gene"
+genes = [
+  "CO1", "CO2", "CO3", "Cytb", "A6", "A8",
+  "ND1", "ND2", "ND3", "ND4", "ND4L", "ND5", "ND6",
+  "lrRNA", "srRNA",
+]
+
+[models.marker.sample]
+salt = "dnabarcode-marker-sample-v1"
+# Spread each gene's records across as many orders as possible. v3-v4 tried
+# taking turns between groups of organisms first ("group_order"): fungi did
+# not improve (60% against 62%) and animals got worse (98.3% against
+# 99.5%), so v5 returns to orders (see analysis/04)
+diversity = "order"
+train_cap = 20000
+eval_cap = 2000
+min_class_records = 20
+max_ambiguous_fraction = 0.10
+# Held-out species exist for CO1 only, so validation uses known species
+eval_splits = ["val_known"]
+exclude_near_duplicates = false
+
+[models.marker.training]
+# v2: logistic regression (0.915) beat naive Bayes (0.870 at best), so naive
+# Bayes is left out, and the training data (doubled by the reverse class
+# below) fits in memory
+k_values = []
+naive_bayes_alphas = []
+ambiguity_thresholds = [0.10]
+logistic_k_values = [6]
+logistic_ambiguity_threshold = 0.10
+logistic_alphas = [1e-6, 1e-5]
+logistic_max_iter = 15
+fragments_per_record = 1
+fragment_min_length = 75
+fragment_max_length = 600
+# Every training record's other strand is added as a "reverse" class: in v2
+# the other strand was more confident for 2.3% of animal and 34% of fungal
+# records, mostly mistaken for another gene; with it (v4), 0.5% and 1.8%
+# (see analysis/04)
+reverse_label = "reverse"
+threads = 8
+random_state = 273
+experiment = "dnabarcode-marker"
+registered_model = "dnabarcode-marker"
+alias = "candidate"
+
+[models.marker.calibration]
+fragment_min_length = 75
+fragment_max_length = 600
+threads = 8
+
+[models.marker.evaluation]
+splits = ["test_known"]
+novel_splits = []
+fragment_lengths = [50, 75, 100, 150, 200, 300, 400, 500]
+fragment_fraction = 0.05
+ambiguity_edges = [0.0, 0.01, 0.03, 0.05, 0.10]
+confidence_thresholds = [0.5, 0.7, 0.8, 0.9, 0.95, 0.99]
+# Also measure how often the right strand is the more confident one
+orientation = true
+threads = 8
+
+[models.marker.serving]
+min_length = 100
+short_length = 300
+confident_threshold = 0.9
+
+[models.marker.card]
+output_dir = "apps/dnabarcode/model-cards"
+notes = "apps/dnabarcode/model-cards/marker-notes.md"
+title = "marker classifier model card"
+task = "Predict which of 15 mitochondrial genes a sequence is from"
+intended_use = """
+The marker classifier is the first check on every sequence: it predicts
+which of the 15 mitochondrial genes the sequence comes from, and (by
+comparing its confidence on both strands) which strand it was given as. If
+the sequence is not COI, the site says which gene it looks like instead of
+identifying it with the wrong model. Sequences of at least {min_length}
+bases are accepted.
+
+It cannot yet reject sequences from other genomes or markers (such as plant
+rbcL, fungal ITS or bacterial 16S, which are planned): it always picks the
+most similar of the 15 genes, so it is used together with a similarity
+check.
+"""
+limitations = [
+  "**Only the 15 mitochondrial genes** are known; any other sequence is matched to the most similar of them, usually with low confidence.",
+  "**Groups of organisms** are unevenly represented in some genes; see *By group of organisms*.",
+]
+
+# Specialists identify species within one group, by comparing sequences with
+# a reference set (nearest neighbours, then alignment for percent identity)
+[models.culicidae]
+kind = "bio.specialist"
+# Consulted when the router gives Diptera at least the route threshold
+router_label = "Diptera"
+# How answers name a mosquito whose closest records have no species or genus name
+member_name = "A mosquito"
+gene = "CO1"
+target_rank = "family"
+target = "Culicidae"
+# Other flies are the background, so the specialist can tell a sequence is
+# not a mosquito. The closest relatives of mosquitoes (phantom, meniscus and
+# frog-biting midges) are kept species by species
+background_rank = "order"
+background = "Diptera"
+close_relatives = ["Chaoboridae", "Dixidae", "Corethrellidae"]
+# Up to 50 distinct sequences per species (identical copies are kept once)
+per_species = 50
+# Serving keeps more variants of widely sampled species (such as Aedes
+# aegypti), so a sequence is more likely to meet its own haplotype
+serving_per_species = 200
+background_per_family = 100
+max_ambiguous_fraction = 0.10
+salt = "dnabarcode-culicidae-v1"
+k = 8
+# Align the 30 closest references by k-mers, at most 3 from any one species
+candidates = 30
+candidates_per_species = 3
+# A match counts if it covers this share of the query or the reference
+# (whichever lies more completely inside the alignment), over enough bases
+min_coverage = 0.8
+min_aligned = 100
+# Records per species used to find its nearest other species (barcode gap)
+neighbour_references = 3
+# Thresholds (percent identity) tuned by `dnabarcode-culicidae-evaluate`
+# (species, group margin and membership); started at 0.98, 0.01 and 0.90.
+# We chose caution: a confident wrong name costs a user more than a less
+# specific answer, so the known-species limit below is 3%.
+# The model card refuses to build unless these match the evaluation's choice.
+member_identity = 0.90
+genus_identity = 0.95
+species_identity = 0.995
+# Named species within this much of the best match are reported together
+group_margin = 0.005
+# Placeholders labelled only "Culicidae sp." add little and include
+# mislabelled records, so placeholders need at least a genus
+placeholders_need_genus = true
+# Report Aedes in the broad sense: NCBI files many species under genera that
+# Reinert et al. split from Aedes, and Wilkerson et al. (2015) returned to it
+# as subgenera. Names are made consistent before matching and scoring.
+genus_groups_note = "Aedes is used here in its broad sense (Wilkerson et al. 2015, PLoS ONE 10:e0133602), which includes groups such as Ochlerotatus and Stegomyia that some classifications treat as separate genera."
+species_synonyms = { "Ochlerotatus berlandi" = "Ochlerotatus brelandi" }
+
+# Check named references against the COI genes of NCBI RefSeq mitogenomes
+# (curated): a record nearly identical to another species' RefSeq COI but
+# far from its own species' is left out. Fetched and committed with
+# `pixi run dnabarcode-culicidae-anchors`. The "other" limit is 97%, not
+# 99%, because a species can differ from its one RefSeq mitogenome by 1-3%
+# (wild Ae. aegypti barcodes are about 97.7% identical to the lab-strain
+# NC_035159); the "own" limit (under 95%) keeps sister species safe
+anchors = "apps/dnabarcode/reference/culicidae-refseq-cox1.fasta"
+anchor_taxon = "Culicidae"
+anchor_other_identity = 0.97
+anchor_own_identity = 0.95
+
+[models.culicidae.genus_groups]
+Ochlerotatus = "Aedes"
+Stegomyia = "Aedes"
+Finlaya = "Aedes"
+Downsiomyia = "Aedes"
+Collessius = "Aedes"
+Georgecraigius = "Aedes"
+Hulecoeteomyia = "Aedes"
+Fredwardsius = "Aedes"
+Aedimorphus = "Aedes"
+Neomelaniconion = "Aedes"
+Mucidus = "Aedes"
+Howardina = "Aedes"
+Tanakaius = "Aedes"
+Phagomyia = "Aedes"
+Bruceharrisonius = "Aedes"
+Dahliana = "Aedes"
+Rampamyia = "Aedes"
+Jarnellius = "Aedes"
+Kompia = "Aedes"
+Lewnielsenius = "Aedes"
+
+[models.culicidae.evaluation]
+# Up to 3 records per species in each validation and test set (at most 1,500
+# per set), so species with many records do not dominate
+per_species = 3
+max_records = 1500
+salt = "dnabarcode-culicidae-evaluation-v1"
+workers = 8
+# Every combination is tried on the validation sets
+species_identity_grid = [0.975, 0.98, 0.985, 0.99, 0.995]
+group_margin_grid = [0.005, 0.01, 0.015]
+member_identity_grid = [0.88, 0.90, 0.92]
+# Choose the most exact species names for known species, minus wrong names
+# for held-out species, among thresholds that name a wrong known species at
+# most 3% of the time and let in at most 0.5% of other flies. The known
+# species limit started at 1%, but no threshold gets below 2.5% with COI on
+# public data: most remaining errors are sister species and mislabelled
+# records (see the model card's development notes).
+max_known_wrong = 0.03
+max_background_admitted = 0.005
+
+# Records left out by hand: errors within a genus, which the automatic check
+# (near-identical to another genus) does not judge
+[[models.culicidae.excluded]]
+accession = "KP896564.1"
+reason = "Labelled Aedes albopictus, but 99.6% identical over 733 bases to Ae. aegypti (NC_035159); the two species differ by roughly 10% in COI."
+
+[models.culicidae.card]
+output_dir = "apps/dnabarcode/model-cards"
+notes = "apps/dnabarcode/model-cards/culicidae-notes.md"
+title = "Culicidae specialist model card"
+task = "Identify a mosquito (Culicidae) COI barcode to species, complex, group, genus or family, or say that it is not a mosquito"
+input = "A COI sequence on the right strand that the router has placed in Diptera (at least 100 bases)"
+intended_use = """
+The Culicidae specialist identifies mosquito COI barcodes after the router
+has placed a sequence in Diptera. It names a species only when one species
+in our reference data matches clearly; otherwise it reports a complex, a
+group of species, a genus or the family, and it says when a sequence may be
+from a species missing from our reference data.
+
+It is meant for research, teaching and as a first look before expert
+confirmation. It is not meant for public-health, regulatory or legal
+decisions without confirmation by an entomologist and, for species
+complexes, a nuclear assay.
+"""
+limitations = [
+  "**Our reference data names 953 of about 3,729 described mosquito species.** A sequence from a species missing from it can be given the name of a close relative. On the test set, this happened mostly to held-out records that have a near-copy (at least 99% identical) of another species in training; see the test results.",
+  "**COI does not separate many mosquito species.** About a third of named species in the reference set have another species at least 98% identical; these are reported as groups, complexes or closest matches.",
+  "**Public records include mislabelled and contaminated sequences.** Records nearly identical to another genus, and records that contradict the curated NCBI RefSeq mitogenome of their own species, are left out automatically (counted under Reference data). Species without a RefSeq mitogenome rely on the other checks and a hand-kept list, so some errors remain.",
+  "**Poorly sampled genera can fall below the membership threshold** (88–90% identity for some *Toxorhynchites*, *Tripteroides*, *Heizmannia* and *Zeugnomyia* records), and are then reported as not mosquitoes.",
+  "*Aedes* is used in its broad sense (Wilkerson et al. 2015), including groups such as *Ochlerotatus* that some classifications treat as genera.",
+  "Only the **COI** barcode region is supported. A sequence must overlap the references by at least 100 bases and cover 80% of the shorter sequence.",
+  "**These results use a reference set drawn from the training split only**, so that the test records stay unseen. The site uses a reference set drawn from every split, which covers more species; its accuracy has not been measured separately.",
+]
+
+[[models.culicidae.complexes]]
+name = "Anopheles gambiae complex"
+members = [
+  "Anopheles gambiae", "Anopheles coluzzii", "Anopheles arabiensis",
+  "Anopheles melas", "Anopheles merus", "Anopheles quadriannulatus",
+  "Anopheles amharicus", "Anopheles bwambae", "Anopheles fontenillei",
+]
+resolve = "Confirm with a nuclear assay: an IGS PCR (separates An. arabiensis, An. melas and An. gambiae/coluzzii), a SINE200 PCR (An. gambiae against An. coluzzii), or a multilocus amplicon panel such as ANOSPP."
+reference = "Boddé et al. (2022), eLife 11:e78775; Santolamazza et al. (2008), Malaria Journal 7:163"
+
+[[models.culicidae.complexes]]
+name = "Culex pipiens complex"
+# Culex pallens and the molestus form are often treated as a subspecies or
+# form of Cx. pipiens, but appear as species names in sequence records
+members = [
+  "Culex pipiens", "Culex quinquefasciatus", "Culex australicus",
+  "Culex globocoxitus", "Culex pallens", "Culex molestus",
+]
+resolve = "Confirm with a nuclear assay: an ACE-2 PCR (separates Cx. pipiens, Cx. quinquefasciatus and Cx. australicus), and a CQ11 PCR for the pipiens and molestus forms of Cx. pipiens."
+reference = "Smith & Fonseca (2004), American Journal of Tropical Medicine and Hygiene 70:339-345; Bahnck & Fonseca (2006), American Journal of Tropical Medicine and Hygiene 75:251-255"
+
+[[models.culicidae.complexes]]
+name = "Anopheles maculipennis complex"
+members = [
+  "Anopheles maculipennis", "Anopheles messeae", "Anopheles daciae",
+  "Anopheles atroparvus", "Anopheles labranchiae", "Anopheles sacharovi",
+  "Anopheles melanoon", "Anopheles subalpinus", "Anopheles martinius",
+  "Anopheles beklemishevi", "Anopheles artemievi", "Anopheles persiensis",
+]
+resolve = "Confirm with a nuclear assay: a multiplex PCR of the ribosomal ITS2 separates the main Palaearctic members; An. messeae and An. daciae need ITS2 sequencing."
+reference = "Proft, Maier & Kampen (1999), Parasitology Research 85:837-843"
+
+[[models.culicidae.complexes]]
+name = "Anopheles funestus group"
+members = [
+  "Anopheles funestus", "Anopheles vaneedeni", "Anopheles parensis",
+  "Anopheles rivulorum", "Anopheles leesoni", "Anopheles longipalpis",
+  "Anopheles aruni", "Anopheles confusus", "Anopheles fuscivenosus",
+  "Anopheles brucei",
+]
+resolve = "Confirm with a nuclear assay: the ITS2 'cocktail' PCR separates An. funestus, An. vaneedeni, An. rivulorum, An. leesoni and An. parensis."
+reference = "Koekemoer et al. (2002), American Journal of Tropical Medicine and Hygiene 66:804-811"
+
+[mlflow]
+# Run metadata and the model registry in SQLite; model files in an artifact
+# folder. Both are inside the git-ignored data/ folder.
+tracking_uri = "sqlite:///data/mlflow/mlflow.db"
+artifact_dir = "data/mlflow/artifacts"
+
+# The pipeline: its stages, in the order they run (prokopton-ml stages).
+# Added by prokopton-ml migrate-config.
+[pipeline]
+stages = [
+  "ingest",
+  "validate",
+  "split",
+  "leakage",
+  "router-sample",
+  "router-train",
+  "router-calibrate",
+  "router-evaluate",
+  "router-card",
+  "marker-sample",
+  "marker-train",
+  "marker-calibrate",
+  "marker-evaluate",
+  "marker-card",
+  "culicidae-anchors",
+  "culicidae-reference",
+  "culicidae-evaluate",
+  "culicidae-card",
+  "bundle",
+]
+
+[stages.ingest]
+kind = "bio.ingest"
+
+[stages.validate]
+kind = "bio.validate"
+
+[stages.split]
+kind = "bio.split"
+
+[stages.leakage]
+kind = "bio.leakage"
+
+[stages.router-sample]
+kind = "bio.classifier-sample"
+model = "router"
+
+[stages.router-train]
+kind = "bio.classifier-train"
+model = "router"
+
+[stages.router-calibrate]
+kind = "bio.classifier-calibrate"
+model = "router"
+
+[stages.router-evaluate]
+kind = "bio.classifier-evaluate"
+model = "router"
+
+[stages.router-card]
+kind = "bio.classifier-card"
+model = "router"
+
+[stages.marker-sample]
+kind = "bio.classifier-sample"
+model = "marker"
+
+[stages.marker-train]
+kind = "bio.classifier-train"
+model = "marker"
+
+[stages.marker-calibrate]
+kind = "bio.classifier-calibrate"
+model = "marker"
+
+[stages.marker-evaluate]
+kind = "bio.classifier-evaluate"
+model = "marker"
+
+[stages.marker-card]
+kind = "bio.classifier-card"
+model = "marker"
+
+[stages.culicidae-anchors]
+kind = "bio.specialist-anchors"
+model = "culicidae"
+
+[stages.culicidae-reference]
+kind = "bio.specialist-reference"
+model = "culicidae"
+
+[stages.culicidae-evaluate]
+kind = "bio.specialist-evaluate"
+model = "culicidae"
+
+[stages.culicidae-card]
+kind = "bio.specialist-card"
+model = "culicidae"
+
+[stages.bundle]
+kind = "core.bundle"
+
+# How submitted sequences are checked and identified (see InferenceConfig)
+# How an answer is made: the serving steps, in order.
+# Added by prokopton-ml migrate-config.
+[serving]
+# POST /identify, as before; the description is shown in the API docs
+endpoint = "identify"
+description = "Identify a DNA barcode. Answers describe the reference data and marker behind them, with a decision trace."
+chain = ["input", "marker", "router", "culicidae"]
+
+[serving.steps.input]
+kind = "bio.sequence-input"
+model = "router"
+# Up to about a whole mitochondrial genome
+max_length = 20000
+max_ambiguous_fraction = 0.10
+
+[serving.steps.marker]
+kind = "bio.marker"
+model = "marker"
+barcode_gene = "CO1"
+# Longer inputs are searched for the COI region first
+long_input = 1000
+window = 600
+step = 60
+region_probability = 0.9
+# Added to declines for other markers, and long sequences without COI
+unsupported_note = "Support for other markers (plant rbcL, fungal ITS and bacterial 16S) is planned."
+
+[serving.steps.router]
+kind = "bio.router"
+model = "router"
+
+[serving.steps.culicidae]
+kind = "bio.specialist"
+model = "culicidae"
+# Rule B: consult a specialist if the router gives its group at least 10%
+route_threshold = 0.10

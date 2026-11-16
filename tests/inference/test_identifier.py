@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from bio_app import CLASSIFIER, app_config, complete
 from inference_world import (
     AEGYPTI,
     ALBOPICTUS,
@@ -45,16 +46,20 @@ def reference(
 
 def config(**specialist: Any) -> AppConfig:
     data = config_dict_with_marker()
-    data["specialists"]["culicidae"].update(specialist)
-    return AppConfig.model_validate(data)
+    data["models"]["culicidae"].update(specialist)
+    return app_config(data)
 
 
 def config_dict_with_marker() -> dict[str, Any]:
     from pathlib import Path
 
     data = config_dict(Path("/tmp/unused"))
-    data["marker"] = {"label": "gene", "training": {"reverse_label": "reverse"}}
-    data["specialists"]["culicidae"]["router_label"] = "Diptera"
+    data["models"]["marker"] = {
+        "kind": CLASSIFIER,
+        "label": "gene",
+        "training": {"reverse_label": "reverse"},
+    }
+    data["models"]["culicidae"]["router_label"] = "Diptera"
     return data
 
 
@@ -129,8 +134,10 @@ def test_declines_bad_input_and_other_markers() -> None:
 
 
 def test_declines_can_add_the_apps_note() -> None:
-    data = config_dict_with_marker()
-    data["inference"] = {"unsupported_note": "Other markers are planned."}
+    data = complete(config_dict_with_marker())
+    data["serving"]["steps"]["marker"]["unsupported_note"] = (
+        "Other markers are planned."
+    )
     app = AppConfig.model_validate(data)
 
     other = identifier(DIPTERA, app).identify(CYTB)

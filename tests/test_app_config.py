@@ -1,14 +1,13 @@
-"""Tests for config schemas 2 and 3 (models, the pipeline, serving steps) and
-reading schema 1, all read as schema 4."""
+"""Tests for an app's models, pipeline and serving steps (config schema 4),
+and for refusing schemas that are no longer read."""
 
 import json
-import tomllib
-from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
+from bio_app import dnabarcode, minimal
 from prokopton.ml.bio.config import (
     ClassifierConfig,
     MarkerStepConfig,
@@ -21,13 +20,9 @@ from prokopton.ml.config import (
     AppConfig,
     StepEntry,
     UnknownClassifierError,
-    convert_schema_1,
-    convert_schema_2,
-    default_stages,
     upgrade,
 )
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
 DNABARCODE_STAGES = (
     "ingest",
     "validate",
@@ -40,19 +35,8 @@ DNABARCODE_STAGES = (
 )
 
 
-def schema_1() -> dict[str, Any]:
-    with (FIXTURES / "dnabarcode.toml").open("rb") as handle:
-        return tomllib.load(handle)
-
-
-def minimal(**extra: Any) -> dict[str, Any]:
-    data = schema_1()
-    kept = {key: data[key] for key in ("name", "title", "data", "validation")}
-    return {"schema": 2, **kept, **extra}
-
-
-def test_schema_1_is_converted_with_every_stage_it_ran() -> None:
-    config = AppConfig.model_validate(schema_1())
+def test_the_dnabarcode_config_has_its_models_and_every_stage() -> None:
+    config = AppConfig.model_validate(dnabarcode())
 
     assert config.schema_version == 4
     assert list(config.models) == ["router", "marker", "culicidae"]
@@ -65,65 +49,58 @@ def test_schema_1_is_converted_with_every_stage_it_ran() -> None:
     assert config.stages["bundle"].model is None
 
 
-def test_settings_are_unchanged_by_the_conversion() -> None:
-    data = schema_1()
+def test_settings_are_read_as_written() -> None:
+    data = dnabarcode()
     config = AppConfig.model_validate(data)
 
     assert classifier_settings(config, "router").training.k_values == tuple(
-        data["router"]["training"]["k_values"]
+        data["models"]["router"]["training"]["k_values"]
     )
-    assert classifier_settings(config, "marker").label == data["marker"]["label"]
+    assert (
+        classifier_settings(config, "marker").label
+        == (data["models"]["marker"]["label"])
+    )
     culicidae = specialist_settings(config, "culicidae")
     assert (
-        culicidae.species_identity
-        == data["specialists"]["culicidae"]["species_identity"]
+        culicidae.species_identity == (data["models"]["culicidae"]["species_identity"])
     )
-    assert [n for n, m in config.models.items() if m.kind == "bio.specialist"] == [
-        "culicidae"
-    ]
 
 
 def test_a_dumped_config_reads_back_the_same() -> None:
-    config = AppConfig.model_validate(schema_1())
+    config = AppConfig.model_validate(dnabarcode())
 
     assert AppConfig.model_validate_json(config.model_dump_json()) == config
     assert json.loads(config.model_dump_json(by_alias=True))["schema"] == 4
 
 
-def test_a_schema_1_app_without_marker_or_anchors() -> None:
-    data = schema_1()
-    del data["marker"]
-    data["specialists"]["culicidae"].pop("anchors", None)
+@pytest.mark.parametrize("schema", [1, 2])
+def test_schemas_1_and_2_are_no_longer_read(schema: int) -> None:
+    data = {**minimal(), "schema": schema}
+    if schema == 1:
+        del data["schema"]  # Schema 1 files didn't say
 
-    config = AppConfig.model_validate(data)
-
-    assert "marker" not in config.models
-    assert "marker-train" not in config.stages
-    assert "culicidae-anchors" not in config.stages
-    assert "culicidae-reference" in config.stages
-
-
-def test_schema_1_without_a_router_gets_the_default_one() -> None:
-    data = schema_1()
-    del data["router"]
-
-    converted = convert_schema_1(data)
-
-    assert converted["models"]["router"] == {"kind": "bio.kmer-classifier"}
+    with pytest.raises(ValidationError, match=f"schema {schema}, which is no longer"):
+        AppConfig.model_validate(data)
+    with pytest.raises(ValueError, match=r"with prokopton-ml 0\.2\.0a7"):
+        upgrade(data)
 
 
-def test_default_stages_cover_classifiers_then_specialists() -> None:
-    stages = default_stages(
-        {"s": {"kind": "bio.specialist"}, "c": {"kind": "bio.kmer-classifier"}}
-    )
+def test_a_dumped_schema_2_config_is_refused() -> None:
+    # As in the config.json of a bundle made by prokopton-ml 0.2.0a2
+    data = {**minimal(), "schema_version": 2}
+    del data["schema"]
 
-    assert list(stages)[4:9] == [
-        f"c-{s}" for s in ("sample", "train", "calibrate", "evaluate", "card")
-    ]
-    assert list(stages)[-1] == "bundle"
+    with pytest.raises(ValidationError, match="schema 2, which is no longer read"):
+        AppConfig.model_validate(data)
 
 
-def test_schema_2_is_read_as_written() -> None:
+def test_upgrade_leaves_schema_4_alone() -> None:
+    data = {"schema": 4, "name": "x"}
+
+    assert upgrade(data) is data
+
+
+def test_a_pipeline_is_read_as_written() -> None:
     config = AppConfig.model_validate(
         minimal(
             models={"router": {"kind": "bio.kmer-classifier"}},
@@ -161,7 +138,7 @@ def test_a_model_with_settings_needs_a_kind_that_declares_them() -> None:
 
 
 def test_models_are_found_by_name_and_kind() -> None:
-    config = AppConfig.model_validate(schema_1())
+    config = AppConfig.model_validate(dnabarcode())
 
     with pytest.raises(UnknownClassifierError, match="no 'sharks' model"):
         config.model_settings("sharks")
@@ -171,48 +148,27 @@ def test_models_are_found_by_name_and_kind() -> None:
         specialist_settings(config, "router")
 
 
-def test_inference_settings_move_into_the_serving_steps() -> None:
-    data = schema_1()
-    data["inference"]["route_threshold"] = 0.2
+def test_the_serving_steps_have_their_kinds_settings() -> None:
+    data = dnabarcode()
+    data["serving"]["steps"]["culicidae"]["route_threshold"] = 0.2
 
-    serving = AppConfig.model_validate(data).serving
-
-    assert serving.chain == ("input", "marker", "router", "culicidae")
-    assert serving.endpoint == "identify"  # What older apps served
     config = AppConfig.model_validate(data)
+
+    assert config.serving.chain == ("input", "marker", "router", "culicidae")
+    assert config.serving.endpoint == "identify"
     marker = config.step_settings("marker")
     assert isinstance(marker, MarkerStepConfig)
-    assert marker.unsupported_note == data["inference"]["unsupported_note"]
+    assert (
+        marker.unsupported_note
+        == (data["serving"]["steps"]["marker"]["unsupported_note"])
+    )
     specialist = config.step_settings("culicidae")
     assert isinstance(specialist, SpecialistStepConfig)
     assert specialist.route_threshold == 0.2
 
 
-def test_schema_2_without_marker_or_inference_gets_default_steps() -> None:
-    data = convert_schema_1(schema_1())
-    del data["models"]["marker"], data["inference"]
-    data["stages"] = {
-        k: v for k, v in data["stages"].items() if v.get("model") != "marker"
-    }
-    data["pipeline"]["stages"] = list(data["stages"])
-
-    steps = convert_schema_2(data)["serving"]["steps"]
-
-    assert list(steps) == ["input", "router", "culicidae"]
-    assert steps["input"] == {"kind": "bio.sequence-input", "model": "router"}
-    empty = convert_schema_2({"models": {}})["serving"]
-    assert (empty["chain"], empty["steps"]) == ([], {})
-
-
-def test_upgrade_leaves_schema_4_alone() -> None:
-    data = {"schema": 4, "name": "x"}
-
-    assert upgrade(data) is data
-
-
 def serving(**fields: Any) -> dict[str, Any]:
     return minimal(
-        schema=3,
         models={
             "router": {"kind": "bio.kmer-classifier"},
             "f": {"kind": "bio.specialist", "target": "F", "background": "B"},
@@ -247,14 +203,3 @@ def test_other_packages_steps_are_accepted() -> None:
 
     assert isinstance(config.serving.steps["x"], StepEntry)
     assert config.step_settings("x") is config.serving.steps["x"]
-
-
-def test_a_dumped_schema_2_config_is_read() -> None:
-    # As in the config.json of a bundle made by prokopton-ml 0.2.0a2
-    data = convert_schema_1(schema_1())
-    data["schema_version"] = data.pop("schema")
-
-    config = AppConfig.model_validate(data)
-
-    assert config.schema_version == 4
-    assert config.serving.chain == ("input", "marker", "router", "culicidae")

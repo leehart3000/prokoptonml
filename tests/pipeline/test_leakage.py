@@ -3,11 +3,13 @@
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+from bio_app import app_config, sequence_app, write_config
 from prokopton.ml.bio.config import LeakageConfig
 from prokopton.ml.bio.pipeline.leakage import (
     REPORT_NAME,
@@ -99,36 +101,14 @@ def test_vsearch_problems_raise_stage_error(tmp_path: Path, command: list[str]) 
         find_near_duplicates(path, tmp_path / "work", rules(vsearch_command=command))
 
 
+def make_data(tmp_path: Path) -> dict[str, Any]:
+    data = sequence_app(tmp_path)
+    data["bio"]["leakage"] = {"vsearch_command": list(FAKE_VSEARCH), "chunk_size": 2}
+    return data
+
+
 def make_config(tmp_path: Path) -> AppConfig:
-    return AppConfig.model_validate(
-        {
-            "name": "testapp",
-            "title": "Test app",
-            "data": {
-                "source": {
-                    "release": "GB999",
-                    "doi": "10.0000/example",
-                    "licence": "CC-BY-4.0",
-                    "archive_url": "https://example.org/fake.zip",
-                    "checksums_url": "https://example.org/sums.txt",
-                    "archive_name": "fake.zip",
-                    "member_template": "x/{gene}.fasta.gz",
-                    "genes": ["CO1"],
-                },
-                "paths": {
-                    "raw_dir": str(tmp_path / "raw"),
-                    "interim_dir": str(tmp_path / "interim"),
-                    "processed_dir": str(tmp_path / "processed"),
-                    "splits_dir": str(tmp_path / "splits"),
-                    "leakage_dir": str(tmp_path / "leakage"),
-                    "samples_dir": str(tmp_path / "samples"),
-                    "models_dir": str(tmp_path / "models"),
-                },
-            },
-            "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
-            "leakage": {"vsearch_command": list(FAKE_VSEARCH), "chunk_size": 2},
-        }
-    )
+    return app_config(make_data(tmp_path))
 
 
 def split_path(tmp_path: Path) -> Path:
@@ -156,42 +136,7 @@ def test_leakage_requires_split_data(tmp_path: Path) -> None:
 
 
 def write_app_toml(tmp_path: Path) -> Path:
-    command = ", ".join(f'"{part}"' for part in FAKE_VSEARCH)
-    config_path = tmp_path / "app.toml"
-    config_path.write_text(
-        f"""
-name = "testapp"
-title = "Test app"
-
-[data.source]
-release = "GB999"
-doi = "10.0000/example"
-licence = "CC-BY-4.0"
-archive_url = "https://example.org/fake.zip"
-checksums_url = "https://example.org/sums.txt"
-archive_name = "fake.zip"
-member_template = "x/{{gene}}.fasta.gz"
-genes = ["CO1"]
-
-[data.paths]
-raw_dir = "{tmp_path / "raw"}"
-interim_dir = "{tmp_path / "interim"}"
-processed_dir = "{tmp_path / "processed"}"
-splits_dir = "{tmp_path / "splits"}"
-leakage_dir = "{tmp_path / "leakage"}"
-samples_dir = "{tmp_path / "samples"}"
-models_dir = "{tmp_path / "models"}"
-
-[validation]
-phylum_reference = "{tmp_path / "phyla.tsv"}"
-
-[leakage]
-vsearch_command = [{command}]
-chunk_size = 2
-""",
-        encoding="utf-8",
-    )
-    return config_path
+    return write_config(tmp_path / "app.toml", make_data(tmp_path))
 
 
 def test_cli_leakage_succeeds(tmp_path: Path) -> None:

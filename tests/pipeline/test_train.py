@@ -9,6 +9,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+from bio_app import CLASSIFIER, app_config, mlflow, sequence_app, write_config
 from fakes import FakeTracker
 from prokopton.ml.bio.pipeline.train import REPORT_NAME, TrainStageError, train
 from prokopton.ml.cli import main
@@ -45,41 +46,12 @@ def write_samples(tmp_path: Path) -> Path:
 
 
 def config_dict(tmp_path: Path, **training: Any) -> dict[str, Any]:
-    return {
-        "name": "testapp",
-        "title": "Test app",
-        "data": {
-            "source": {
-                "release": "GB999",
-                "doi": "10.0000/example",
-                "licence": "CC-BY-4.0",
-                "archive_url": "https://example.org/fake.zip",
-                "checksums_url": "https://example.org/sums.txt",
-                "archive_name": "fake.zip",
-                "member_template": "x/{gene}.fasta.gz",
-                "genes": ["CO1"],
-            },
-            "paths": {
-                "raw_dir": str(tmp_path / "raw"),
-                "interim_dir": str(tmp_path / "interim"),
-                "processed_dir": str(tmp_path / "processed"),
-                "splits_dir": str(tmp_path / "splits"),
-                "leakage_dir": str(tmp_path / "leakage"),
-                "samples_dir": str(tmp_path / "samples"),
-                "models_dir": str(tmp_path / "models"),
-            },
-        },
-        "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
-        "router": {"training": {**TRAINING, **training}},
-        "mlflow": {
-            "tracking_uri": f"sqlite:///{tmp_path / 'mlflow' / 'mlflow.db'}",
-            "artifact_dir": str(tmp_path / "mlflow" / "artifacts"),
-        },
-    }
+    router = {"kind": CLASSIFIER, "training": {**TRAINING, **training}}
+    return sequence_app(tmp_path, models={"router": router}, mlflow=mlflow(tmp_path))
 
 
 def make_config(tmp_path: Path, **training: Any) -> AppConfig:
-    return AppConfig.model_validate(config_dict(tmp_path, **training))
+    return app_config(config_dict(tmp_path, **training))
 
 
 def test_train_registers_the_best_and_writes_a_report(tmp_path: Path) -> None:
@@ -121,21 +93,7 @@ def test_train_rejects_thresholds_above_the_samples(tmp_path: Path) -> None:
 
 
 def write_app_toml(tmp_path: Path) -> Path:
-    config_path = tmp_path / "app.toml"
-    data = config_dict(tmp_path)
-    # These values are written the same way in TOML and JSON
-    lines = [f'name = "{data["name"]}"', f'title = "{data["title"]}"']
-    for section, values in (
-        ("data.source", data["data"]["source"]),
-        ("data.paths", data["data"]["paths"]),
-        ("validation", data["validation"]),
-        ("router.training", data["router"]["training"]),
-        ("mlflow", data["mlflow"]),
-    ):
-        lines.append(f"\n[{section}]")
-        lines += [f"{key} = {json.dumps(value)}" for key, value in values.items()]
-    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return config_path
+    return write_config(tmp_path / "app.toml", config_dict(tmp_path))
 
 
 def test_cli_train_reports_missing_samples(tmp_path: Path) -> None:

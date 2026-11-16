@@ -7,7 +7,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from prokopton.ml.bio.config import ValidationConfig, bio_section
+from bio_app import app_config, sequence_app, write_config
+from prokopton.ml.bio.config import ValidationConfig
 from prokopton.ml.bio.data.taxonomy import NO_PHYLUM, OTHER_EUKARYOTES, UNMAPPED
 from prokopton.ml.bio.pipeline.validate import (
     REASONS,
@@ -206,34 +207,7 @@ def make_config(tmp_path: Path) -> AppConfig:
         "Arthropoda\t6656\t1\t1\tMetazoa\tOpisthokonta\n",
         encoding="utf-8",
     )
-    return AppConfig.model_validate(
-        {
-            "name": "testapp",
-            "title": "Test app",
-            "data": {
-                "source": {
-                    "release": "GB999",
-                    "doi": "10.0000/example",
-                    "licence": "CC-BY-4.0",
-                    "archive_url": "https://example.org/fake.zip",
-                    "checksums_url": "https://example.org/sums.txt",
-                    "archive_name": "fake.zip",
-                    "member_template": "x/{gene}.fasta.gz",
-                    "genes": ["CO1"],
-                },
-                "paths": {
-                    "raw_dir": str(tmp_path / "raw"),
-                    "interim_dir": str(tmp_path / "interim"),
-                    "processed_dir": str(tmp_path / "processed"),
-                    "splits_dir": str(tmp_path / "splits"),
-                    "leakage_dir": str(tmp_path / "leakage"),
-                    "samples_dir": str(tmp_path / "samples"),
-                    "models_dir": str(tmp_path / "models"),
-                },
-            },
-            "validation": {"phylum_reference": str(reference)},
-        }
-    )
+    return app_config(sequence_app(tmp_path))
 
 
 def test_validate_reads_and_writes_parquet(tmp_path: Path) -> None:
@@ -261,37 +235,7 @@ def test_validate_requires_ingested_data(tmp_path: Path) -> None:
 
 def write_app_toml(tmp_path: Path, config: AppConfig) -> Path:
     """Write the test app's config as a TOML file for the CLI."""
-    config_path = tmp_path / "app.toml"
-    config_path.write_text(
-        f"""
-name = "testapp"
-title = "Test app"
-
-[data.source]
-release = "GB999"
-doi = "10.0000/example"
-licence = "CC-BY-4.0"
-archive_url = "https://example.org/fake.zip"
-checksums_url = "https://example.org/sums.txt"
-archive_name = "fake.zip"
-member_template = "x/{{gene}}.fasta.gz"
-genes = ["CO1"]
-
-[data.paths]
-raw_dir = "{tmp_path / "raw"}"
-interim_dir = "{tmp_path / "interim"}"
-processed_dir = "{tmp_path / "processed"}"
-splits_dir = "{tmp_path / "splits"}"
-leakage_dir = "{tmp_path / "leakage"}"
-samples_dir = "{tmp_path / "samples"}"
-models_dir = "{tmp_path / "models"}"
-
-[validation]
-phylum_reference = "{bio_section(config).validation.phylum_reference}"
-""",
-        encoding="utf-8",
-    )
-    return config_path
+    return write_config(tmp_path / "app.toml", config.model_dump(mode="json"))
 
 
 def test_cli_validate_succeeds(tmp_path: Path) -> None:

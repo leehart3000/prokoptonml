@@ -1,12 +1,12 @@
 """Tests for prokopton.ml.bio.reporting.card."""
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from bio_app import CLASSIFIER, app_config, sequence_app, write_config
 from prokopton.ml.bio.config import (
     ClassifierCalibrationConfig,
     ClassifierEvaluationConfig,
@@ -51,36 +51,19 @@ COMMON: dict[str, Any] = {
 
 
 def config_dict(tmp_path: Path) -> dict[str, Any]:
-    paths = ["raw", "interim", "processed", "splits", "leakage", "samples", "models"]
-    return {
-        "name": "testapp",
-        "title": "DNA barcoding",
-        "data": {
-            "source": {
-                "release": "GB999",
-                "doi": "10.0000/example",
-                "licence": "CC-BY-4.0",
-                "archive_url": "https://example.org/fake.zip",
-                "checksums_url": "https://example.org/sums.txt",
-                "archive_name": "fake.zip",
-                "member_template": "x/{gene}.fasta.gz",
-                "genes": ["CO1"],
-            },
-            "paths": {f"{name}_dir": str(tmp_path / name) for name in paths},
-        },
-        "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
-        "router": {
-            "card": {
-                "output_dir": str(tmp_path / "cards"),
-                "notes": str(tmp_path / "notes.md"),
-                "title": "router model card",
-                "task": "Predict the broad group (for animals, the order)",
-                "intended_use": "For COI of at least {min_length} bases.",
-                "training_note": "Earlier rounds are in the notes.",
-                "limitations": ["**Only COI** is supported."],
-            }
+    router = {
+        "kind": CLASSIFIER,
+        "card": {
+            "output_dir": str(tmp_path / "cards"),
+            "notes": str(tmp_path / "notes.md"),
+            "title": "router model card",
+            "task": "Predict the broad group (for animals, the order)",
+            "intended_use": "For COI of at least {min_length} bases.",
+            "training_note": "Earlier rounds are in the notes.",
+            "limitations": ["**Only COI** is supported."],
         },
     }
+    return sequence_app(tmp_path, title="DNA barcoding", models={"router": router})
 
 
 def sample_report() -> SampleReport:
@@ -205,12 +188,13 @@ def write_reports(
     model: str = "router",
 ) -> AppConfig:
     settings = config_dict(tmp_path)
-    settings["marker"] = {
+    settings["models"]["marker"] = {
+        "kind": CLASSIFIER,
         "label": "gene",
         "genes": ["CO1", "Cytb"],
         "card": {"output_dir": str(tmp_path / "cards")},
     }
-    config = AppConfig.model_validate(settings)
+    config = app_config(settings)
     sample_dir = tmp_path / "samples" / "midori2_gb999" / model
     model_dir = tmp_path / "models" / model
     sample_dir.mkdir(parents=True)
@@ -404,7 +388,7 @@ def test_card_for_an_uncalibrated_model(tmp_path: Path) -> None:
 
 def test_card_for_an_app_without_that_classifier(tmp_path: Path) -> None:
     write_reports(tmp_path, calibration=calibration_report())
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
 
     with pytest.raises(UnknownClassifierError, match="marker"):
         build_card(config, "marker")
@@ -413,9 +397,9 @@ def test_card_for_an_app_without_that_classifier(tmp_path: Path) -> None:
 def test_card_without_notes(tmp_path: Path) -> None:
     settings = config_dict(tmp_path)
     write_reports(tmp_path, calibration=calibration_report())
-    del settings["router"]["card"]["notes"]
+    del settings["models"]["router"]["card"]["notes"]
 
-    card = build_card(AppConfig.model_validate(settings)).card.read_text()
+    card = build_card(app_config(settings)).card.read_text()
 
     assert "Development notes" not in card
 
@@ -442,7 +426,7 @@ def test_card_refuses_reports_of_different_models(
 
 
 def test_card_requires_the_reports(tmp_path: Path) -> None:
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
 
     with pytest.raises(CardError, match="run the pipeline first"):
         build_card(config)
@@ -457,20 +441,7 @@ def test_card_requires_the_notes_file_it_names(tmp_path: Path) -> None:
 
 
 def write_app_toml(tmp_path: Path) -> Path:
-    data = config_dict(tmp_path)
-    lines = [f'name = "{data["name"]}"', f'title = "{data["title"]}"']
-    for section, values in (
-        ("data.source", data["data"]["source"]),
-        ("data.paths", data["data"]["paths"]),
-        ("validation", data["validation"]),
-        ("router.card", data["router"]["card"]),
-    ):
-        lines.append(f"\n[{section}]")
-        # These values are written the same way in TOML and JSON
-        lines += [f"{key} = {json.dumps(value)}" for key, value in values.items()]
-    path = tmp_path / "app.toml"
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return path
+    return write_config(tmp_path / "app.toml", config_dict(tmp_path))
 
 
 def test_cli_card(tmp_path: Path) -> None:

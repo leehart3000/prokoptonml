@@ -9,6 +9,7 @@ import pyarrow.parquet as pq
 import pytest
 from pydantic import ValidationError
 
+from bio_app import app_config, sequence_app, write_config
 from prokopton.ml.bio.config import SplitConfig
 from prokopton.ml.bio.pipeline.split import (
     REPORT_NAME,
@@ -175,35 +176,9 @@ def test_summary_counts_splits_groups_and_families() -> None:
 def make_config(
     tmp_path: Path, genes: tuple[str, ...] = ("CO1",), **split_fields: object
 ) -> AppConfig:
-    return AppConfig.model_validate(
-        {
-            "name": "testapp",
-            "title": "Test app",
-            "data": {
-                "source": {
-                    "release": "GB999",
-                    "doi": "10.0000/example",
-                    "licence": "CC-BY-4.0",
-                    "archive_url": "https://example.org/fake.zip",
-                    "checksums_url": "https://example.org/sums.txt",
-                    "archive_name": "fake.zip",
-                    "member_template": "x/{gene}.fasta.gz",
-                    "genes": list(genes),
-                },
-                "paths": {
-                    "raw_dir": str(tmp_path / "raw"),
-                    "interim_dir": str(tmp_path / "interim"),
-                    "processed_dir": str(tmp_path / "processed"),
-                    "splits_dir": str(tmp_path / "splits"),
-                    "leakage_dir": str(tmp_path / "leakage"),
-                    "samples_dir": str(tmp_path / "samples"),
-                    "models_dir": str(tmp_path / "models"),
-                },
-            },
-            "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
-            "split": {"report_families": ["Culicidae"], **split_fields},
-        }
-    )
+    data = sequence_app(tmp_path, genes=list(genes))
+    data["bio"]["split"] = {"report_families": ["Culicidae"], **split_fields}
+    return app_config(data)
 
 
 def write_processed(tmp_path: Path, gene: str = "CO1") -> None:
@@ -261,37 +236,8 @@ def test_split_requires_validated_data(tmp_path: Path) -> None:
 
 
 def write_app_toml(tmp_path: Path) -> Path:
-    config_path = tmp_path / "app.toml"
-    config_path.write_text(
-        f"""
-name = "testapp"
-title = "Test app"
-
-[data.source]
-release = "GB999"
-doi = "10.0000/example"
-licence = "CC-BY-4.0"
-archive_url = "https://example.org/fake.zip"
-checksums_url = "https://example.org/sums.txt"
-archive_name = "fake.zip"
-member_template = "x/{{gene}}.fasta.gz"
-genes = ["CO1"]
-
-[data.paths]
-raw_dir = "{tmp_path / "raw"}"
-interim_dir = "{tmp_path / "interim"}"
-processed_dir = "{tmp_path / "processed"}"
-splits_dir = "{tmp_path / "splits"}"
-leakage_dir = "{tmp_path / "leakage"}"
-samples_dir = "{tmp_path / "samples"}"
-models_dir = "{tmp_path / "models"}"
-
-[validation]
-phylum_reference = "{tmp_path / "phyla.tsv"}"
-""",
-        encoding="utf-8",
-    )
-    return config_path
+    config = make_config(tmp_path)
+    return write_config(tmp_path / "app.toml", config.model_dump(mode="json"))
 
 
 def test_cli_split_succeeds(tmp_path: Path) -> None:

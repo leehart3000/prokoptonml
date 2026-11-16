@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from bio_app import app_config, write_config
 from fakes import FakeTracker
 from prokopton.ml.bio.config import specialist_settings
 from prokopton.ml.bio.pipeline import specialist_evaluate
@@ -21,7 +22,6 @@ from prokopton.ml.bio.pipeline.specialist_evaluate import (
 )
 from prokopton.ml.bio.specialists.identify import Identification
 from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig
 from prokopton.ml.training import tracking
 from specialist_world import config_dict, prepared
 
@@ -81,7 +81,7 @@ def test_parallel_workers_give_the_same_answers(
     monkeypatch.setattr(specialist_evaluate, "PROGRESS_EVERY", 1)
     one = evaluate_specialist(config, "culicidae", lambda _: FakeTracker())
     two_workers = config_dict(tmp_path, workers=2)
-    parallel = AppConfig.model_validate(two_workers)
+    parallel = app_config(two_workers)
 
     two = evaluate_specialist(parallel, "culicidae", lambda _: FakeTracker())
 
@@ -110,7 +110,7 @@ def test_reports_when_no_thresholds_meet_the_constraints(
 
 
 def test_needs_its_inputs(tmp_path: Path) -> None:
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
 
     with pytest.raises(SpecialistEvaluationError, match="reference stages first"):
         evaluate_specialist(config, "culicidae", lambda _: FakeTracker())
@@ -156,9 +156,7 @@ def test_scores_are_averaged_per_record_and_per_species() -> None:
 def test_choosing_puts_the_background_first_then_known_species(
     tmp_path: Path,
 ) -> None:
-    rules = specialist_settings(
-        AppConfig.model_validate(config_dict(tmp_path)), "culicidae"
-    )
+    rules = specialist_settings(app_config(config_dict(tmp_path)), "culicidae")
     bad = score_set([answer("species", "Aedes x")], [row("Aedes aegypti")])
     good = score_set([answer("species", "Aedes aegypti")], [row("Aedes aegypti")])
     kept_out = score_set([answer("not_member", None)], [row("M", role="background")])
@@ -204,23 +202,7 @@ def test_choosing_puts_the_background_first_then_known_species(
 
 
 def write_app_toml(tmp_path: Path) -> Path:
-    data = config_dict(tmp_path)
-    lines = [f'name = "{data["name"]}"', f'title = "{data["title"]}"']
-    specialist = dict(data["specialists"]["culicidae"])
-    evaluation = specialist.pop("evaluation")
-    for section, values in (
-        ("data.source", data["data"]["source"]),
-        ("data.paths", data["data"]["paths"]),
-        ("validation", data["validation"]),
-        ("specialists.culicidae", specialist),
-        ("specialists.culicidae.evaluation", evaluation),
-    ):
-        lines.append(f"\n[{section}]")
-        # These values are written the same way in TOML and JSON
-        lines += [f"{key} = {json.dumps(value)}" for key, value in values.items()]
-    path = tmp_path / "app.toml"
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return path
+    return write_config(tmp_path / "app.toml", config_dict(tmp_path))
 
 
 def test_cli_evaluate_a_specialist(
@@ -241,7 +223,7 @@ def test_specialist_tracker_names_its_experiment(
 ) -> None:
     made: list[tuple[Any, ...]] = []
     monkeypatch.setattr(tracking, "MlflowTracker", lambda *args: made.append(args))
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
 
     tracking.specialist_tracker(config, "culicidae")
 

@@ -10,6 +10,7 @@ import pytest
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 
+from bio_app import CLASSIFIER, app_config, mlflow, sequence_app, write_config
 from fakes import FakeTracker
 from prokopton.ml.bio.features.kmers import KmerVectorizer
 from prokopton.ml.bio.pipeline.evaluate import (
@@ -18,7 +19,6 @@ from prokopton.ml.bio.pipeline.evaluate import (
     evaluate,
 )
 from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig
 
 MOTIFS = {"Diptera": "ACGTTGCA", "Hymenoptera": "GGGCCCAT"}
 FOLDER = "midori2_gb999"
@@ -72,42 +72,18 @@ def make_model() -> Pipeline:
 
 
 def config_dict(tmp_path: Path) -> dict[str, Any]:
-    paths = ["raw", "interim", "processed", "splits", "leakage", "samples", "models"]
-    return {
-        "name": "testapp",
-        "title": "Test app",
-        "data": {
-            "source": {
-                "release": "GB999",
-                "doi": "10.0000/example",
-                "licence": "CC-BY-4.0",
-                "archive_url": "https://example.org/fake.zip",
-                "checksums_url": "https://example.org/sums.txt",
-                "archive_name": "fake.zip",
-                "member_template": "x/{gene}.fasta.gz",
-                "genes": ["CO1"],
-            },
-            "paths": {f"{name}_dir": str(tmp_path / name) for name in paths},
-        },
-        "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
-        "router": {
-            "training": {
-                "experiment": "test-router",
-                "registered_model": "test-router",
-            },
-            "evaluation": {
-                "fragment_lengths": [20, 1000],
-                "fragment_fraction": 1.0,
-                # 21 records are scored, so the last batch is empty
-                "batch_size": 7,
-                "threads": 2,
-            },
-        },
-        "mlflow": {
-            "tracking_uri": f"sqlite:///{tmp_path / 'mlflow' / 'mlflow.db'}",
-            "artifact_dir": str(tmp_path / "mlflow" / "artifacts"),
+    router = {
+        "kind": CLASSIFIER,
+        "training": {"experiment": "test-router", "registered_model": "test-router"},
+        "evaluation": {
+            "fragment_lengths": [20, 1000],
+            "fragment_fraction": 1.0,
+            # 21 records are scored, so the last batch is empty
+            "batch_size": 7,
+            "threads": 2,
         },
     }
+    return sequence_app(tmp_path, models={"router": router}, mlflow=mlflow(tmp_path))
 
 
 def registered_tracker() -> FakeTracker:
@@ -119,7 +95,7 @@ def registered_tracker() -> FakeTracker:
 def test_evaluate_scores_each_test_set(tmp_path: Path) -> None:
     write_data(tmp_path)
     tracker = registered_tracker()
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
 
     report = evaluate(config, lambda _config: tracker)
 
@@ -160,7 +136,7 @@ def test_evaluate_scores_each_test_set(tmp_path: Path) -> None:
 
 
 def test_evaluate_requires_split_and_leakage_data(tmp_path: Path) -> None:
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
 
     with pytest.raises(EvaluationStageError, match="run the split and leakage"):
         evaluate(config, lambda _config: registered_tracker())
@@ -171,33 +147,19 @@ def test_evaluate_without_novel_splits_needs_no_leakage_data(tmp_path: Path) -> 
     for path in (tmp_path / "leakage").rglob("*.parquet"):
         path.unlink()
     settings = config_dict(tmp_path)
-    settings["router"]["evaluation"] |= {"splits": ["test_known"], "novel_splits": []}
+    settings["models"]["router"]["evaluation"] |= {
+        "splits": ["test_known"],
+        "novel_splits": [],
+    }
 
-    report = evaluate(
-        AppConfig.model_validate(settings), lambda _c: registered_tracker()
-    )
+    report = evaluate(app_config(settings), lambda _c: registered_tracker())
 
     assert set(report.splits) == {"test_known"}
     assert "near_duplicates" not in report.data_sha256
 
 
 def write_app_toml(tmp_path: Path) -> Path:
-    data = config_dict(tmp_path)
-    lines = [f'name = "{data["name"]}"', f'title = "{data["title"]}"']
-    for section, values in (
-        ("data.source", data["data"]["source"]),
-        ("data.paths", data["data"]["paths"]),
-        ("validation", data["validation"]),
-        ("router.training", data["router"]["training"]),
-        ("router.evaluation", data["router"]["evaluation"]),
-        ("mlflow", data["mlflow"]),
-    ):
-        lines.append(f"\n[{section}]")
-        # These values are written the same way in TOML and JSON
-        lines += [f"{key} = {json.dumps(value)}" for key, value in values.items()]
-    path = tmp_path / "app.toml"
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return path
+    return write_config(tmp_path / "app.toml", config_dict(tmp_path))
 
 
 def test_cli_evaluate_reports_missing_data(tmp_path: Path) -> None:
@@ -211,7 +173,7 @@ def test_cli_evaluate_loads_the_registered_model_from_mlflow(tmp_path: Path) -> 
     from prokopton.ml.training.tracking import MlflowTracker
 
     write_data(tmp_path)
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
     tracker = MlflowTracker(
         config.mlflow.tracking_uri, config.mlflow.artifact_dir, "test-router"
     )
@@ -252,7 +214,8 @@ def test_evaluate_marker_by_gene_group_and_strand(tmp_path: Path) -> None:
     tracker = FakeTracker()
     tracker.log_model(model, None, "test-marker", "candidate")
     settings = config_dict(tmp_path)
-    settings["marker"] = {
+    settings["models"]["marker"] = {
+        "kind": CLASSIFIER,
         "label": "gene",
         "genes": ["CO1", "Cytb"],
         "training": {"registered_model": "test-marker"},
@@ -266,9 +229,7 @@ def test_evaluate_marker_by_gene_group_and_strand(tmp_path: Path) -> None:
         },
     }
 
-    report = evaluate(
-        AppConfig.model_validate(settings), lambda _c: tracker, model="marker"
-    )
+    report = evaluate(app_config(settings), lambda _c: tracker, model="marker")
 
     assert report.model == "marker"
     assert report.gene == "CO1,Cytb"
@@ -301,7 +262,8 @@ def test_strand_check_ignores_the_reverse_class(tmp_path: Path) -> None:
     tracker = FakeTracker()
     tracker.log_model(model, None, "test-marker", "candidate")
     settings = config_dict(tmp_path)
-    settings["marker"] = {
+    settings["models"]["marker"] = {
+        "kind": CLASSIFIER,
         "label": "gene",
         "genes": ["CO1"],
         "training": {"registered_model": "test-marker", "reverse_label": "reverse"},
@@ -315,9 +277,7 @@ def test_strand_check_ignores_the_reverse_class(tmp_path: Path) -> None:
         },
     }
 
-    report = evaluate(
-        AppConfig.model_validate(settings), lambda _c: tracker, model="marker"
-    )
+    report = evaluate(app_config(settings), lambda _c: tracker, model="marker")
 
     (whole,) = report.fragments["test_known"]
     # The motif records all pick the right strand (the 1 in 14 that misses

@@ -7,6 +7,7 @@ from typing import Any, Literal
 import pytest
 from pydantic import BaseModel
 
+from bio_app import minimal
 from prokopton.ml.config import AppConfig
 from prokopton.ml.inference import chain
 from prokopton.ml.inference.chain import (
@@ -23,13 +24,11 @@ from prokopton.ml.inference.chain import (
     Work,
     serving_entry_point_kinds,
 )
-from test_schema_2 import minimal
 
 
 def config(*steps: str) -> AppConfig:
     return AppConfig.model_validate(
         minimal(
-            schema=3,
             serving={
                 "chain": list(steps),
                 "steps": {name: {"kind": f"test.{name}"} for name in steps},
@@ -131,7 +130,6 @@ def test_installed_packages_can_add_kinds(monkeypatch: pytest.MonkeyPatch) -> No
 def test_a_steps_model_must_be_loaded() -> None:
     app = AppConfig.model_validate(
         minimal(
-            schema=3,
             models={"router": {"kind": "bio.kmer-classifier"}},
             serving={
                 "chain": ["first"],

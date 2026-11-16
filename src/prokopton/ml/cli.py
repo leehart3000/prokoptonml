@@ -3,7 +3,7 @@
     prokopton-ml stages                      the pipeline, and when each stage ran
     prokopton-ml run STAGE [STAGE ...]       run stages (or --all, or --from STAGE)
     prokopton-ml identify --input FILE       identify one sequence
-    prokopton-ml migrate-config [--write]    rewrite an older config as schema 3
+    prokopton-ml migrate-config [--write]    rewrite a schema 3 config as schema 4
     prokopton-ml check BUNDLE CHECKS [--url URL]
                                              run known-answer checks
     prokopton-ml release vVERSION [...]      tag main and follow the release
@@ -60,7 +60,7 @@ CONFIG_NAME = "prokopton.toml"
 
 ENV_PREFIX = "PROKOPTON_"
 """Prefix for environment variables that override config values, e.g.
-``PROKOPTON_DATA__PATHS__RAW_DIR``."""
+``PROKOPTON_PATHS__MODELS_DIR``."""
 
 logger = logging.getLogger("prokopton.ml")
 
@@ -113,9 +113,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     migrate = commands.add_parser(
         "migrate-config",
-        help="Rewrite an older config file as the current schema, keeping its "
-        "comments "
-        "(prints it; --write replaces the file).",
+        help="Rewrite a schema 3 config file as the current schema, keeping "
+        "its comments (prints it; --write replaces the file).",
     )
     migrate.add_argument("--write", action="store_true", help="Replace the file.")
     check = commands.add_parser(
@@ -192,7 +191,7 @@ def _find_config(given: Path | None) -> Path:
 
 
 def _load(path: Path, stages: Registry) -> AppConfig:
-    _warn_if_schema_1(path)
+    _warn_if_schema_3(path)
     config = load_config(path, AppConfig, env_prefix=ENV_PREFIX)
     stages.check(config)
     return config
@@ -279,18 +278,16 @@ def _migrate(path: Path, write: bool) -> str:
     return done
 
 
-def _warn_if_schema_1(path: Path) -> None:
+def _warn_if_schema_3(path: Path) -> None:
     try:
         data = tomllib.loads(path.read_text("utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
         return  # load_config reports these
-    schema = schema_of(data)
-    if schema < CURRENT_SCHEMA:
+    if schema_of(data) == 3:  # Older schemas are refused by load_config
         logger.warning(
-            "%s is schema %s, read by converting it; this will stop working in "
-            "prokopton-ml 0.2.0. Run: prokopton-ml migrate-config --write",
+            "%s is schema 3, read by converting it; a later version will stop "
+            "reading it. Run: prokopton-ml migrate-config --write",
             path,
-            schema,
         )
 
 

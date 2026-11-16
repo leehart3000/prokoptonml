@@ -10,6 +10,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+from bio_app import CLASSIFIER, app_config, sequence_app, write_config
 from prokopton.ml.bio.pipeline.sample import (
     REPORT_NAME,
     SampleStageError,
@@ -119,41 +120,14 @@ def write_inputs(tmp_path: Path, rows: list[dict[str, Any]], leaky: list[str]) -
 
 
 def make_config(tmp_path: Path, **sample_fields: object) -> AppConfig:
-    return AppConfig.model_validate(
-        {
-            "name": "testapp",
-            "title": "Test app",
-            "data": {
-                "source": {
-                    "release": "GB999",
-                    "doi": "10.0000/example",
-                    "licence": "CC-BY-4.0",
-                    "archive_url": "https://example.org/fake.zip",
-                    "checksums_url": "https://example.org/sums.txt",
-                    "archive_name": "fake.zip",
-                    "member_template": "x/{gene}.fasta.gz",
-                    "genes": ["CO1"],
-                },
-                "paths": {
-                    "raw_dir": str(tmp_path / "raw"),
-                    "interim_dir": str(tmp_path / "interim"),
-                    "processed_dir": str(tmp_path / "processed"),
-                    "splits_dir": str(tmp_path / "splits"),
-                    "leakage_dir": str(tmp_path / "leakage"),
-                    "samples_dir": str(tmp_path / "samples"),
-                    "models_dir": str(tmp_path / "models"),
-                },
+    sample = {"train_cap": 20, "eval_cap": 10, "min_class_records": 10}
+    return app_config(
+        sequence_app(
+            tmp_path,
+            models={
+                "router": {"kind": CLASSIFIER, "sample": {**sample, **sample_fields}}
             },
-            "validation": {"phylum_reference": str(tmp_path / "phyla.tsv")},
-            "router": {
-                "sample": {
-                    "train_cap": 20,
-                    "eval_cap": 10,
-                    "min_class_records": 10,
-                    **sample_fields,
-                }
-            },
-        }
+        )
     )
 
 
@@ -229,42 +203,8 @@ def test_sample_requires_leakage_data_when_excluding(tmp_path: Path) -> None:
 
 
 def write_app_toml(tmp_path: Path) -> Path:
-    config_path = tmp_path / "app.toml"
-    config_path.write_text(
-        f"""
-name = "testapp"
-title = "Test app"
-
-[data.source]
-release = "GB999"
-doi = "10.0000/example"
-licence = "CC-BY-4.0"
-archive_url = "https://example.org/fake.zip"
-checksums_url = "https://example.org/sums.txt"
-archive_name = "fake.zip"
-member_template = "x/{{gene}}.fasta.gz"
-genes = ["CO1"]
-
-[data.paths]
-raw_dir = "{tmp_path / "raw"}"
-interim_dir = "{tmp_path / "interim"}"
-processed_dir = "{tmp_path / "processed"}"
-splits_dir = "{tmp_path / "splits"}"
-leakage_dir = "{tmp_path / "leakage"}"
-samples_dir = "{tmp_path / "samples"}"
-models_dir = "{tmp_path / "models"}"
-
-[validation]
-phylum_reference = "{tmp_path / "phyla.tsv"}"
-
-[router.sample]
-train_cap = 20
-eval_cap = 10
-min_class_records = 10
-""",
-        encoding="utf-8",
-    )
-    return config_path
+    config = make_config(tmp_path)
+    return write_config(tmp_path / "app.toml", config.model_dump(mode="json"))
 
 
 def test_cli_sample_succeeds(tmp_path: Path) -> None:

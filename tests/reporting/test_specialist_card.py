@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from bio_app import app_config
 from fakes import FakeTracker
 from prokopton.ml.bio.pipeline.reference import reference_path
 from prokopton.ml.bio.pipeline.specialist_evaluate import (
@@ -36,10 +37,10 @@ def tuned(tmp_path: Path, notes: Path | None = None) -> AppConfig:
     config = prepared(tmp_path)
     report = evaluate_specialist(config, "culicidae", lambda _: FakeTracker())
     data = config_dict(tmp_path)
-    data["specialists"]["culicidae"].update(
+    data["models"]["culicidae"].update(
         report.chosen.model_dump(), card=card_settings(tmp_path, notes)
     )
-    return AppConfig.model_validate(data)
+    return app_config(data)
 
 
 def test_writes_the_card_and_chart(tmp_path: Path) -> None:
@@ -75,7 +76,7 @@ def test_says_when_a_limit_was_missed(tmp_path: Path) -> None:
             "reference": "Someone (2020)",
         }
     ]
-    config = AppConfig.model_validate(data)
+    config = app_config(data)
     neighbours = reference_path(config, "culicidae").parent / "_reference_report.json"
     neighbours.write_text(
         neighbours.read_text()
@@ -103,11 +104,11 @@ def test_refuses_thresholds_that_were_not_chosen(tmp_path: Path) -> None:
     data["models"]["culicidae"]["species_identity"] = 0.999
 
     with pytest.raises(SpecialistCardError, match="set the chosen values"):
-        build_specialist_card(AppConfig.model_validate(data), "culicidae")
+        build_specialist_card(app_config(data), "culicidae")
 
 
 def test_needs_valid_reports_and_notes(tmp_path: Path) -> None:
-    config = AppConfig.model_validate(config_dict(tmp_path))
+    config = app_config(config_dict(tmp_path))
     with pytest.raises(SpecialistCardError, match="run the reference"):
         build_specialist_card(config, "culicidae")
 
