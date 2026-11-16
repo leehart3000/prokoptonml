@@ -1,0 +1,202 @@
+name: Deploy to Cloud Run
+
+# A reusable workflow for products: builds the product's API image with its
+# serving bundle, tests it, pushes it and deploys it to Cloud Run. A product
+# calls it from its own workflow, pinned to a platform release tag:
+#
+#   jobs:
+#     api:
+#       uses: leehart3000/prokoptonml/.github/workflows/deploy-cloud-run.yml@v0.2.0a4
+#       with:
+#         settings: infra/deploy/myproduct.env
+#       permissions:
+#         contents: read
+#         id-token: write
+#
+# The settings file (KEY=value lines, nothing secret) names the Google Cloud
+# project, region, Workload Identity provider, deployer and runtime service
+# accounts, image, service, the API key's secret, the bundle (a gs:// folder)
+# and the Cloud Run limits. The image is built from the product's Dockerfile
+# (see templates/Dockerfile in the platform's repository) and must have
+# prokopton-ml 0.2.0a4 or later, whose check command runs the product's
+# known-answer checks against the image before it is pushed. The endpoint
+# comes from the bundle's config ([serving] endpoint).
+on:
+  workflow_call:
+    inputs:
+      settings:
+        description: "The product's deploy settings file"
+        type: string
+        required: true
+      checks:
+        description: "The product's known-answer checks (see prokopton-ml check)"
+        type: string
+        default: tests/known-answers
+      dockerfile:
+        description: "The product's Dockerfile"
+        type: string
+        default: Dockerfile
+      check_public:
+        description: "Check the live service after deploying (leave off for the very first deploy, before the service is public)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One deploy at a time per product; a newer run waits rather than cancelling
+concurrency:
+  group: deploy-cloud-run-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build, test and deploy
+    # Google only trusts runs from main and v* release tags
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04 # Pinned; move to a newer image on purpose
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # To sign in to Google with Workload Identity Federation
+    env:
+      SETTINGS: ${{ inputs.settings }}
+      CHECKS: ${{ inputs.checks }}
+      DOCKERFILE: ${{ inputs.dockerfile }}
+    steps:
+      - name: Check out the product's repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the deploy settings
+        run: |
+          test -f "$SETTINGS" || { echo "::error::No settings file at $SETTINGS"; exit 1; }
+          test -d "$CHECKS" || { echo "::error::No known-answer checks at $CHECKS"; exit 1; }
+          grep -E '^[A-Z_]+=' "$SETTINGS" >> "$GITHUB_ENV"
+          missing=""
+          for key in PROJECT_ID REGION WIF_PROVIDER DEPLOYER_SA IMAGE SERVICE \
+            RUNTIME_SA SECRET BUNDLE CPU MEMORY CONCURRENCY MAX_INSTANCES TIMEOUT; do
+            grep -qE "^${key}=.+" "$SETTINGS" || missing="$missing $key"
+          done
+          test -z "$missing" || { echo "::error::$SETTINGS does not set:$missing"; exit 1; }
+
+      - name: Sign in to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Download the serving bundle
+        run: gcloud storage rsync "$BUNDLE" bundle --recursive
+
+      - name: Check the bundle against its manifest
+        shell: python3 {0}
+        run: |
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import sys
+
+          root = pathlib.Path("bundle")
+          manifest = json.loads((root / "manifest.json").read_text("utf-8"))
+          listed = set(manifest["files"])
+          present = {
+              str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()
+          } - {"manifest.json"}
+          wrong = sorted(
+              name
+              for name, digest in manifest["files"].items()
+              if name not in present
+              or hashlib.sha256((root / name).read_bytes()).hexdigest() != digest
+          )
+          extra = sorted(present - listed)
+          if wrong or extra:
+              sys.exit(f"Bundle does not match its manifest: wrong {wrong}, extra {extra}")
+          config = json.loads((root / "config.json").read_text("utf-8"))
+          endpoint = config.get("serving", {}).get("endpoint", "predict")
+          app = manifest["app"]
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"APP={app}\nENDPOINT={endpoint}\n")
+          print(f"Bundle OK: {app}, {len(listed)} files, {manifest['versions']}; POST /{endpoint}")
+
+      - name: Build the image
+        run: >-
+          docker build
+          --file "$DOCKERFILE"
+          --label "org.opencontainers.image.revision=$GITHUB_SHA"
+          --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          --label "org.prokopton.bundle=$BUNDLE"
+          --tag "$IMAGE:$GITHUB_SHA" .
+
+      - name: Test the image
+        run: |
+          docker run --detach --name api --publish 8080:8080 \
+            --env PROKOPTON_API_KEY=ci-test-key "$IMAGE:$GITHUB_SHA"
+          healthy=false
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://localhost:8080/health > /dev/null; then
+              healthy=true
+              break
+            fi
+            sleep 2
+          done
+          test "$healthy" = true || { echo "::error::The image did not become healthy"; exit 1; }
+          curl --silent --show-error --fail http://localhost:8080/version
+          echo
+          # Without the key, the endpoint must refuse
+          code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header 'Content-Type: application/json' \
+            --data '{}' "http://localhost:8080/$ENDPOINT")"
+          test "$code" = 401 || { echo "::error::Expected 401 without a key, got $code"; exit 1; }
+          # Each known request must give its expected answer, sent by the
+          # image's own prokopton-ml to the running service
+          docker run --rm --network host \
+            --env PROKOPTON_API_KEY=ci-test-key \
+            --volume "$PWD/$CHECKS:/checks:ro" \
+            "$IMAGE:$GITHUB_SHA" \
+            sh -c 'exec prokopton-ml check "$PROKOPTON_BUNDLE" /checks --url http://localhost:8080'
+
+      - name: Show the service log if the test failed
+        if: failure()
+        run: docker logs api || true
+
+      - name: Push the image
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker push "$IMAGE:$GITHUB_SHA"
+          echo "IMAGE_DIGEST=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$GITHUB_SHA")" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run
+        run: >-
+          gcloud run deploy "$SERVICE"
+          --image "$IMAGE_DIGEST"
+          --region "$REGION"
+          --service-account "$RUNTIME_SA"
+          --set-secrets "PROKOPTON_API_KEY=${SECRET}:latest"
+          --cpu "$CPU"
+          --memory "$MEMORY"
+          --concurrency "$CONCURRENCY"
+          --min-instances 0
+          --no-cpu-boost
+          --max-instances "$MAX_INSTANCES"
+          --timeout "$TIMEOUT"
+          --ingress all
+          --labels "app=${APP},commit=${GITHUB_SHA::12}"
+          --quiet
+
+      - name: Check the live service
+        if: inputs.check_public
+        run: |
+          url="$(gcloud run services describe "$SERVICE" --region "$REGION" --format 'value(status.url)')"
+          curl --silent --show-error --fail --retry 5 --retry-all-errors "$url/health"
+          echo
+          code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --header 'Content-Type: application/json' \
+            --data '{}' "$url/$ENDPOINT")"
+          test "$code" = 401 || { echo "::error::Expected 401 without a key, got $code"; exit 1; }
+          echo "Live at $url: healthy, and /$ENDPOINT refuses requests without the key"
