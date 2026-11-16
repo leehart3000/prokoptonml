@@ -76,7 +76,9 @@ def test_identifies_and_logs_without_the_sequence(
     lines = [json.loads(r.message) for r in caplog.records if '"identify"' in r.message]
     assert [line["cached"] for line in lines] == [False, True]
     assert lines[0]["router_label"] == "Other"
-    assert lines[0]["specialist_outcome"] is None
+    # Each step logs its own fields: this chain has no specialist step
+    assert "specialist_outcome" not in lines[0]
+    assert "strand" in lines[0]
     assert BARCODE not in caplog.text
 
 
