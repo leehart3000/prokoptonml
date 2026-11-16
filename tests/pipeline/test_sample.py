@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.pipeline.sample."""
+"""Tests for prokopton.ml.bio.pipeline.sample."""
 
 import json
 from collections import Counter
@@ -10,15 +10,15 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig
-from prokopton.ml.pipeline.sample import (
+from prokopton.ml.bio.pipeline.sample import (
     REPORT_NAME,
     SampleStageError,
     label_for,
     sample,
     select_capped,
 )
+from prokopton.ml.cli import main
+from prokopton.ml.config import AppConfig
 
 
 @pytest.mark.parametrize(
@@ -287,7 +287,7 @@ def test_sample_writes_in_batches(
     write_inputs(tmp_path, make_rows(), [])
     config = make_config(tmp_path)
     whole = pq.read_table(sample(config).splits["train"].output)
-    monkeypatch.setattr("prokopton.ml.pipeline.sample.BATCH_SIZE", 7)
+    monkeypatch.setattr("prokopton.ml.bio.pipeline.sample.BATCH_SIZE", 7)
 
     output = sample(config).splits["train"].output
 

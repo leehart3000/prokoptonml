@@ -43,6 +43,7 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
+from prokopton.ml.bio.pipeline.split import hash_fraction
 from prokopton.ml.bio.sources.refseq import read_anchors
 from prokopton.ml.bio.specialists.identify import (
     NEIGHBOURS_NAME,
@@ -50,7 +51,6 @@ from prokopton.ml.bio.specialists.identify import (
     write_neighbours,
 )
 from prokopton.ml.config import AppConfig, SpecialistConfig
-from prokopton.ml.pipeline.split import hash_fraction
 
 __all__ = [
     "CONTRADICTED_NAME",

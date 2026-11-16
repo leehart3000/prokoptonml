@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.pipeline.train."""
+"""Tests for prokopton.ml.bio.pipeline.train."""
 
 import json
 from pathlib import Path
@@ -10,9 +10,9 @@ import pyarrow.parquet as pq
 import pytest
 
 from fakes import FakeTracker
+from prokopton.ml.bio.pipeline.train import REPORT_NAME, TrainStageError, train
 from prokopton.ml.cli import main
 from prokopton.ml.config import AppConfig
-from prokopton.ml.pipeline.train import REPORT_NAME, TrainStageError, train
 
 MOTIFS = {"Diptera": "ACGTTGCA", "Fungi": "GGGCCCAT"}
 TRAINING = {

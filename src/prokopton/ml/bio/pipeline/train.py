@@ -1,7 +1,7 @@
 """Train stage: choose and register the router from the sampled data.
 
 Reads the router samples written by the sample stage, tries every candidate
-in ``[router.training]`` (see ``prokopton.ml.training.router``), and records
+in ``[router.training]`` (see ``prokopton.ml.bio.training.router``), and records
 each in MLflow. The best is registered under ``registered_model`` with the
 alias ``alias``. Every run is tagged with the data's lineage: the release,
 the gene and the SHA-256 of each sample file, so a model can be traced back
@@ -21,10 +21,10 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
+from prokopton.ml.bio.pipeline.sample import REPORT_NAME as SAMPLE_REPORT_NAME
+from prokopton.ml.bio.training.router import RouterSample, train_router
 from prokopton.ml.config import AppConfig, ClassifierTrainingConfig
 from prokopton.ml.data.checksums import sha256_of_file
-from prokopton.ml.pipeline.sample import REPORT_NAME as SAMPLE_REPORT_NAME
-from prokopton.ml.training.router import RouterSample, train_router
 from prokopton.ml.training.tracking import Tracker, mlflow_tracker
 
 __all__ = [

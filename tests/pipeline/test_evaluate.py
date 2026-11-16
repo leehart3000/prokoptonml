@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.pipeline.evaluate."""
+"""Tests for prokopton.ml.bio.pipeline.evaluate."""
 
 import json
 from pathlib import Path
@@ -12,13 +12,13 @@ from sklearn.pipeline import Pipeline
 
 from fakes import FakeTracker
 from prokopton.ml.bio.features.kmers import KmerVectorizer
-from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig
-from prokopton.ml.pipeline.evaluate import (
+from prokopton.ml.bio.pipeline.evaluate import (
     REPORT_NAME,
     EvaluationStageError,
     evaluate,
 )
+from prokopton.ml.cli import main
+from prokopton.ml.config import AppConfig
 
 MOTIFS = {"Diptera": "ACGTTGCA", "Hymenoptera": "GGGCCCAT"}
 FOLDER = "midori2_gb999"

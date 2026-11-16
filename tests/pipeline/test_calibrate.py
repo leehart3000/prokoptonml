@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.pipeline.calibrate."""
+"""Tests for prokopton.ml.bio.pipeline.calibrate."""
 
 import json
 from pathlib import Path
@@ -13,13 +13,13 @@ from sklearn.pipeline import Pipeline
 
 from fakes import FakeTracker
 from prokopton.ml.bio.features.kmers import KmerVectorizer
-from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig
-from prokopton.ml.pipeline.calibrate import (
+from prokopton.ml.bio.pipeline.calibrate import (
     REPORT_NAME,
     CalibrationStageError,
     calibrate,
 )
+from prokopton.ml.cli import main
+from prokopton.ml.config import AppConfig
 from prokopton.ml.training.calibration import LengthCalibratedClassifier
 
 MOTIFS = {"Diptera": "ACGTTGCA", "Hymenoptera": "GGGCCCAT"}
