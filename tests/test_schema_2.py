@@ -8,13 +8,15 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from prokopton.ml.config import (
-    AppConfig,
+from prokopton.ml.bio.config import (
     ClassifierConfig,
     MarkerStepConfig,
-    OtherStepConfig,
     SpecialistConfig,
     SpecialistStepConfig,
+)
+from prokopton.ml.config import (
+    AppConfig,
+    OtherStepConfig,
     UnknownClassifierError,
     convert_schema_1,
     convert_schema_2,

@@ -38,9 +38,9 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import Normalizer, normalize
 
+from prokopton.ml.bio.config import ClassifierTrainingConfig
 from prokopton.ml.bio.features.fragments import random_fragments, reverse_complement
 from prokopton.ml.bio.features.kmers import KmerVectorizer
-from prokopton.ml.config import ClassifierTrainingConfig
 from prokopton.ml.training.metrics import classification_metrics
 from prokopton.ml.training.tracking import Tracker
 

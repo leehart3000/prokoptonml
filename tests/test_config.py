@@ -6,15 +6,14 @@ import pytest
 from prokopton.core.config import ConfigError, load_config
 from pydantic import ValidationError
 
-from prokopton.ml.config import (
-    AppConfig,
+from prokopton.ml.bio.config import (
     ClassifierCalibrationConfig,
     ClassifierServingConfig,
     ClassifierTrainingConfig,
     Midori2SourceConfig,
     SpecialistConfig,
-    UnknownClassifierError,
 )
+from prokopton.ml.config import AppConfig, UnknownClassifierError
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 

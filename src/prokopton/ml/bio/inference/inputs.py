@@ -11,7 +11,7 @@ not DNA, too many ambiguous bases, or a sequence that is too short or long.
 import re
 from dataclasses import dataclass, field
 
-from prokopton.ml.config import SequenceInputStepConfig
+from prokopton.ml.bio.config import SequenceInputStepConfig
 
 __all__ = ["DNA", "InputError", "Submission", "parse_submission"]
 

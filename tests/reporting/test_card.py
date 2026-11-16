@@ -7,6 +7,12 @@ from typing import Any
 
 import pytest
 
+from prokopton.ml.bio.config import (
+    ClassifierCalibrationConfig,
+    ClassifierEvaluationConfig,
+    ClassifierSampleConfig,
+    ClassifierTrainingConfig,
+)
 from prokopton.ml.bio.evaluation.scores import (
     AmbiguityBin,
     CalibrationBin,
@@ -24,14 +30,7 @@ from prokopton.ml.bio.pipeline.sample import SampleReport, SplitSampleReport
 from prokopton.ml.bio.pipeline.train import TrainReport
 from prokopton.ml.bio.reporting.card import CardError, build_card
 from prokopton.ml.cli import main
-from prokopton.ml.config import (
-    AppConfig,
-    ClassifierCalibrationConfig,
-    ClassifierEvaluationConfig,
-    ClassifierSampleConfig,
-    ClassifierTrainingConfig,
-    UnknownClassifierError,
-)
+from prokopton.ml.config import AppConfig, UnknownClassifierError
 
 NOW = datetime(2026, 11, 11, 12, 0, tzinfo=UTC)
 METRICS = {

@@ -20,10 +20,11 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
+from prokopton.ml.bio.config import ClassifierCalibrationConfig
 from prokopton.ml.bio.features.fragments import random_fragments
 from prokopton.ml.bio.pipeline.train import read_sample
 from prokopton.ml.bio.training.router import predict_proba
-from prokopton.ml.config import AppConfig, ClassifierCalibrationConfig
+from prokopton.ml.config import AppConfig
 from prokopton.ml.training.calibration import (
     LengthCalibratedClassifier,
     fit_length_temperature,

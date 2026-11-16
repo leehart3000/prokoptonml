@@ -2,8 +2,8 @@
 
 import pytest
 
+from prokopton.ml.bio.config import SequenceInputStepConfig
 from prokopton.ml.bio.inference.inputs import InputError, parse_submission
-from prokopton.ml.config import SequenceInputStepConfig
 
 RULES = SequenceInputStepConfig(
     kind="bio.sequence-input",

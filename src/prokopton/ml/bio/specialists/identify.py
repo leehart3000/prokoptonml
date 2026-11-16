@@ -48,9 +48,9 @@ import pyarrow.parquet as pq
 from scipy import sparse
 from sklearn.preprocessing import normalize
 
+from prokopton.ml.bio.config import ComplexConfig, SpecialistConfig
 from prokopton.ml.bio.features.kmers import KmerVectorizer
 from prokopton.ml.bio.specialists.identity import align
-from prokopton.ml.config import ComplexConfig, SpecialistConfig
 
 __all__ = [
     "NEIGHBOURS_NAME",

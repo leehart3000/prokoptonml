@@ -8,6 +8,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+from prokopton.ml.bio.config import LeakageConfig
 from prokopton.ml.bio.pipeline.leakage import (
     REPORT_NAME,
     LeakageStageError,
@@ -15,7 +16,7 @@ from prokopton.ml.bio.pipeline.leakage import (
     leakage,
 )
 from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig, LeakageConfig
+from prokopton.ml.config import AppConfig
 
 FAKE_VSEARCH = (sys.executable, str(Path(__file__).with_name("fake_vsearch.py")))
 
