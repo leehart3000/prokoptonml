@@ -58,9 +58,10 @@ The config itself (schema 4) holds only what every app has: its name, data
 release (`[data]`), models folder (`[paths]`), models, pipeline, serving steps
 and MLflow settings. Each kind's own settings, and app-wide sections such as
 `[bio]` for sequence apps, are declared by the package that reads them
-(`prokopton.ml.settings`) and checked when the config is read. Older configs
-are converted when read; `prokopton-ml migrate-config --write` rewrites them,
-keeping their comments.
+(`prokopton.ml.settings`) and checked when the config is read. Schema 3
+configs are converted when read, and `prokopton-ml migrate-config --write`
+rewrites them as schema 4, keeping their comments. Schemas 1 and 2 are no
+longer read: rewrite them with prokopton-ml 0.2.0a7 first.
 
 ```python
 import prokopton.ml
@@ -82,7 +83,7 @@ end to end with `prokopton.ml.bio` removed; locally, `pixi run penguins`.
 
 A product deploys its API to Google Cloud Run with the reusable workflow
 [`deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml), pinned to a
-platform release's commit (`@<commit> # v0.2.0a5`, as for actions). It builds the product's image (from
+platform release's commit (`@<commit> # v0.2.0`, as for actions). It builds the product's image (from
 [`templates/Dockerfile`](templates/Dockerfile)) with its serving bundle, runs
 the product's known-answer checks against the image with `prokopton-ml check`,
 then pushes and deploys it.
@@ -95,13 +96,17 @@ then pushes and deploys it.
 | [pepbarcode.org](https://pepbarcode.org) | Peptide barcoding | | Planned |
 
 Each product has its own repository and its own cloud project, and pins an
-exact platform version.
+exact platform version. A new product can start from the template
+repository,
+[leehart3000/prokoptonml-product-template](https://github.com/leehart3000/prokoptonml-product-template):
+the Penguins example as a product, with its CI, deploy and release
+workflows.
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| `src/prokopton/ml/` | The generic platform: pipeline stages, training, evaluation, model cards, bundles, serving, command-line tool |
+| `src/prokopton/ml/` | The generic platform: config, pipeline stages, training, evaluation, model cards, bundles, serving, command-line tool, and the tabular kinds (`tabular/`) |
 | `src/prokopton/ml/bio/` | Sequence-specific code: MIDORI2 and RefSeq sources, FASTA, k-mer features, specialists, sequence input checks (the `bio` extra) |
 | `tests/` | Tests (100% coverage), with frozen fixtures in `tests/fixtures/` |
 | `.github/workflows/` | CI, secret scanning, lockfile updates and releases to PyPI |
