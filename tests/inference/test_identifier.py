@@ -14,6 +14,8 @@ from inference_world import (
     random_sequence,
 )
 from prokopton.ml.bio.features.fragments import reverse_complement
+from prokopton.ml.bio.serving import member_name
+from prokopton.ml.bio.serving import specialist_answer as _specialist_answer
 from prokopton.ml.bio.specialists.identify import (
     Identification,
     Outcome,
@@ -21,11 +23,7 @@ from prokopton.ml.bio.specialists.identify import (
     Specialist,
 )
 from prokopton.ml.config import AppConfig
-from prokopton.ml.inference.identify import (
-    Identifier,
-    _specialist_answer,
-    member_name,
-)
+from prokopton.ml.inference.identify import Identifier
 from specialist_world import config_dict
 
 

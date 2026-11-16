@@ -157,7 +157,7 @@ def core_kinds() -> list[StageKind]:
                 "specialist's reference set, with checksums."
             ),
             run=_bundle,
-            uses=("inference", "models"),
+            uses=("serving", "models"),
             errors=(BundleError,),
         )
     ]

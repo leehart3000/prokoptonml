@@ -3,9 +3,14 @@
 import pytest
 
 from prokopton.ml.bio.inference.inputs import InputError, parse_submission
-from prokopton.ml.config import InferenceConfig
+from prokopton.ml.config import SequenceInputStepConfig
 
-RULES = InferenceConfig(max_length=1000, max_ambiguous_fraction=0.1)
+RULES = SequenceInputStepConfig(
+    kind="bio.sequence-input",
+    model="router",
+    max_length=1000,
+    max_ambiguous_fraction=0.1,
+)
 BASES = "ACGT" * 50  # 200 bases
 
 

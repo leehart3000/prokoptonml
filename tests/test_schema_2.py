@@ -11,10 +11,15 @@ from pydantic import ValidationError
 from prokopton.ml.config import (
     AppConfig,
     ClassifierConfig,
+    MarkerStepConfig,
+    OtherStepConfig,
     SpecialistConfig,
+    SpecialistStepConfig,
     UnknownClassifierError,
     convert_schema_1,
+    convert_schema_2,
     default_stages,
+    upgrade,
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -44,7 +49,7 @@ def minimal(**extra: Any) -> dict[str, Any]:
 def test_schema_1_is_converted_with_every_stage_it_ran() -> None:
     config = AppConfig.model_validate(schema_1())
 
-    assert config.schema_version == 2
+    assert config.schema_version == 3
     assert list(config.models) == ["router", "marker", "culicidae"]
     assert isinstance(config.models["router"], ClassifierConfig)
     assert isinstance(config.models["culicidae"], SpecialistConfig)
@@ -76,7 +81,7 @@ def test_a_dumped_config_reads_back_the_same() -> None:
     config = AppConfig.model_validate(schema_1())
 
     assert AppConfig.model_validate_json(config.model_dump_json()) == config
-    assert json.loads(config.model_dump_json(by_alias=True))["schema"] == 2
+    assert json.loads(config.model_dump_json(by_alias=True))["schema"] == 3
 
 
 def test_a_schema_1_app_without_marker_or_anchors() -> None:
@@ -154,3 +159,79 @@ def test_models_are_found_by_name_and_kind() -> None:
         config.classifier("culicidae")
     with pytest.raises(UnknownClassifierError, match="no 'router' specialist"):
         config.specialist("router")
+
+
+def test_inference_settings_move_into_the_serving_steps() -> None:
+    data = schema_1()
+    data["inference"]["route_threshold"] = 0.2
+
+    serving = AppConfig.model_validate(data).serving
+
+    assert serving.chain == ("input", "marker", "router", "culicidae")
+    assert serving.endpoint == "predict"
+    marker = serving.steps["marker"]
+    assert isinstance(marker, MarkerStepConfig)
+    assert marker.unsupported_note == data["inference"]["unsupported_note"]
+    specialist = serving.steps["culicidae"]
+    assert isinstance(specialist, SpecialistStepConfig)
+    assert specialist.route_threshold == 0.2
+
+
+def test_schema_2_without_marker_or_inference_gets_default_steps() -> None:
+    data = convert_schema_1(schema_1())
+    del data["models"]["marker"], data["inference"]
+    data["stages"] = {
+        k: v for k, v in data["stages"].items() if v.get("model") != "marker"
+    }
+    data["pipeline"]["stages"] = list(data["stages"])
+
+    steps = convert_schema_2(data)["serving"]["steps"]
+
+    assert list(steps) == ["input", "router", "culicidae"]
+    assert steps["input"] == {"kind": "bio.sequence-input", "model": "router"}
+    assert convert_schema_2({"models": {}})["serving"] == {"chain": [], "steps": {}}
+
+
+def test_upgrade_leaves_schema_3_alone() -> None:
+    data = minimal(serving={"endpoint": "identify"})
+    data["schema"] = 3
+
+    assert upgrade(data) is data
+
+
+def serving(**fields: Any) -> dict[str, Any]:
+    return minimal(
+        schema=3,
+        models={
+            "router": {"kind": "bio.kmer-classifier"},
+            "f": {"kind": "bio.specialist", "target": "F", "background": "B"},
+        },
+        serving=fields,
+    )
+
+
+def test_serving_steps_are_checked() -> None:
+    with pytest.raises(ValidationError, match=r"no \[serving.steps.input\] section"):
+        AppConfig.model_validate(serving(chain=["input"]))
+    with pytest.raises(ValidationError, match="'sharks', which is not a model"):
+        AppConfig.model_validate(
+            serving(steps={"r": {"kind": "bio.router", "model": "sharks"}})
+        )
+    with pytest.raises(ValidationError, match=r"needs a bio\.kmer-classifier model"):
+        AppConfig.model_validate(
+            serving(steps={"r": {"kind": "bio.router", "model": "f"}})
+        )
+
+
+def test_other_packages_steps_are_accepted() -> None:
+    config = AppConfig.model_validate(
+        serving(
+            chain=["x", "y"],
+            steps={
+                "x": {"kind": "shop.thing"},
+                "y": {"kind": "shop.other", "model": "f"},
+            },
+        )
+    )
+
+    assert isinstance(config.serving.steps["x"], OtherStepConfig)
