@@ -33,7 +33,14 @@ pip install "prokopton-ml[serve,bio]==0.2.0a3"
 prokopton-ml stages                  # an app's pipeline, and when each stage ran
 prokopton-ml run router-train        # run stages (or --all, or --from STAGE)
 prokopton-ml identify --input x.fa   # identify one sequence
+prokopton-ml check bundle tests/known-answers   # known-answer checks
 ```
+
+A known-answer check is a request (`<name>.json`) and the start of the
+answer it must give (`<name>.expected`: the answer's text, or
+`declined: <reason>`). `prokopton-ml check` runs every check against a
+serving bundle, or with `--url` against a running service (its API key from
+`PROKOPTON_API_KEY`), and fails if any answer differs.
 
 An app is described by `prokopton.toml` (found in the current folder or a
 parent folder): its models, and its pipeline as named stages, each with a

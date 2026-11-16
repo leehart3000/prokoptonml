@@ -4,9 +4,11 @@
     prokopton-ml run STAGE [STAGE ...]       run stages (or --all, or --from STAGE)
     prokopton-ml identify --input FILE       identify one sequence
     prokopton-ml migrate-config [--write]    rewrite an older config as schema 3
+    prokopton-ml check BUNDLE CHECKS [--url URL]
+                                             run known-answer checks
 
 The config is ``prokopton.toml`` in this folder or a parent folder, unless
-``--config PATH`` is given.
+``--config PATH`` is given. ``check`` and ``identify --bundle`` need no config.
 """
 
 import argparse
@@ -21,6 +23,14 @@ from pathlib import Path
 from prokopton.core.config import ConfigError, load_config
 
 from prokopton.ml.bio.stages import bio_kinds
+from prokopton.ml.checks import (
+    CheckError,
+    bundle_config,
+    read_checks,
+    report,
+    run_local,
+    run_remote,
+)
 from prokopton.ml.config import AppConfig, UnknownClassifierError
 from prokopton.ml.inference.bundle import BundleError, load_bundle
 from prokopton.ml.inference.load import LoadError, load_identifier
@@ -104,6 +114,20 @@ def _build_parser() -> argparse.ArgumentParser:
         "(prints it; --write replaces the file).",
     )
     migrate.add_argument("--write", action="store_true", help="Replace the file.")
+    check = commands.add_parser(
+        "check",
+        help="Run known-answer checks (<name>.json requests and <name>.expected "
+        "answers) against a serving bundle, or a running service; fails if any "
+        "answer differs.",
+    )
+    check.add_argument("bundle", type=Path, help="The serving bundle.")
+    check.add_argument("checks", type=Path, help="The folder of checks.")
+    check.add_argument(
+        "--url",
+        default=None,
+        help="Send the checks to the service at this URL instead (its API key, "
+        "if any, from PROKOPTON_API_KEY).",
+    )
     return parser
 
 
@@ -172,6 +196,23 @@ def _identify(config: AppConfig | None, source: Path, bundle: Path | None) -> st
     return f"{result.status}: {result.answer.text if result.answer else result.reason}"
 
 
+def _check(bundle: Path, folder: Path, url: str | None) -> str:
+    checks = read_checks(folder)
+    if url is None:
+        outcomes = run_local(load_bundle(bundle).identifier, checks)
+    else:
+        endpoint = bundle_config(bundle).serving.endpoint
+        key = os.environ.get("PROKOPTON_API_KEY", "")
+        outcomes = run_remote(url, endpoint, checks, key=key)
+    lines, failed = report(outcomes)
+    for line in lines:
+        print(line)
+    if failed:
+        msg = f"{failed} of {len(outcomes)} checks gave a different answer"
+        raise CheckError(msg)
+    return f"all {len(outcomes)} checks gave their expected answers"
+
+
 def _migrate(path: Path, write: bool) -> str:
     """Rewrite an older config as the current schema: print it, or replace
     the file."""
@@ -212,12 +253,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         MigrationError,
         LoadError,
         BundleError,
+        CheckError,
         OSError,
     )
     try:
         stages = registry()
         expected += stages.errors
-        if args.command == "identify" and args.bundle is not None:
+        if args.command == "check":
+            summary = _check(args.bundle, args.checks, args.url)
+        elif args.command == "identify" and args.bundle is not None:
             summary = _identify(None, args.input, args.bundle)
         else:
             path = _find_config(args.config)

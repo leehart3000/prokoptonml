@@ -18,6 +18,7 @@ CORE = frozenset(
     {
         "",
         "__main__",
+        "checks",
         "cli",
         "data",
         "data.checksums",
