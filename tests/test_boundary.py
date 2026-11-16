@@ -40,6 +40,8 @@ CORE = frozenset(
         "stages",
         "tabular",
         "tabular.config",
+        "tabular.models",
+        "tabular.serving",
         "tabular.stages",
         "training",
         "training.calibration",
