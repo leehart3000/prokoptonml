@@ -52,6 +52,7 @@ __all__ = [
     "MAX_SEQUENCE_CHARACTERS",
     "Classifier",
     "Region",
+    "SequenceAnswer",
     "SequenceRequest",
     "SequenceResult",
     "bio_serving_kinds",
@@ -138,9 +139,19 @@ def _log_specialist(result: Result) -> dict[str, Any]:
     }
 
 
+class SequenceAnswer(Answer):
+    """An answer about a sequence. ``level`` is species, complex,
+    species_group, genus, family or group (the router's, such as an order);
+    ``species`` names the species behind a species, complex or closest-match
+    answer."""
+
+    species: tuple[str, ...] = ()
+
+
 class SequenceResult(Result):
     """The outcome of identifying one sequence."""
 
+    answer: SequenceAnswer | None = None
     length: int = 0
     strand: Literal["given", "reverse"] | None = None
     region: Region | None = None
@@ -338,7 +349,7 @@ def _build_router(
                 details={"top": [{"label": c, "probability": p} for c, p in top]},
             )
         )
-        work.answer = Answer(
+        work.answer = SequenceAnswer(
             level="group",
             name=label,
             text=(
@@ -400,7 +411,7 @@ def member_name(rules: SpecialistConfig) -> str:
     return rules.member_name or f"A member of {rules.target}"
 
 
-def specialist_answer(found: Identification, member: str) -> Answer:
+def specialist_answer(found: Identification, member: str) -> SequenceAnswer:
     """The answer for a specialist's identification of a member."""
     names = ", ".join(found.species)
     texts = {
@@ -420,7 +431,7 @@ def specialist_answer(found: Identification, member: str) -> Answer:
         "genus": f"{found.label} ({found.identity:.1%} identical).",
         "family": f"{found.label} ({found.identity:.1%} identical).",
     }
-    return Answer(
+    return SequenceAnswer(
         level=_LEVELS[found.outcome],
         name=found.label,
         text=texts[found.outcome],

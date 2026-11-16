@@ -9,6 +9,7 @@ import pytest
 from fakes import FakeTracker
 from inference_world import AEGYPTI, FakeMarker, FakeRouter
 from prokopton.ml import cli
+from prokopton.ml.bio.specialists.identify import Specialist
 from prokopton.ml.config import AppConfig
 from prokopton.ml.inference.load import LoadError, load_identifier
 from specialist_world import config_dict, prepared
@@ -46,13 +47,13 @@ def test_loads_models_and_specialists(tmp_path: Path) -> None:
         "router": "5",
         "culicidae": "reference GB999",
     }
-    assert set(loaded.identifier.specialists) == {"culicidae"}
+    assert isinstance(loaded.identifier.models["culicidae"], Specialist)
 
 
 def test_skips_specialists_not_used_at_serving(tmp_path: Path) -> None:
     loaded = load_identifier(app(tmp_path, router_label=""), factory(models()))
 
-    assert loaded.identifier.specialists == {}
+    assert "culicidae" not in loaded.identifier.models
 
 
 def test_loads_only_what_the_serving_steps_use(tmp_path: Path) -> None:
