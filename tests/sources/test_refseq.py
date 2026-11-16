@@ -85,16 +85,17 @@ def test_cli_fetches_anchors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(cli, "load_config", lambda *_, **__: config)
 
     # Not configured
-    assert cli.main(["anchors", "app.toml", "--specialist", "culicidae"]) == 1
+    assert cli.main(["--config", "app.toml", "run", "culicidae-anchors"]) == 1
 
     data["specialists"]["culicidae"].update(
         anchors=str(tmp_path / "anchors.fasta"), anchor_taxon="Culicidae"
     )
     config = AppConfig.model_validate(data)
     monkeypatch.setattr(
-        cli, "fetch_anchors", lambda taxon, path: fetch_anchors(taxon, path, fake_fetch)
+        "prokopton.ml.bio.stages.fetch_anchors",
+        lambda taxon, path: fetch_anchors(taxon, path, fake_fetch),
     )
-    assert cli.main(["anchors", "app.toml", "--specialist", "culicidae"]) == 0
+    assert cli.main(["--config", "app.toml", "run", "culicidae-anchors"]) == 0
     assert (tmp_path / "anchors.fasta").exists()
 
 

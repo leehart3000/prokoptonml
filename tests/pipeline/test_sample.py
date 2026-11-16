@@ -270,11 +270,15 @@ min_class_records = 10
 def test_cli_sample_succeeds(tmp_path: Path) -> None:
     write_inputs(tmp_path, make_rows(), [])
 
-    assert main(["sample", str(write_app_toml(tmp_path))]) == 0
+    assert (
+        main(["--config", str(write_app_toml(tmp_path)), "run", "router-sample"]) == 0
+    )
 
 
 def test_cli_sample_reports_missing_data(tmp_path: Path) -> None:
-    assert main(["sample", str(write_app_toml(tmp_path))]) == 1
+    assert (
+        main(["--config", str(write_app_toml(tmp_path)), "run", "router-sample"]) == 1
+    )
 
 
 def test_sample_writes_in_batches(
@@ -368,7 +372,9 @@ def test_marker_sample_requires_every_gene(tmp_path: Path) -> None:
 def test_cli_sample_for_an_app_without_that_classifier(tmp_path: Path) -> None:
     write_inputs(tmp_path, make_rows(), [])
 
-    assert main(["sample", str(write_app_toml(tmp_path)), "--model", "marker"]) == 1
+    assert (
+        main(["--config", str(write_app_toml(tmp_path)), "run", "marker-sample"]) == 1
+    )
 
 
 def test_select_capped_takes_turns_between_groups_then_orders() -> None:

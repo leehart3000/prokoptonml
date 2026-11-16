@@ -473,9 +473,9 @@ def write_app_toml(tmp_path: Path) -> Path:
 def test_cli_card(tmp_path: Path) -> None:
     write_reports(tmp_path, calibration=calibration_report())
 
-    assert main(["card", str(write_app_toml(tmp_path))]) == 0
+    assert main(["--config", str(write_app_toml(tmp_path)), "run", "router-card"]) == 0
     assert (tmp_path / "cards" / "router.md").exists()
 
 
 def test_cli_card_reports_missing_reports(tmp_path: Path) -> None:
-    assert main(["card", str(write_app_toml(tmp_path))]) == 1
+    assert main(["--config", str(write_app_toml(tmp_path)), "run", "router-card"]) == 1

@@ -29,9 +29,17 @@ the [`prokopton`](https://pypi.org/project/prokopton/) core package
 (`prokopton.core`).
 
 ```bash
-pip install "prokopton-ml[serve,bio]==0.2.0a1"
-prokopton-ml --help
+pip install "prokopton-ml[serve,bio]==0.2.0a2"
+prokopton-ml stages                  # an app's pipeline, and when each stage ran
+prokopton-ml run router-train        # run stages (or --all, or --from STAGE)
+prokopton-ml identify --input x.fa   # identify one sequence
 ```
+
+An app is described by `prokopton.toml` (found in the current folder or a
+parent folder): its models, and its pipeline as named stages, each with a
+kind such as `bio.ingest` or `core.bundle`. A package can add stage kinds
+with an entry point in the `prokopton.ml.stages` group: a function that
+returns a list of `prokopton.ml.stages.StageKind`.
 
 ```python
 import prokopton.ml

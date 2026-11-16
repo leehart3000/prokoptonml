@@ -167,7 +167,7 @@ phylum_reference = "{config.validation.phylum_reference}"
         encoding="utf-8",
     )
 
-    assert main(["ingest", str(config_path)]) == 0
+    assert main(["--config", str(config_path), "run", "ingest"]) == 0
     assert (config.data.paths.interim_dir / "midori2_gb999" / REPORT_NAME).exists()
 
 
@@ -207,11 +207,11 @@ phylum_reference = "{tmp_path / "phyla.tsv"}"
         encoding="utf-8",
     )
 
-    assert main(["ingest", str(config_path)]) == 1
+    assert main(["--config", str(config_path), "run", "ingest"]) == 1
 
 
 def test_cli_returns_error_for_invalid_config(tmp_path: Path) -> None:
     config_path = tmp_path / "bad.toml"
     config_path.write_text('name = "testapp"\n', encoding="utf-8")
 
-    assert main(["ingest", str(config_path)]) == 1
+    assert main(["--config", str(config_path), "run", "ingest"]) == 1

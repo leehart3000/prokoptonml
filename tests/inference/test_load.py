@@ -80,13 +80,16 @@ def test_cli_identify_prints_json(
     sequence = tmp_path / "query.fasta"
     sequence.write_text(f">q\n{AEGYPTI}\n")
 
-    assert cli.main(["identify", "app.toml", "--input", str(sequence)]) == 0
+    assert cli.main(["--config", "app.toml", "identify", "--input", str(sequence)]) == 0
     output = json.loads(capsys.readouterr().out)
     assert output["status"] == "identified"
     assert output["versions"]["router"] == "5"
 
     monkeypatch.setattr("sys.stdin.read", lambda: "ACGT")
-    assert cli.main(["identify", "app.toml", "--input", "-"]) == 0
+    assert cli.main(["--config", "app.toml", "identify", "--input", "-"]) == 0
     assert json.loads(capsys.readouterr().out)["reason"] == "too_short"
 
-    assert cli.main(["identify", "app.toml", "--input", str(tmp_path / "no")]) == 1
+    assert (
+        cli.main(["--config", "app.toml", "identify", "--input", str(tmp_path / "no")])
+        == 1
+    )

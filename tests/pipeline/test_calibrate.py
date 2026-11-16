@@ -162,7 +162,10 @@ def write_app_toml(tmp_path: Path) -> Path:
 
 
 def test_cli_calibrate_reports_missing_samples(tmp_path: Path) -> None:
-    assert main(["calibrate", str(write_app_toml(tmp_path))]) == 1
+    assert (
+        main(["--config", str(write_app_toml(tmp_path)), "run", "router-calibrate"])
+        == 1
+    )
 
 
 def test_cli_calibrate_registers_a_model_mlflow_can_load(tmp_path: Path) -> None:
@@ -177,7 +180,10 @@ def test_cli_calibrate_registers_a_model_mlflow_can_load(tmp_path: Path) -> None
     with tracker.run("register"):
         tracker.log_model(make_model(), None, "test-router", "candidate")
 
-    assert main(["calibrate", str(write_app_toml(tmp_path))]) == 0
+    assert (
+        main(["--config", str(write_app_toml(tmp_path)), "run", "router-calibrate"])
+        == 0
+    )
 
     model = mlflow.pyfunc.load_model("models:/test-router@candidate")
     query = pd.DataFrame({"sequence": [MOTIFS["Hymenoptera"] * 12]})

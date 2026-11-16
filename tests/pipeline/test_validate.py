@@ -299,11 +299,17 @@ def test_cli_validate_succeeds(tmp_path: Path) -> None:
     input_path.parent.mkdir(parents=True)
     make_records([{}]).to_parquet(input_path, index=False)
 
-    assert main(["validate", str(write_app_toml(tmp_path, config))]) == 0
+    assert (
+        main(["--config", str(write_app_toml(tmp_path, config)), "run", "validate"])
+        == 0
+    )
     assert (tmp_path / "processed" / "midori2_gb999" / REPORT_NAME).exists()
 
 
 def test_cli_validate_reports_missing_data(tmp_path: Path) -> None:
     config = make_config(tmp_path)
 
-    assert main(["validate", str(write_app_toml(tmp_path, config))]) == 1
+    assert (
+        main(["--config", str(write_app_toml(tmp_path, config)), "run", "validate"])
+        == 1
+    )

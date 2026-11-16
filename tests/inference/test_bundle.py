@@ -123,22 +123,18 @@ def test_cli_builds_and_uses_a_bundle(
     prepared(tmp_path)
     config = app(tmp_path)
     monkeypatch.setattr(cli, "load_config", lambda *_, **__: config)
-    monkeypatch.setattr(cli, "build_bundle", lambda c: build_bundle(c, factory()))
+    monkeypatch.setattr(
+        "prokopton.ml.stages.build_bundle", lambda c: build_bundle(c, factory())
+    )
 
-    assert cli.main(["bundle", "app.toml"]) == 0
+    assert cli.main(["--config", "app.toml", "run", "bundle"]) == 0
     query = tmp_path / "query.txt"
     query.write_text(AEGYPTI)
     folder = str(bundle_path(config))
-    assert (
-        cli.main(["identify", "app.toml", "--input", str(query), "--bundle", folder])
-        == 0
-    )
+    assert cli.main(["identify", "--input", str(query), "--bundle", folder]) == 0
     output = json.loads(capsys.readouterr().out)
     assert output["answer"]["name"] == "Aedes aegypti"
     assert output["versions"]["marker"] == "6"
 
     (bundle_path(config) / MANIFEST_NAME).unlink()
-    assert (
-        cli.main(["identify", "app.toml", "--input", str(query), "--bundle", folder])
-        == 1
-    )
+    assert cli.main(["identify", "--input", str(query), "--bundle", folder]) == 1

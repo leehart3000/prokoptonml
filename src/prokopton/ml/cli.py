@@ -1,8 +1,18 @@
-"""Command-line interface for ProkoptonML: ``prokopton-ml <command> <config>``."""
+"""Command-line interface for ProkoptonML.
+
+    prokopton-ml stages                      the pipeline, and when each stage ran
+    prokopton-ml run STAGE [STAGE ...]       run stages (or --all, or --from STAGE)
+    prokopton-ml identify --input FILE       identify one sequence
+    prokopton-ml migrate-config [--write]    rewrite a schema 1 config as schema 2
+
+The config is ``prokopton.toml`` in this folder or a parent folder, unless
+``--config PATH`` is given.
+"""
 
 import argparse
 import json
 import logging
+import os
 import sys
 import tomllib
 from collections.abc import Sequence
@@ -10,39 +20,26 @@ from pathlib import Path
 
 from prokopton.core.config import ConfigError, load_config
 
-from prokopton.ml.bio.data.taxonomy import ReferenceDataError
-from prokopton.ml.bio.pipeline.ingest import IngestError, ingest
-from prokopton.ml.bio.pipeline.leakage import LeakageStageError, leakage
-from prokopton.ml.bio.pipeline.reference import ReferenceStageError, build_reference
-from prokopton.ml.bio.pipeline.specialist_evaluate import (
-    SpecialistEvaluationError,
-    evaluate_specialist,
-)
-from prokopton.ml.bio.pipeline.validate import DataValidationError, validate
-from prokopton.ml.bio.reporting.specialist_card import (
-    SpecialistCardError,
-    build_specialist_card,
-)
-from prokopton.ml.bio.sources.refseq import AnchorError, fetch_anchors
+from prokopton.ml.bio.stages import bio_kinds
 from prokopton.ml.config import AppConfig, UnknownClassifierError
-from prokopton.ml.data.checksums import ChecksumManifestError, ChecksumMismatchError
-from prokopton.ml.data.download import DownloadError
-from prokopton.ml.inference.bundle import (
-    BundleError,
-    build_bundle,
-    bundle_path,
-    load_bundle,
-)
+from prokopton.ml.inference.bundle import BundleError, load_bundle
 from prokopton.ml.inference.load import LoadError, load_identifier
 from prokopton.ml.migrate import MigrationError, is_schema_1, migrate_text
-from prokopton.ml.pipeline.calibrate import CalibrationStageError, calibrate
-from prokopton.ml.pipeline.evaluate import EvaluationStageError, evaluate
-from prokopton.ml.pipeline.sample import SampleStageError, sample
-from prokopton.ml.pipeline.split import SplitStageError, split
-from prokopton.ml.pipeline.train import TrainStageError, train
-from prokopton.ml.reporting.card import CardError, build_card
+from prokopton.ml.stages import (
+    Registry,
+    StageError,
+    core_kinds,
+    entry_point_kinds,
+    plan,
+    read_record,
+    run_stage,
+    settings_hash,
+)
 
-__all__ = ["ENV_PREFIX", "main"]
+__all__ = ["CONFIG_NAME", "ENV_PREFIX", "main"]
+
+CONFIG_NAME = "prokopton.toml"
+"""The app's config file, found in the current folder or a parent folder."""
 
 ENV_PREFIX = "PROKOPTON_"
 """Prefix for environment variables that override config values, e.g.
@@ -51,41 +48,9 @@ ENV_PREFIX = "PROKOPTON_"
 logger = logging.getLogger("prokopton.ml")
 
 
-_COMMANDS = {
-    "ingest": "Download, verify and convert an app's source data to Parquet.",
-    "validate": "Check data quality, apply rules and write processed data.",
-    "split": "Assign records to training, validation and test sets.",
-    "leakage": "List novel-set records with a near-copy in the training set.",
-    "sample": "Draw balanced training and validation samples for a classifier.",
-    "train": "Train a classifier's candidates, then track and register the best.",
-    "calibrate": "Calibrate a registered classifier's confidence by length.",
-    "evaluate": (
-        "Measure a registered classifier on the test sets, or tune and test "
-        "a specialist (with --specialist)."
-    ),
-    "card": (
-        "Write a classifier's model card from the pipeline's reports, or a "
-        "specialist's (with --specialist)."
-    ),
-    "reference": "Build a specialist's reference set from the training split.",
-    "bundle": (
-        "Build the serving bundle: the registered models, and each serving "
-        "specialist's reference set from every split, with checksums."
-    ),
-    "anchors": (
-        "Fetch the COI genes of a specialist's RefSeq mitogenomes from NCBI, "
-        "to check reference labels against."
-    ),
-    "identify": (
-        "Identify one sequence with the registered models and print the "
-        "result, with its decision trace, as JSON."
-    ),
-    "migrate-config": (
-        "Rewrite a schema 1 config file as schema 2, keeping its comments "
-        "(prints it; --write replaces the file)."
-    ),
-}
-_CLASSIFIER_COMMANDS = {"sample", "train", "calibrate", "evaluate", "card"}
+def registry() -> Registry:
+    """Every stage kind available: the platform's and installed packages'."""
+    return Registry([*core_kinds(), *bio_kinds(), *entry_point_kinds()])
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -93,138 +58,112 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="prokopton-ml",
         description="Build, deploy and monitor scientific ML applications.",
     )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help=f"The app's config file (default: {CONFIG_NAME} in this folder or a "
+        "parent folder, whose folder then becomes the working folder).",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
-    for name, help_text in _COMMANDS.items():
-        command = commands.add_parser(name, help=help_text)
-        command.add_argument("config", type=Path, help="Path to the app's TOML file.")
-        if name in _CLASSIFIER_COMMANDS:
-            command.add_argument(
-                "--model",
-                choices=("router", "marker"),
-                default="router",
-                help="Which classifier to work on (default: router).",
-            )
-        if name == "identify":
-            command.add_argument(
-                "--input",
-                type=Path,
-                required=True,
-                help="A file with one sequence (plain or FASTA); '-' for stdin.",
-            )
-            command.add_argument(
-                "--bundle",
-                type=Path,
-                default=None,
-                help="Use a serving bundle instead of the MLflow registry.",
-            )
-        if name == "migrate-config":
-            command.add_argument(
-                "--write", action="store_true", help="Replace the file."
-            )
-        if name in ("reference", "evaluate", "card", "anchors"):
-            command.add_argument(
-                "--specialist",
-                required=name in ("reference", "anchors"),
-                default="",
-                help="Which specialist (as named in the app's config).",
-            )
+    commands.add_parser(
+        "stages",
+        help="List the pipeline's stages, when each last ran, and whether its "
+        "settings have changed since.",
+    )
+    run = commands.add_parser("run", help="Run pipeline stages.")
+    run.add_argument("stages", nargs="*", help="Stages to run, in this order.")
+    run.add_argument("--all", action="store_true", help="Run every stage, in order.")
+    run.add_argument("--from", dest="start", help="Run the pipeline from this stage.")
+    identify = commands.add_parser(
+        "identify",
+        help="Identify one sequence and print the result, with its decision "
+        "trace, as JSON.",
+    )
+    identify.add_argument(
+        "--input",
+        type=Path,
+        required=True,
+        help="A file with one sequence (plain or FASTA); '-' for stdin.",
+    )
+    identify.add_argument(
+        "--bundle",
+        type=Path,
+        default=None,
+        help="Use a serving bundle instead of the MLflow registry (no config needed).",
+    )
+    migrate = commands.add_parser(
+        "migrate-config",
+        help="Rewrite a schema 1 config file as schema 2, keeping its comments "
+        "(prints it; --write replaces the file).",
+    )
+    migrate.add_argument("--write", action="store_true", help="Replace the file.")
     return parser
 
 
-def _identify(config: AppConfig, source: Path, bundle: Path | None) -> str:
+def _find_config(given: Path | None) -> Path:
+    """The config file: as given, or found in this folder or a parent folder
+    (whose folder then becomes the working folder, as paths in the config are
+    relative to it)."""
+    if given is not None:
+        return given
+    here = Path.cwd()
+    for folder in (here, *here.parents):
+        if (folder / CONFIG_NAME).is_file():
+            if folder != here:
+                os.chdir(folder)
+                logger.info(
+                    "Using %s (working folder %s)", folder / CONFIG_NAME, folder
+                )
+            return folder / CONFIG_NAME
+    msg = f"No {CONFIG_NAME} in {here} or its parent folders; use --config PATH"
+    raise ConfigError(msg)
+
+
+def _load(path: Path, stages: Registry) -> AppConfig:
+    _warn_if_schema_1(path)
+    config = load_config(path, AppConfig, env_prefix=ENV_PREFIX)
+    stages.check(config)
+    return config
+
+
+def _list_stages(config: AppConfig, stages: Registry) -> str:
+    for number, name in enumerate(config.pipeline.stages, start=1):
+        stage = config.stages[name]
+        target = f" ({stage.model})" if stage.model else ""
+        record = read_record(config, name)
+        if record is None:
+            status = "never run"
+        else:
+            changed = record.settings_sha256 != settings_hash(
+                config, name, stages[stage.kind]
+            )
+            status = f"last run {record.finished_at:%Y-%m-%d %H:%M} UTC with " + (
+                f"{record.platform_version}"
+                + ("; settings changed since" if changed else "")
+            )
+        print(f"{number:3}  {name:<24} {stage.kind}{target}  [{status}]")
+    return f"{len(config.pipeline.stages)} stages"
+
+
+def _run_stages(config: AppConfig, stages: Registry, names: list[str]) -> str:
+    for name in names:
+        logger.info("Running %s (%s)", name, config.stages[name].kind)
+        logger.info("%s: %s", name, run_stage(stages, config, name))
+    return f"ran {len(names)} stage{'s' if len(names) != 1 else ''}"
+
+
+def _identify(config: AppConfig | None, source: Path, bundle: Path | None) -> str:
     text = sys.stdin.read() if str(source) == "-" else source.read_text("utf-8")
-    loaded = load_bundle(bundle) if bundle else load_identifier(config)
+    if bundle is not None:
+        loaded = load_bundle(bundle)
+    else:
+        assert config is not None  # A config is loaded when there is no bundle
+        loaded = load_identifier(config)
     result = loaded.identifier.identify(text)
     output = {"versions": loaded.versions, **result.model_dump(mode="json")}
     print(json.dumps(output, indent=2))
     return f"{result.status}: {result.answer.text if result.answer else result.reason}"
-
-
-def _run(
-    command: str,
-    config: AppConfig,
-    model: str = "router",
-    specialist: str = "",
-    source: Path | None = None,
-    bundle: Path | None = None,
-) -> str:
-    """Run one pipeline stage and return a one-line summary."""
-    if command == "identify" and source is not None:
-        return _identify(config, source, bundle)
-    if command == "anchors":
-        rules = config.specialist(specialist)
-        if rules.anchors is None or not rules.anchor_taxon:
-            msg = f"Set anchors and anchor_taxon for the {specialist!r} specialist"
-            raise AnchorError(msg)
-        anchors = fetch_anchors(rules.anchor_taxon, rules.anchors)
-        return f"{len(anchors)} COI anchors written to {rules.anchors}"
-    if command == "bundle":
-        manifest = build_bundle(config)
-        return f"serving bundle {manifest.versions} written to {bundle_path(config)}"
-    if command == "reference":
-        reference = build_reference(config, specialist)
-        return (
-            f"{reference.target_records} target records "
-            f"({reference.target_named_species} named species), "
-            f"{reference.background_records} background records"
-        )
-    if command == "ingest":
-        ingest_report = ingest(config)
-        total = sum(gene.records for gene in ingest_report.genes.values())
-        return f"{len(ingest_report.genes)} genes, {total} records"
-    if command == "validate":
-        validation_report = validate(config)
-        kept = sum(g.kept_records for g in validation_report.genes.values())
-        seen = sum(g.input_records for g in validation_report.genes.values())
-        return f"kept {kept} of {seen} records"
-    if command == "leakage":
-        leakage_report = leakage(config)
-        found = {g: r.near_duplicates for g, r in leakage_report.genes.items()}
-        return f"near-duplicates: {found}"
-    if command == "sample":
-        sample_report = sample(config, model)
-        sizes = {name: r.sampled_records for name, r in sample_report.splits.items()}
-        return f"{len(sample_report.labels)} classes; records per split: {sizes}"
-    if command == "train":
-        train_report = train(config, model=model)
-        return (
-            f"best {train_report.best_model} k={train_report.best_k}, "
-            f"selection score {train_report.metrics['selection_score']:.4f}; "
-            f"{train_report.registered_model} v{train_report.model_version} "
-            f"@{train_report.alias}"
-        )
-    if command == "calibrate":
-        calibration = calibrate(config, model=model)
-        return (
-            f"v{calibration.base_version} calibrated as v{calibration.model_version}; "
-            f"NLL {calibration.nll_before:.4f} -> {calibration.nll_after:.4f}"
-        )
-    if command == "evaluate" and specialist:
-        tuned = evaluate_specialist(config, specialist)
-        chosen = tuned.chosen
-        return (
-            f"{specialist} thresholds: species {chosen.species_identity}, "
-            f"group margin {chosen.group_margin}, member {chosen.member_identity}"
-        )
-    if command == "card" and specialist:
-        written = build_specialist_card(config, specialist)
-        return f"{specialist} model card written to {written.card}"
-    if command == "card":
-        files = build_card(config, model)
-        return f"model card for v{files.model_version} written to {files.card}"
-    if command == "evaluate":
-        evaluation = evaluate(config, model=model)
-        accuracy = {
-            name: round(scores.metrics["accuracy"], 4)
-            for name, scores in evaluation.splits.items()
-        }
-        return f"v{evaluation.model_version} accuracy: {accuracy}"
-    split_report = split(config)
-    totals = {
-        name: sum(g.records[name] for g in split_report.genes.values())
-        for name in next(iter(split_report.genes.values())).records
-    }
-    return f"records per split: {totals}"
 
 
 def _migrate(path: Path, write: bool) -> str:
@@ -257,45 +196,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-    try:
-        if args.command == "migrate-config":
-            logger.info("Done: %s", _migrate(args.config, args.write))
-            return 0
-        _warn_if_schema_1(args.config)
-        config = load_config(args.config, AppConfig, env_prefix=ENV_PREFIX)
-        summary = _run(
-            args.command,
-            config,
-            getattr(args, "model", "router"),
-            getattr(args, "specialist", ""),
-            getattr(args, "input", None),
-            getattr(args, "bundle", None),
-        )
-    except (
+    expected: tuple[type[Exception], ...] = (
         ConfigError,
-        IngestError,
-        DownloadError,
-        ChecksumManifestError,
-        ChecksumMismatchError,
-        ReferenceDataError,
-        DataValidationError,
-        SplitStageError,
-        LeakageStageError,
-        SampleStageError,
-        TrainStageError,
-        EvaluationStageError,
-        CalibrationStageError,
-        CardError,
+        StageError,
         UnknownClassifierError,
-        ReferenceStageError,
-        SpecialistEvaluationError,
-        SpecialistCardError,
+        MigrationError,
         LoadError,
         BundleError,
-        AnchorError,
-        MigrationError,
         OSError,
-    ) as error:
+    )
+    try:
+        stages = registry()
+        expected += stages.errors
+        if args.command == "identify" and args.bundle is not None:
+            summary = _identify(None, args.input, args.bundle)
+        else:
+            path = _find_config(args.config)
+            if args.command == "migrate-config":
+                summary = _migrate(path, args.write)
+            else:
+                config = _load(path, stages)
+                if args.command == "stages":
+                    summary = _list_stages(config, stages)
+                elif args.command == "identify":
+                    summary = _identify(config, args.input, None)
+                else:
+                    names = plan(
+                        config, args.stages, run_all=args.all, start=args.start
+                    )
+                    summary = _run_stages(config, stages, names)
+    except expected as error:
         logger.error("%s", error)
         return 1
     logger.info("Done: %s", summary)

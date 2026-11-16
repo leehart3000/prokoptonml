@@ -132,13 +132,13 @@ def test_the_command_prints_or_writes(
     path = tmp_path / "app.toml"
     path.write_text(HEADER, "utf-8")
 
-    assert main(["migrate-config", str(path)]) == 0
+    assert main(["--config", str(path), "migrate-config"]) == 0
     assert "schema = 2" in capsys.readouterr().out
     assert path.read_text("utf-8") == HEADER
 
-    assert main(["migrate-config", str(path), "--write"]) == 0
+    assert main(["--config", str(path), "migrate-config", "--write"]) == 0
     assert "schema = 2" in path.read_text("utf-8")
-    assert main(["migrate-config", str(path)]) == 1
+    assert main(["--config", str(path), "migrate-config"]) == 1
 
 
 def test_commands_warn_about_schema_1(
@@ -147,10 +147,10 @@ def test_commands_warn_about_schema_1(
     path = tmp_path / "app.toml"
     path.write_text(HEADER, "utf-8")
 
-    assert main(["anchors", str(path), "--specialist", "nope"]) == 1
+    assert main(["--config", str(path), "run", "nope-anchors"]) == 1
 
     assert "is schema 1" in caplog.text
-    assert "no 'nope' specialist" in caplog.text
+    assert "no stage named 'nope-anchors'" in caplog.text
 
 
 def test_commands_leave_unreadable_files_to_the_loader(
@@ -159,6 +159,6 @@ def test_commands_leave_unreadable_files_to_the_loader(
     path = tmp_path / "app.toml"
     path.write_text("name = \n", "utf-8")
 
-    assert main(["anchors", str(path), "--specialist", "nope"]) == 1
-    assert main(["anchors", str(tmp_path / "missing.toml"), "--specialist", "x"]) == 1
+    assert main(["--config", str(path), "run", "nope-anchors"]) == 1
+    assert main(["--config", str(tmp_path / "missing.toml"), "run", "x"]) == 1
     assert "is schema 1" not in caplog.text

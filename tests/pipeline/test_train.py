@@ -139,14 +139,14 @@ def write_app_toml(tmp_path: Path) -> Path:
 
 
 def test_cli_train_reports_missing_samples(tmp_path: Path) -> None:
-    assert main(["train", str(write_app_toml(tmp_path))]) == 1
+    assert main(["--config", str(write_app_toml(tmp_path)), "run", "router-train"]) == 1
 
 
 def test_cli_train_tracks_and_registers_with_mlflow(tmp_path: Path) -> None:
     mlflow = pytest.importorskip("mlflow")
     write_samples(tmp_path)
 
-    assert main(["train", str(write_app_toml(tmp_path))]) == 0
+    assert main(["--config", str(write_app_toml(tmp_path)), "run", "router-train"]) == 0
 
     mlflow.set_tracking_uri(f"sqlite:///{tmp_path / 'mlflow' / 'mlflow.db'}")
     client = mlflow.MlflowClient()

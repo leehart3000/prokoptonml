@@ -32,6 +32,7 @@ CORE = frozenset(
         "reporting.charts",
         "serving",
         "serving.app",
+        "stages",
         "training",
         "training.calibration",
         "training.metrics",
@@ -61,14 +62,7 @@ SPLIT = frozenset(
 
 ALLOWED = frozenset(
     {
-        ("cli", "bio.data.taxonomy"),
-        ("cli", "bio.pipeline.ingest"),
-        ("cli", "bio.pipeline.leakage"),
-        ("cli", "bio.pipeline.reference"),
-        ("cli", "bio.pipeline.specialist_evaluate"),
-        ("cli", "bio.pipeline.validate"),
-        ("cli", "bio.reporting.specialist_card"),
-        ("cli", "bio.sources.refseq"),
+        ("cli", "bio.stages"),
         ("inference.bundle", "bio.pipeline.reference"),
         ("inference.bundle", "bio.specialists.identify"),
         ("inference.load", "bio.pipeline.reference"),
