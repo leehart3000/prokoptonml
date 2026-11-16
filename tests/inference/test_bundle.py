@@ -135,7 +135,7 @@ def test_needs_serving_steps(tmp_path: Path) -> None:
         build_bundle(AppConfig.model_validate(data), factory())
 
 
-def test_reads_format_1_bundles(tmp_path: Path) -> None:
+def test_refuses_format_1_bundles(tmp_path: Path) -> None:
     _, folder = built(tmp_path)
     manifest = json.loads((folder / MANIFEST_NAME).read_text())
     for key in ("format", "models", "steps"):
@@ -143,11 +143,10 @@ def test_reads_format_1_bundles(tmp_path: Path) -> None:
     manifest["specialists"] = ["culicidae"]
     (folder / MANIFEST_NAME).write_text(json.dumps(manifest))
 
-    loaded = load_bundle(folder)
-
-    result = loaded.identifier.identify(AEGYPTI)
-    assert result.answer is not None
-    assert result.answer.name == "Aedes aegypti"
+    with pytest.raises(
+        BundleError, match=r"bundle format 1; .* build the bundle again"
+    ):
+        load_bundle(folder)
 
 
 def test_refuses_unknown_formats(tmp_path: Path) -> None:
