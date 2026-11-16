@@ -51,9 +51,6 @@ CORE = frozenset(
 )
 """Generic modules (packages' ``__init__`` files are named by their package)."""
 
-OLD_PATHS = frozenset({"features", "features.kmers"})
-"""Old import paths, kept so that models saved before 0.2.0 still load."""
-
 SPLIT: frozenset[str] = frozenset()
 """Modules with both kinds of code, to be divided."""
 
@@ -104,11 +101,11 @@ def _core_to_bio() -> set[tuple[str, str]]:
 
 
 def test_every_module_is_classified() -> None:
-    assert not (CORE & SPLIT or CORE & OLD_PATHS or SPLIT & OLD_PATHS)
+    assert not CORE & SPLIT
     outside_bio = {
         name for name in _modules() if name != "bio" and not name.startswith("bio.")
     }
-    assert outside_bio == CORE | SPLIT | OLD_PATHS
+    assert outside_bio == CORE | SPLIT
 
 
 def test_core_imports_no_new_bio_modules() -> None:

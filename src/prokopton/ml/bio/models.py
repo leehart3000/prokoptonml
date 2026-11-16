@@ -6,9 +6,18 @@
   from the training split (as evaluated); in a bundle, it is rebuilt from
   **every** split (more species), with its barcode-gap table and a pre-built
   k-mer index, under ``specialists/<name>/``.
+
+Classifiers saved before prokopton-ml 0.2.0 (in the MLflow registry) refer
+to ``KmerVectorizer`` by its old import path, so the registry's models are
+loaded with that path leading to its new place (see ``old_paths``).
+Bundles are built from the registry, and so refer to the new path.
 """
 
+import importlib
 import shutil
+import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -25,9 +34,26 @@ from prokopton.ml.bio.specialists.identify import NEIGHBOURS_NAME, Specialist
 from prokopton.ml.config import AppConfig
 from prokopton.ml.inference.models import LoadError, ModelKind, TrackerFactory
 
-__all__ = ["INDEX_NAME", "bio_model_kinds"]
+__all__ = ["INDEX_NAME", "OLD_PATHS", "bio_model_kinds", "old_paths"]
 
 INDEX_NAME = "index.npz"
+OLD_PATHS = {"prokopton.ml.features.kmers": "prokopton.ml.bio.features.kmers"}
+"""Old import path -> the module now there, for modules that moved after
+models were saved."""
+
+
+@contextmanager
+def old_paths() -> Iterator[None]:
+    """While loading saved models, let the old import paths (``OLD_PATHS``)
+    lead to the modules now there."""
+    added = [old for old in OLD_PATHS if old not in sys.modules]
+    for old in added:
+        sys.modules[old] = importlib.import_module(OLD_PATHS[old])
+    try:
+        yield
+    finally:
+        for old in added:
+            sys.modules.pop(old, None)
 
 
 def _bundle_classifier(
@@ -46,9 +72,10 @@ def _load_classifier(
     config: AppConfig, name: str, tracker_factory: TrackerFactory
 ) -> tuple[Any, str]:
     training = classifier_settings(config, name).training
-    model, version = tracker_factory(config, name).load_model(
-        training.registered_model, training.alias
-    )
+    with old_paths():
+        model, version = tracker_factory(config, name).load_model(
+            training.registered_model, training.alias
+        )
     return model, version
 
 

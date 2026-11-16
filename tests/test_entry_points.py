@@ -49,12 +49,11 @@ def test_every_kind_is_found_through_the_entry_points() -> None:
 SAVED_TYPES = (
     "prokopton.ml.bio.features.kmers.KmerVectorizer",
     "prokopton.ml.training.calibration.LengthCalibratedClassifier",
-    # The old path, used by models saved before 0.2.0 (see design 0004, D3)
-    "prokopton.ml.features.kmers.KmerVectorizer",
 )
 """Classes inside saved models (in the MLflow registry and in bundles), by the
 import path the saved files refer to. Moving one of them stops saved models
-from loading, unless the old path still leads to it."""
+from loading, unless the old path is added to ``bio.models.OLD_PATHS``
+(models saved before 0.2.0 refer to one there)."""
 
 
 @pytest.mark.parametrize("path", SAVED_TYPES)
