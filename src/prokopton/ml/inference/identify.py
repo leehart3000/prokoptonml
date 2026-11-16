@@ -1,21 +1,19 @@
 """Identify a submission with an app's serving steps (see ``chain``).
 
-``Identifier`` builds the app's serving chain from its loaded models. The
-steps and model kinds for DNA sequences are in ``prokopton.ml.bio``; other
-packages can add serving step kinds and model kinds through the
-``prokopton.ml.serving_steps`` and ``prokopton.ml.model_kinds`` entry point
-groups.
+``Identifier`` builds the app's serving chain from its loaded models. Every
+serving step kind and model kind comes from an installed package's entry
+points (the ``prokopton.ml.serving_steps`` and ``prokopton.ml.model_kinds``
+groups), including the platform's own kinds for DNA sequences in
+``prokopton.ml.bio``.
 """
 
 from collections.abc import Mapping
 from typing import Any
 
-from prokopton.ml.bio.models import bio_model_kinds
 from prokopton.ml.bio.serving import (
     Classifier,
     Region,
     SequenceResult,
-    bio_serving_kinds,
     member_name,
 )
 from prokopton.ml.bio.specialists.identify import Specialist
@@ -45,14 +43,15 @@ __all__ = [
 
 
 def model_kinds() -> ModelKinds:
-    """Every model kind available: the platform's and installed packages'."""
-    return ModelKinds([*bio_model_kinds(), *model_entry_point_kinds()])
+    """Every model kind available, from installed packages' entry points (the
+    platform's own ``bio`` kinds among them)."""
+    return ModelKinds(model_entry_point_kinds())
 
 
 def serving_kinds() -> ServingKinds:
-    """Every serving step kind available: the platform's and installed
-    packages'."""
-    return ServingKinds([*bio_serving_kinds(), *serving_entry_point_kinds()])
+    """Every serving step kind available, from installed packages' entry
+    points (the platform's own ``bio`` kinds among them)."""
+    return ServingKinds(serving_entry_point_kinds())
 
 
 class Identifier(Chain):

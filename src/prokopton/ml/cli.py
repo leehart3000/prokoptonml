@@ -24,7 +24,6 @@ from pathlib import Path
 
 from prokopton.core.config import ConfigError, load_config
 
-from prokopton.ml.bio.stages import bio_kinds
 from prokopton.ml.checks import (
     CheckError,
     bundle_config,
@@ -67,8 +66,9 @@ logger = logging.getLogger("prokopton.ml")
 
 
 def registry() -> Registry:
-    """Every stage kind available: the platform's and installed packages'."""
-    return Registry([*core_kinds(), *bio_kinds(), *entry_point_kinds()])
+    """Every stage kind available: the core's, and every installed package's
+    (the platform's own ``bio`` kinds among them) through entry points."""
+    return Registry([*core_kinds(), *entry_point_kinds()])
 
 
 def _build_parser() -> argparse.ArgumentParser:
