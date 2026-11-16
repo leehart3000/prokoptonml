@@ -6,9 +6,11 @@
     prokopton-ml migrate-config [--write]    rewrite an older config as schema 3
     prokopton-ml check BUNDLE CHECKS [--url URL]
                                              run known-answer checks
+    prokopton-ml release vVERSION [...]      tag main and follow the release
 
 The config is ``prokopton.toml`` in this folder or a parent folder, unless
-``--config PATH`` is given. ``check`` and ``identify --bundle`` need no config.
+``--config PATH`` is given. ``check``, ``release`` and ``identify --bundle``
+need no config.
 """
 
 import argparse
@@ -40,6 +42,7 @@ from prokopton.ml.migrate import (
     migrate_text,
     schema_of,
 )
+from prokopton.ml.release import Release, ReleaseError, release
 from prokopton.ml.stages import (
     Registry,
     StageError,
@@ -128,6 +131,43 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Send the checks to the service at this URL instead (its API key, "
         "if any, from PROKOPTON_API_KEY).",
     )
+    make = commands.add_parser(
+        "release",
+        help="Tag main with a new version, follow the Release workflow and check "
+        "the result (see prokopton.ml.release).",
+    )
+    make.add_argument("tag", help="The version tag, such as v1.2.3 or v0.2.0a4.")
+    make.add_argument(
+        "--name",
+        default=None,
+        help="The name in the tag's message (default: the PyPI package, or "
+        "this folder's name).",
+    )
+    make.add_argument(
+        "--version-file",
+        type=Path,
+        default=None,
+        help="A pyproject.toml whose version the tag must match.",
+    )
+    make.add_argument(
+        "--pypi",
+        default=None,
+        metavar="PACKAGE",
+        help="Offer to approve publishing to PyPI, then check PyPI lists it.",
+    )
+    make.add_argument(
+        "--check-url",
+        default=None,
+        help="A live page that must show the new version (<span data-version>).",
+    )
+    make.add_argument(
+        "--workflow", default="release.yml", help="The Release workflow's file."
+    )
+    make.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Make the checks and list the changes, but do not tag.",
+    )
     return parser
 
 
@@ -213,6 +253,19 @@ def _check(bundle: Path, folder: Path, url: str | None) -> str:
     return f"all {len(outcomes)} checks gave their expected answers"
 
 
+def _release(args: argparse.Namespace) -> str:
+    spec = Release(
+        tag=args.tag,
+        name=args.name or args.pypi or Path.cwd().name,
+        version_file=args.version_file,
+        pypi=args.pypi,
+        check_url=args.check_url,
+        workflow=args.workflow,
+        dry_run=args.dry_run,
+    )
+    return release(spec)
+
+
 def _migrate(path: Path, write: bool) -> str:
     """Rewrite an older config as the current schema: print it, or replace
     the file."""
@@ -254,6 +307,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         LoadError,
         BundleError,
         CheckError,
+        ReleaseError,
         OSError,
     )
     try:
@@ -261,6 +315,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         expected += stages.errors
         if args.command == "check":
             summary = _check(args.bundle, args.checks, args.url)
+        elif args.command == "release":
+            summary = _release(args)
         elif args.command == "identify" and args.bundle is not None:
             summary = _identify(None, args.input, args.bundle)
         else:

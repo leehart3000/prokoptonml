@@ -5,7 +5,7 @@ name: Release
 # environment. Trusted Publishing (no tokens); PyPI attestations are made by
 # the publish action. The tag must match the version in pyproject.toml, be
 # on main, and not be on a commit that is already released. Start a release
-# with scripts/release.sh, which checks the same first.
+# with pixi run release vVERSION, which checks the same first.
 on:
   push:
     tags: ["v*"]
