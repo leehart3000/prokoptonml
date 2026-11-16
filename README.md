@@ -67,6 +67,13 @@ approve it, then checks that PyPI lists the new version. Products release
 with the same command, with `--check-url` to check that their live page shows
 the new version.
 
+A product deploys its API to Google Cloud Run with the reusable workflow
+[`deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml), pinned to a
+platform release tag. It builds the product's image (from
+[`templates/Dockerfile`](templates/Dockerfile)) with its serving bundle, runs
+the product's known-answer checks against the image with `prokopton-ml check`,
+then pushes and deploys it.
+
 ## Products built with ProkoptonML
 
 | Product | Domain | Repository | Status |

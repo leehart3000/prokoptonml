@@ -128,6 +128,9 @@ def test_the_api_key_is_required_when_set(tmp_path: Path) -> None:
             api.post("/identify", json={"sequence": BARCODE}, headers=right).status_code
             == 200
         )
+        # The key is checked first, so any request without it gets 401 (the
+        # deploy workflow relies on this, as it doesn't know the app's request)
+        assert api.post("/identify", json={}).status_code == 401
         assert api.get("/health").status_code == 200
 
 
