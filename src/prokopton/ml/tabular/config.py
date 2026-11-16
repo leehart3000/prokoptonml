@@ -22,6 +22,7 @@ __all__ = [
     "TableSplitConfig",
     "TableTrainingConfig",
     "TabularClassifierConfig",
+    "registered_model",
     "table_classifier",
     "tabular_settings",
 ]
@@ -138,3 +139,9 @@ def table_classifier(config: AppConfig, name: str) -> TabularClassifierConfig:
         msg = f"This app has no {name!r} tabular classifier configured"
         raise UnknownClassifierError(msg)
     return found
+
+
+def registered_model(config: AppConfig, name: str) -> str:
+    """The name a tabular classifier is registered under in MLflow."""
+    training = table_classifier(config, name).training
+    return training.registered_model or f"{config.name}-{name}"

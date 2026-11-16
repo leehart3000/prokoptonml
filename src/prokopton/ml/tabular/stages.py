@@ -34,7 +34,12 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from prokopton.ml.config import AppConfig
 from prokopton.ml.stages import StageContext, StageKind
-from prokopton.ml.tabular.config import KIND, TableConfig, table_classifier
+from prokopton.ml.tabular.config import (
+    KIND,
+    TableConfig,
+    registered_model,
+    table_classifier,
+)
 from prokopton.ml.training.metrics import classification_metrics
 from prokopton.ml.training.tracking import Tracker, mlflow_tracker
 
@@ -229,12 +234,6 @@ def build_pipeline(table: TableConfig, c: float, max_iter: int) -> Pipeline:
     )
 
 
-def _registered(config: AppConfig, model: str) -> str:
-    return table_classifier(config, model).training.registered_model or (
-        f"{config.name}-{model}"
-    )
-
-
 def _scores(
     pipeline: Pipeline, frame: pd.DataFrame, table: TableConfig
 ) -> dict[str, float]:
@@ -281,11 +280,11 @@ def train(
         best, chosen = max(candidates, key=lambda pair: _rank(pair[0]))
         tracker.log_metrics({f"chosen_{k}": v for k, v in best.validation.items()})
         version = tracker.log_model(
-            chosen, inputs.head(3), _registered(config, model), rules.alias
+            chosen, inputs.head(3), registered_model(config, model), rules.alias
         )
     report = TrainReport(
         model=model,
-        registered_model=_registered(config, model),
+        registered_model=registered_model(config, model),
         model_version=version,
         run_id=run_id,
         classes=[str(c) for c in chosen.classes_],
@@ -311,7 +310,7 @@ def evaluate(
     test = read_split(config, model, "test")
     make_tracker = tracker_factory or partial(mlflow_tracker, model=model)
     pipeline, version = make_tracker(config).load_model(
-        _registered(config, model), settings.training.alias
+        registered_model(config, model), settings.training.alias
     )
     predicted = [str(p) for p in pipeline.predict(test[list(table.columns)])]
     truth = [str(t) for t in test[table.target]]
@@ -373,8 +372,13 @@ def write_card(config: AppConfig, model: str) -> Path:
         f"- `{splits.table}` (release {splits.release}, SHA-256 "
         f"`{splits.table_sha256[:12]}…`).",
         f"- Inputs: {', '.join(f'`{c}`' for c in table.columns)}.",
-        f"- {splits.left_out} records without a target were left out; the rest "
-        f"were split by class (seed {splits.seed}): "
+        (
+            f"- {splits.left_out} records without a target were left out; the "
+            "rest were split by class"
+            if splits.left_out
+            else "- Every record has a target; they were split by class"
+        )
+        + f" (seed {splits.seed}): "
         + ", ".join(f"{n} {splits.records[n]}" for n in SPLITS)
         + ".",
         "",
