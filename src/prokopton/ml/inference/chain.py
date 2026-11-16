@@ -29,6 +29,7 @@ __all__ = [
     "Answer",
     "Chain",
     "Decline",
+    "RequestSpec",
     "Result",
     "ServingKinds",
     "ServingStepKind",
@@ -131,6 +132,18 @@ StepRunner = Callable[[Work], Decline | Literal["final"] | None]
 
 
 @dataclass(frozen=True)
+class RequestSpec:
+    """What a chain's first step accepts: the request body, and the text in
+    it that the chain answers."""
+
+    model: Callable[[AppConfig, str], type[BaseModel]]
+    """Makes the request model for the step (named in the config), with
+    its example."""
+    text: Callable[[BaseModel], str]
+    """The text to answer, from a validated request."""
+
+
+@dataclass(frozen=True)
 class ServingStepKind:
     """A kind of serving step: what it does, and how to build it."""
 
@@ -140,6 +153,10 @@ class ServingStepKind:
     """Builds the step from the config, its name and the loaded models."""
     result: type[Result] = Result
     """The result the chain returns when this kind is the first step."""
+    request: RequestSpec | None = None
+    """The request it accepts, when it is the first step."""
+    log: Callable[[Result], dict[str, Any]] | None = None
+    """Fields it adds to each request's log line (never the request itself)."""
 
 
 class ServingKinds:
@@ -190,8 +207,39 @@ class Chain:
                 raise ValueError(msg)
             kind = kinds[settings.kind]
             self.steps.append((name, kind.build(config, name, models)))
-        first = config.serving.steps[config.serving.chain[0]].kind
-        self.result_type = kinds[first].result
+        first = config.serving.chain[0]
+        start = kinds[config.serving.steps[first].kind]
+        self.result_type = start.result
+        self._request = start.request
+        self._first = first
+        self._loggers: list[Callable[[Result], dict[str, Any]]] = []
+        for name in config.serving.chain:
+            log = kinds[config.serving.steps[name].kind].log
+            if log is not None and log not in self._loggers:
+                self._loggers.append(log)
+
+    def request_model(self) -> type[BaseModel]:
+        """The request body the chain accepts (from its first step's kind).
+
+        Raises:
+            ValueError: If the first step's kind does not take requests.
+        """
+        if self._request is None:
+            msg = f"The first serving step, {self._first!r}, does not take requests"
+            raise ValueError(msg)
+        return self._request.model(self.config, self._first)
+
+    def text_of(self, request: BaseModel) -> str:
+        """The text to answer, from a request made with ``request_model``."""
+        assert self._request is not None  # request_model made the request type
+        return self._request.text(request)
+
+    def log_fields(self, result: Result) -> dict[str, Any]:
+        """What the steps' kinds log about a result (never the request)."""
+        fields: dict[str, Any] = {}
+        for log in self._loggers:
+            fields.update(log(result))
+        return fields
 
     def identify(self, text: str) -> Result:
         """Answer one request (see the module docstring)."""
