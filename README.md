@@ -75,6 +75,11 @@ approve it, then checks that PyPI lists the new version. Products release
 with the same command, with `--check-url` to check that their live page shows
 the new version.
 
+The platform is not tied to sequences: [`examples/penguins/`](examples/penguins/)
+is a small tabular app (Palmer Penguins) built only on the core's tabular
+kinds (`core.tabular-classifier`, its stages and serving steps). CI runs it
+end to end with `prokopton.ml.bio` removed; locally, `pixi run penguins`.
+
 A product deploys its API to Google Cloud Run with the reusable workflow
 [`deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml), pinned to a
 platform release's commit (`@<commit> # v0.2.0a5`, as for actions). It builds the product's image (from

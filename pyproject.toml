@@ -100,6 +100,8 @@ check = { depends-on = ["format-check", "lint", "typecheck", "test"] }
 # pixi run release vVERSION: tag main, follow the Release workflow (offering
 # to approve the PyPI step) and check PyPI (see prokopton.ml.release)
 release = "prokopton-ml release --version-file pyproject.toml --pypi prokopton-ml"
+# pixi run penguins: the Palmer Penguins example, end to end (examples/penguins)
+penguins = { cmd = "prokopton-ml run --all && prokopton-ml check models/bundle tests/known-answers", cwd = "examples/penguins" }
 
 [tool.pixi.environments]
 default = { features = ["dev"], solve-group = "default" }
