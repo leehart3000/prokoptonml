@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from prokopton.ml.bio.config import SpecialistConfig
+from prokopton.ml.bio.config import SpecialistConfig, specialist_settings
 from prokopton.ml.bio.pipeline.reference import REPORT_NAME as REFERENCE_REPORT
 from prokopton.ml.bio.pipeline.reference import ReferenceReport, reference_path
 from prokopton.ml.bio.pipeline.specialist_evaluate import (
@@ -316,7 +316,7 @@ def build_specialist_card(config: AppConfig, name: str) -> SpecialistCardFiles:
         SpecialistCardError: If a report is missing or invalid, or the
             config's thresholds are not the ones the evaluation chose.
     """
-    rules = config.specialist(name)
+    rules = specialist_settings(config, name)
     reference, evaluation = _read(config, name)
     _check_thresholds(rules, evaluation)
     card = rules.card

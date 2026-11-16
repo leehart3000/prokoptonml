@@ -39,6 +39,9 @@ bio = "prokopton.ml.bio.serving:bio_serving_kinds"
 [project.entry-points."prokopton.ml.model_kinds"]
 bio = "prokopton.ml.bio.models:bio_model_kinds"
 
+[project.entry-points."prokopton.ml.settings"]
+bio = "prokopton.ml.bio.config:bio_settings"
+
 [project.urls]
 Homepage = "https://prokoptonml.org"
 Repository = "https://github.com/leehart3000/prokoptonml"

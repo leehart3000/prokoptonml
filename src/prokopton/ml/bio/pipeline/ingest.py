@@ -18,6 +18,7 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
+from prokopton.ml.bio.config import bio_section
 from prokopton.ml.bio.data.fasta import parse_fasta
 from prokopton.ml.bio.sources.midori2 import RANKS, parse_midori2_records, record_to_row
 from prokopton.ml.config import AppConfig
@@ -119,8 +120,8 @@ def ingest(config: AppConfig, *, batch_size: int = 100_000) -> IngestReport:
         DownloadError: If a required file cannot be downloaded.
     """
     started_at = datetime.now(UTC)
-    source = config.data.source
-    paths = config.data.paths
+    source = bio_section(config).source
+    paths = bio_section(config).paths
 
     archive = paths.raw_dir / source.archive_name
     checksums = paths.raw_dir / CHECKSUMS_NAME
@@ -131,7 +132,7 @@ def ingest(config: AppConfig, *, batch_size: int = 100_000) -> IngestReport:
             logger.info("Using existing %s", path)
 
     manifest = parse_sha256_manifest(checksums.read_text(encoding="utf-8").splitlines())
-    output_root = paths.interim_dir / f"midori2_{source.release.lower()}"
+    output_root = paths.interim_dir / f"midori2_{config.data.release.lower()}"
 
     genes: dict[str, GeneIngestReport] = {}
     for gene in source.genes:
@@ -151,7 +152,7 @@ def ingest(config: AppConfig, *, batch_size: int = 100_000) -> IngestReport:
     report = IngestReport(
         app=config.name,
         source=source.type,
-        release=source.release,
+        release=config.data.release,
         doi=source.doi,
         licence=source.licence,
         prokopton_ml_version=__version__,

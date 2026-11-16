@@ -43,7 +43,7 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.bio.config import SpecialistConfig
+from prokopton.ml.bio.config import SpecialistConfig, bio_section, specialist_settings
 from prokopton.ml.bio.pipeline.split import hash_fraction
 from prokopton.ml.bio.sources.refseq import read_anchors
 from prokopton.ml.bio.specialists.identify import (
@@ -138,12 +138,12 @@ class ReferenceReport(BaseModel):
 
 def reference_path(config: AppConfig, name: str) -> Path:
     """Where a specialist's reference set (for evaluation) is written."""
-    return config.data.paths.models_dir / "specialists" / name / REFERENCE_NAME
+    return config.paths.models_dir / "specialists" / name / REFERENCE_NAME
 
 
 def serving_reference_path(config: AppConfig, name: str) -> Path:
     """Where a specialist's serving reference set (all splits) is written."""
-    folder = config.data.paths.models_dir / "specialists" / name / "serving"
+    folder = config.paths.models_dir / "specialists" / name / "serving"
     return folder / REFERENCE_NAME
 
 
@@ -227,10 +227,13 @@ def build_reference(
         ReferenceStageError: If the split data is missing.
     """
     started_at = datetime.now(UTC)
-    rules = config.specialist(name)
-    folder = f"midori2_{config.data.source.release.lower()}"
+    rules = specialist_settings(config, name)
+    folder = f"midori2_{config.data.release.lower()}"
     path = (
-        config.data.paths.splits_dir / folder / f"gene={rules.gene}" / "records.parquet"
+        bio_section(config).paths.splits_dir
+        / folder
+        / f"gene={rules.gene}"
+        / "records.parquet"
     )
     if not path.exists():
         msg = f"{path} not found; run the split stage first"
@@ -357,7 +360,7 @@ def build_reference(
     report = ReferenceReport(
         app=config.name,
         specialist=name,
-        release=config.data.source.release,
+        release=config.data.release,
         gene=rules.gene,
         prokopton_ml_version=__version__,
         rules=rules,

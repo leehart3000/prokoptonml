@@ -28,6 +28,8 @@ from prokopton.ml.bio.config import (
     SequenceInputStepConfig,
     SpecialistConfig,
     SpecialistStepConfig,
+    classifier_settings,
+    specialist_settings,
 )
 from prokopton.ml.bio.features.fragments import reverse_complement
 from prokopton.ml.bio.inference.inputs import InputError, Submission, parse_submission
@@ -145,7 +147,7 @@ class SequenceResult(Result):
 
 
 def _settings[T](config: AppConfig, name: str, kind: type[T]) -> T:
-    settings = config.serving.steps[name]
+    settings = config.step_settings(name)
     assert isinstance(settings, kind)  # The step's kind chose its settings type
     return settings
 
@@ -172,7 +174,7 @@ def _submission(work: Work) -> Submission:
 
 def _build_input(config: AppConfig, name: str, _: Mapping[str, Any]) -> StepRunner:
     rules = _settings(config, name, SequenceInputStepConfig)
-    min_length = config.classifier(rules.model).serving.min_length
+    min_length = classifier_settings(config, rules.model).serving.min_length
 
     def run(work: Work) -> Decline | None:
         try:
@@ -236,7 +238,7 @@ def _build_marker(
 ) -> StepRunner:
     rules = _settings(config, name, MarkerStepConfig)
     marker: Classifier = models[rules.model]
-    reverse_label = config.classifier(rules.model).training.reverse_label
+    reverse_label = classifier_settings(config, rules.model).training.reverse_label
 
     def with_note(message: str) -> str:
         note = rules.unsupported_note
@@ -314,7 +316,7 @@ def _build_router(
 ) -> StepRunner:
     rules = _settings(config, name, RouterStepConfig)
     router: Classifier = models[rules.model]
-    serving = config.classifier(rules.model).serving
+    serving = classifier_settings(config, rules.model).serving
 
     def run(work: Work) -> None:
         oriented = work.found["sequence"]
@@ -432,7 +434,7 @@ def _build_specialist(
 ) -> StepRunner:
     rules = _settings(config, name, SpecialistStepConfig)
     specialist: Specialist = models[rules.model]
-    group = config.specialist(rules.model)
+    group = specialist_settings(config, rules.model)
     member = member_name(group)
 
     def run(work: Work) -> Literal["final"] | None:

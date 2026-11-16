@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from fakes import FakeTracker
+from prokopton.ml.bio.config import specialist_settings
 from prokopton.ml.bio.pipeline import specialist_evaluate
 from prokopton.ml.bio.pipeline.specialist_evaluate import (
     REPORT_NAME,
@@ -155,7 +156,9 @@ def test_scores_are_averaged_per_record_and_per_species() -> None:
 def test_choosing_puts_the_background_first_then_known_species(
     tmp_path: Path,
 ) -> None:
-    rules = AppConfig.model_validate(config_dict(tmp_path)).specialist("culicidae")
+    rules = specialist_settings(
+        AppConfig.model_validate(config_dict(tmp_path)), "culicidae"
+    )
     bad = score_set([answer("species", "Aedes x")], [row("Aedes aegypti")])
     good = score_set([answer("species", "Aedes aegypti")], [row("Aedes aegypti")])
     kept_out = score_set([answer("not_member", None)], [row("M", role="background")])

@@ -12,13 +12,14 @@ from prokopton.ml.bio.config import (
     ClassifierTrainingConfig,
     Midori2SourceConfig,
     SpecialistConfig,
+    bio_section,
+    specialist_settings,
 )
 from prokopton.ml.config import AppConfig, UnknownClassifierError
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 SOURCE_FIELDS: dict[str, object] = {
-    "release": "GB273",
     "doi": "10.5281/zenodo.22685701",
     "licence": "CC-BY-4.0",
     "archive_url": "https://example.org/archive.zip",
@@ -33,11 +34,11 @@ def test_dnabarcode_config_is_valid() -> None:
     config = load_config(FIXTURES / "dnabarcode.toml", AppConfig)
 
     assert config.name == "dnabarcode"
-    assert config.data.source.release == "GB273"
-    assert config.data.source.genes[0] == "CO1"
-    assert len(config.data.source.genes) == 15
-    assert config.validation.min_length == 100
-    assert config.validation.phylum_reference.is_file()
+    assert config.data.release == "GB273"
+    assert bio_section(config).source.genes[0] == "CO1"
+    assert len(bio_section(config).source.genes) == 15
+    assert bio_section(config).validation.min_length == 100
+    assert bio_section(config).validation.phylum_reference.is_file()
 
 
 def test_source_config_accepts_valid_fields() -> None:
@@ -52,7 +53,6 @@ def test_source_config_accepts_valid_fields() -> None:
         ("archive_url", "http://example.org/archive.zip", "URL must start with"),
         ("checksums_url", "ftp://example.org/sums.txt", "URL must start with"),
         ("member_template", "FORMAT/uniq/CO1.fasta.gz", "must contain '{gene}'"),
-        ("release", "273", "String should match pattern"),
         ("genes", [], "at least 1 item"),
     ],
 )
@@ -73,7 +73,7 @@ def test_env_override_changes_paths(tmp_path: Path) -> None:
         environ=environ,
     )
 
-    assert config.data.paths.raw_dir == tmp_path
+    assert bio_section(config).paths.raw_dir == tmp_path
 
 
 def test_invalid_app_name_is_rejected(tmp_path: Path) -> None:
@@ -107,6 +107,6 @@ def test_specialist_identities_must_be_in_order() -> None:
 def test_unknown_specialist(tmp_path: Path) -> None:
     config = load_config(FIXTURES / "dnabarcode.toml", AppConfig)
 
-    assert config.specialist("culicidae").target == "Culicidae"
+    assert specialist_settings(config, "culicidae").target == "Culicidae"
     with pytest.raises(UnknownClassifierError, match="sharks"):
-        config.specialist("sharks")
+        specialist_settings(config, "sharks")

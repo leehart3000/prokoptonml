@@ -84,7 +84,9 @@ def test_stages_are_listed_with_their_last_run(
     assert "last run" in listing
     assert "settings changed" not in listing
 
-    (project / CONFIG_NAME).write_text(app_toml(raw_dir="raw"), "utf-8")
+    # The data release is one of the settings every stage uses
+    changed = app_toml().replace('release = "GB999"', 'release = "GB998"')
+    (project / CONFIG_NAME).write_text(changed, "utf-8")
     assert main(["stages"]) == 0
     assert "settings changed since" in capsys.readouterr().out
 

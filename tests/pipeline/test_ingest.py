@@ -9,6 +9,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 import pytest
 
+from prokopton.ml.bio.config import bio_section
 from prokopton.ml.bio.pipeline.ingest import REPORT_NAME, IngestError, ingest
 from prokopton.ml.cli import main
 from prokopton.ml.config import AppConfig
@@ -135,7 +136,7 @@ def test_ingest_rejects_tampered_file(tmp_path: Path) -> None:
 
 def test_cli_ingest_succeeds(tmp_path: Path) -> None:
     config = make_config(tmp_path, ["CO1"])
-    source = config.data.source
+    source = bio_section(config).source
     config_path = tmp_path / "app.toml"
     config_path.write_text(
         f"""
@@ -143,7 +144,7 @@ name = "testapp"
 title = "Test app"
 
 [data.source]
-release = "{source.release}"
+release = "{config.data.release}"
 doi = "{source.doi}"
 licence = "{source.licence}"
 archive_url = "{source.archive_url}"
@@ -153,22 +154,24 @@ member_template = "{source.member_template}"
 genes = ["CO1"]
 
 [data.paths]
-raw_dir = "{config.data.paths.raw_dir}"
-interim_dir = "{config.data.paths.interim_dir}"
-processed_dir = "{config.data.paths.processed_dir}"
-splits_dir = "{config.data.paths.splits_dir}"
-leakage_dir = "{config.data.paths.leakage_dir}"
-samples_dir = "{config.data.paths.samples_dir}"
-models_dir = "{config.data.paths.models_dir}"
+raw_dir = "{bio_section(config).paths.raw_dir}"
+interim_dir = "{bio_section(config).paths.interim_dir}"
+processed_dir = "{bio_section(config).paths.processed_dir}"
+splits_dir = "{bio_section(config).paths.splits_dir}"
+leakage_dir = "{bio_section(config).paths.leakage_dir}"
+samples_dir = "{bio_section(config).paths.samples_dir}"
+models_dir = "{config.paths.models_dir}"
 
 [validation]
-phylum_reference = "{config.validation.phylum_reference}"
+phylum_reference = "{bio_section(config).validation.phylum_reference}"
 """,
         encoding="utf-8",
     )
 
     assert main(["--config", str(config_path), "run", "ingest"]) == 0
-    assert (config.data.paths.interim_dir / "midori2_gb999" / REPORT_NAME).exists()
+    assert (
+        bio_section(config).paths.interim_dir / "midori2_gb999" / REPORT_NAME
+    ).exists()
 
 
 def test_cli_returns_error_for_invalid_manifest(tmp_path: Path) -> None:

@@ -14,6 +14,7 @@ from typing import Any
 
 import joblib
 
+from prokopton.ml.bio.config import classifier_settings, specialist_settings
 from prokopton.ml.bio.pipeline.reference import (
     REFERENCE_NAME,
     build_reference,
@@ -44,7 +45,7 @@ def _load_bundled_classifier(config: AppConfig, name: str, folder: Path) -> Any:
 def _load_classifier(
     config: AppConfig, name: str, tracker_factory: TrackerFactory
 ) -> tuple[Any, str]:
-    training = config.classifier(name).training
+    training = classifier_settings(config, name).training
     model, version = tracker_factory(config, name).load_model(
         training.registered_model, training.alias
     )
@@ -61,14 +62,14 @@ def _bundle_specialist(
     for file_name in (REFERENCE_NAME, NEIGHBOURS_NAME):
         shutil.copy2(source / file_name, target / file_name)
     specialist = Specialist.from_parquet(
-        target / REFERENCE_NAME, config.specialist(name)
+        target / REFERENCE_NAME, specialist_settings(config, name)
     )
     specialist.save_index(target / INDEX_NAME)
     files = [
         f"specialists/{name}/{f}" for f in (REFERENCE_NAME, NEIGHBOURS_NAME, INDEX_NAME)
     ]
     return (
-        f"{config.data.source.release}, {report.target_records} target records",
+        f"{config.data.release}, {report.target_records} target records",
         files,
     )
 
@@ -76,7 +77,9 @@ def _bundle_specialist(
 def _load_bundled_specialist(config: AppConfig, name: str, folder: Path) -> Specialist:
     target = folder / "specialists" / name
     return Specialist.from_parquet(
-        target / REFERENCE_NAME, config.specialist(name), index=target / INDEX_NAME
+        target / REFERENCE_NAME,
+        specialist_settings(config, name),
+        index=target / INDEX_NAME,
     )
 
 
@@ -87,8 +90,8 @@ def _load_specialist(
     if not path.exists():
         msg = f"{path} not found; run the reference stage for {name!r} first"
         raise LoadError(msg)
-    specialist = Specialist.from_parquet(path, config.specialist(name))
-    return specialist, f"reference {config.data.source.release}"
+    specialist = Specialist.from_parquet(path, specialist_settings(config, name))
+    return specialist, f"reference {config.data.release}"
 
 
 def bio_model_kinds() -> list[ModelKind]:

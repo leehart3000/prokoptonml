@@ -32,7 +32,7 @@ def app_data(tmp_path: Path) -> dict[str, Any]:
     with (FIXTURES / "dnabarcode.toml").open("rb") as handle:
         config = AppConfig.model_validate(tomllib.load(handle))
     data = config.model_dump(mode="json")
-    data["data"]["paths"]["models_dir"] = str(tmp_path)
+    data["paths"]["models_dir"] = str(tmp_path)
     return data
 
 
@@ -118,7 +118,7 @@ def test_settings_hashes_follow_the_settings_a_stage_uses(tmp_path: Path) -> Non
     before = app(tmp_path)
     data = app_data(tmp_path)
     data["models"]["router"]["training"]["threads"] = 3
-    data["validation"]["min_length"] = 101
+    data["bio"]["validation"]["min_length"] = 101
     after = AppConfig.model_validate(data)
     registry = platform()
 

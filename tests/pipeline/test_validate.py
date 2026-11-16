@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from prokopton.ml.bio.config import ValidationConfig
+from prokopton.ml.bio.config import ValidationConfig, bio_section
 from prokopton.ml.bio.data.taxonomy import NO_PHYLUM, OTHER_EUKARYOTES, UNMAPPED
 from prokopton.ml.bio.pipeline.validate import (
     REASONS,
@@ -287,7 +287,7 @@ samples_dir = "{tmp_path / "samples"}"
 models_dir = "{tmp_path / "models"}"
 
 [validation]
-phylum_reference = "{config.validation.phylum_reference}"
+phylum_reference = "{bio_section(config).validation.phylum_reference}"
 """,
         encoding="utf-8",
     )

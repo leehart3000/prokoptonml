@@ -20,6 +20,7 @@ CORE = frozenset(
         "__main__",
         "checks",
         "cli",
+        "config",
         "data",
         "data.checksums",
         "data.download",
@@ -34,6 +35,7 @@ CORE = frozenset(
         "reporting.charts",
         "serving",
         "serving.app",
+        "settings",
         "stages",
         "training",
         "training.calibration",
@@ -46,12 +48,7 @@ CORE = frozenset(
 OLD_PATHS = frozenset({"features", "features.kmers"})
 """Old import paths, kept so that models saved before 0.2.0 still load."""
 
-SPLIT = frozenset(
-    {
-        "config",
-        "inference.identify",
-    }
-)
+SPLIT = frozenset({"inference.identify"})
 """Modules with both kinds of code, to be divided."""
 
 ALLOWED: frozenset[tuple[str, str]] = frozenset()

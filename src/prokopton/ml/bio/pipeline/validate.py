@@ -28,7 +28,7 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.bio.config import ValidationConfig
+from prokopton.ml.bio.config import ValidationConfig, bio_section
 from prokopton.ml.bio.data.taxonomy import NO_PHYLUM, UNMAPPED, load_phylum_groups
 from prokopton.ml.config import AppConfig
 
@@ -225,11 +225,11 @@ def validate(config: AppConfig) -> ValidationReport:
         ReferenceDataError: If the phylum reference table is missing or invalid.
     """
     started_at = datetime.now(UTC)
-    source = config.data.source
-    folder = f"midori2_{source.release.lower()}"
-    input_root = config.data.paths.interim_dir / folder
-    output_root = config.data.paths.processed_dir / folder
-    groups = load_phylum_groups(config.validation.phylum_reference)
+    source = bio_section(config).source
+    folder = f"midori2_{config.data.release.lower()}"
+    input_root = bio_section(config).paths.interim_dir / folder
+    output_root = bio_section(config).paths.processed_dir / folder
+    groups = load_phylum_groups(bio_section(config).validation.phylum_reference)
 
     genes: dict[str, GeneValidationReport] = {}
     for gene in source.genes:
@@ -238,7 +238,7 @@ def validate(config: AppConfig) -> ValidationReport:
             msg = f"{input_path} not found; run the ingest stage first"
             raise DataValidationError(msg)
         records = pd.read_parquet(input_path, dtype_backend="numpy_nullable")
-        kept, report = validate_gene(records, groups, config.validation)
+        kept, report = validate_gene(records, groups, bio_section(config).validation)
 
         output = output_root / f"gene={gene}" / "records.parquet"
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -256,9 +256,9 @@ def validate(config: AppConfig) -> ValidationReport:
 
     result = ValidationReport(
         app=config.name,
-        release=source.release,
+        release=config.data.release,
         prokopton_ml_version=__version__,
-        rules=config.validation,
+        rules=bio_section(config).validation,
         started_at=started_at,
         finished_at=datetime.now(UTC),
         genes=genes,
