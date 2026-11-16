@@ -235,3 +235,14 @@ def test_other_packages_steps_are_accepted() -> None:
     )
 
     assert isinstance(config.serving.steps["x"], OtherStepConfig)
+
+
+def test_a_dumped_schema_2_config_is_read() -> None:
+    # As in the config.json of a bundle made by prokopton-ml 0.2.0a2
+    data = convert_schema_1(schema_1())
+    data["schema_version"] = data.pop("schema")
+
+    config = AppConfig.model_validate(data)
+
+    assert config.schema_version == 3
+    assert config.serving.chain == ("input", "marker", "router", "culicidae")

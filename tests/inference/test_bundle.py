@@ -66,6 +66,8 @@ def test_builds_a_bundle_with_checksums(tmp_path: Path) -> None:
     assert manifest.versions["marker"] == "6"
     assert manifest.versions["culicidae"].startswith("GB999, ")
     assert manifest.format == 2
+    written = json.loads((bundle_path(config) / "config.json").read_text())
+    assert written["schema"] == 3
     assert manifest.models == {
         "router": "bio.kmer-classifier",
         "marker": "bio.kmer-classifier",

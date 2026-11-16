@@ -145,7 +145,9 @@ def build_bundle(
     folder = final.with_name(f"{final.name}.part")
     shutil.rmtree(folder, ignore_errors=True)
     folder.mkdir(parents=True)
-    (folder / "config.json").write_text(config.model_dump_json(indent=2), "utf-8")
+    (folder / "config.json").write_text(
+        config.model_dump_json(indent=2, by_alias=True), "utf-8"
+    )
     runtime = _installed(RUNTIME_PACKAGES)
     (folder / "requirements.txt").write_text(
         "".join(f"{name}=={version}\n" for name, version in runtime.items()),
