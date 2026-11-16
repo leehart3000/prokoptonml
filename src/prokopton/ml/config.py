@@ -4,107 +4,68 @@ Each application (for example dnabarcode) is described by one TOML file that is
 validated against ``AppConfig``. Relative paths in the file are resolved from
 the current working directory, normally the repository root.
 
-Schema 2 (``schema = 2``) describes an app's models under ``[models.<name>]``,
-each with a ``kind``, and its pipeline as named stages (``[pipeline]`` and
-``[stages.<name>]``). Schema 1 files, with fixed ``[router]``, ``[marker]``
-and ``[specialists.<name>]`` sections, are converted when they are read (see
-``convert_schema_1``); ``prokopton-ml migrate-config`` rewrites them.
+Schema 4 (``schema = 4``) holds only what every app has: its name and title,
+its data release (``[data]``), where its models go (``[paths]``), its models
+(``[models.<name>]``, each with a ``kind``), its pipeline (``[pipeline]`` and
+``[stages.<name>]``), its serving steps (``[serving]``) and MLflow. Everything
+else belongs to the package that reads it (see ``prokopton.ml.settings``): a
+model's or serving step's own settings, checked against those declared for
+its kind, and app-wide sections such as ``[bio]``, checked against the
+section of that name.
 
-The settings of sequence apps (the MIDORI2 source, the k-mer classifiers,
-the specialists and the sequence serving steps) are defined in
-``prokopton.ml.bio.config``; they are named here too, for now.
+Older files are converted when they are read: schema 1 (fixed ``[router]``,
+``[marker]`` and ``[specialists.<name>]``), schema 2 (``[inference]``) and
+schema 3 (sequence settings in ``[data.source]``, ``[validation]`` and so on);
+``prokopton-ml migrate-config`` rewrites them.
 """
 
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from prokopton.core.config import ConfigModel
 from pydantic import (
     AliasChoices,
-    Discriminator,
+    BaseModel,
+    ConfigDict,
     Field,
-    Tag,
+    PrivateAttr,
+    ValidationError,
     model_validator,
 )
 
-from prokopton.ml.bio.config import (
-    ALLOWED_URL_SCHEMES,
-    ClassifierCalibrationConfig,
-    ClassifierCardConfig,
-    ClassifierConfig,
-    ClassifierEvaluationConfig,
-    ClassifierSampleConfig,
-    ClassifierServingConfig,
-    ClassifierTrainingConfig,
-    ComplexConfig,
-    LeakageConfig,
-    MarkerStepConfig,
-    Midori2SourceConfig,
-    RouterStepConfig,
-    SequenceInputStepConfig,
-    SpecialistConfig,
-    SpecialistEvaluationConfig,
-    SpecialistStepConfig,
-    SplitConfig,
-    ValidationConfig,
-)
+from prokopton.ml.settings import Declared, declared
 
 __all__ = [
-    "ALLOWED_URL_SCHEMES",
     "AppConfig",
-    "ClassifierCalibrationConfig",
-    "ClassifierCardConfig",
-    "ClassifierConfig",
-    "ClassifierEvaluationConfig",
-    "ClassifierSampleConfig",
-    "ClassifierServingConfig",
-    "ClassifierTrainingConfig",
-    "ComplexConfig",
     "DataConfig",
-    "DataPathsConfig",
-    "LeakageConfig",
-    "MarkerStepConfig",
-    "Midori2SourceConfig",
     "MlflowConfig",
-    "ModelConfig",
-    "OtherStepConfig",
+    "ModelEntry",
+    "PathsConfig",
     "PipelineConfig",
-    "RouterStepConfig",
-    "SequenceInputStepConfig",
     "ServingConfig",
-    "ServingStepConfig",
-    "SpecialistConfig",
-    "SpecialistEvaluationConfig",
-    "SpecialistStepConfig",
-    "SplitConfig",
     "StageConfig",
+    "StepEntry",
     "UnknownClassifierError",
-    "ValidationConfig",
     "convert_schema_1",
     "convert_schema_2",
+    "convert_schema_3",
     "default_stages",
     "upgrade",
 ]
 
 
-class DataPathsConfig(ConfigModel):
-    """Local folders for downloaded (raw), converted (interim) and validated
-    (processed) data."""
-
-    raw_dir: Path
-    interim_dir: Path
-    processed_dir: Path
-    splits_dir: Path
-    leakage_dir: Path
-    samples_dir: Path
-    models_dir: Path
-
-
 class DataConfig(ConfigModel):
-    """Data settings for an application."""
+    """The app's data."""
 
-    source: Midori2SourceConfig
-    paths: DataPathsConfig
+    release: str = Field(min_length=1)
+    """Which release of its data the app is built from (such as ``GB273``),
+    shown in model cards and by ``GET /version``."""
+
+
+class PathsConfig(ConfigModel):
+    """Where the app's models, model cards and bundle are written."""
+
+    models_dir: Path
 
 
 class MlflowConfig(ConfigModel):
@@ -120,13 +81,25 @@ class MlflowConfig(ConfigModel):
 
 
 class UnknownClassifierError(ValueError):
-    """Raised when an app has no model of the name (and kind) asked for."""
+    """Raised when an app has no model (or settings) of the name asked for."""
 
 
-ModelConfig = Annotated[
-    ClassifierConfig | SpecialistConfig, Field(discriminator="kind")
-]
-"""One of an app's models, chosen by its ``kind``."""
+class ModelEntry(ConfigModel):
+    """One of the app's models: its ``kind``, and the kind's own settings."""
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    kind: str = Field(min_length=1)
+
+
+class StepEntry(ConfigModel):
+    """One serving step: its ``kind``, the model it uses (if any), and the
+    kind's own settings."""
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    kind: str = Field(min_length=1)
+    model: str | None = None
 
 
 class PipelineConfig(ConfigModel):
@@ -141,6 +114,17 @@ class StageConfig(ConfigModel):
 
     kind: str = Field(min_length=1)
     model: str | None = None
+
+
+class ServingConfig(ConfigModel):
+    """How the app answers a request: a chain of serving steps, in order
+    (``chain``), each configured under ``[serving.steps.<name>]``, served at
+    ``POST /<endpoint>``."""
+
+    endpoint: str = Field(default="predict", pattern=r"^[a-z][a-z0-9-]*$")
+    description: str = "Make a prediction, with a decision trace."
+    chain: tuple[str, ...] = ()
+    steps: dict[str, StepEntry] = Field(default_factory=dict)
 
 
 _CLASSIFIER_STAGES = ("sample", "train", "calibrate", "evaluate", "card")
@@ -205,56 +189,7 @@ def convert_schema_1(data: dict[str, Any]) -> dict[str, Any]:
     return converted
 
 
-_CLASSIFIER_KIND = "bio.kmer-classifier"
 _SPECIALIST_KIND = "bio.specialist"
-
-
-class OtherStepConfig(ConfigModel):
-    """A serving step of a kind provided by another package."""
-
-    kind: str = Field(min_length=1)
-    model: str | None = None
-
-
-_STEP_TYPES: dict[str, type[ConfigModel]] = {
-    "bio.sequence-input": SequenceInputStepConfig,
-    "bio.marker": MarkerStepConfig,
-    "bio.router": RouterStepConfig,
-    "bio.specialist": SpecialistStepConfig,
-}
-_STEP_MODEL_KINDS = {
-    "bio.sequence-input": _CLASSIFIER_KIND,
-    "bio.marker": _CLASSIFIER_KIND,
-    "bio.router": _CLASSIFIER_KIND,
-    "bio.specialist": _SPECIALIST_KIND,
-}
-
-
-def _step_tag(value: Any) -> str:
-    kind = value.get("kind") if isinstance(value, dict) else getattr(value, "kind", "")
-    return kind if kind in _STEP_TYPES else "other"
-
-
-ServingStepConfig = Annotated[
-    Annotated[SequenceInputStepConfig, Tag("bio.sequence-input")]
-    | Annotated[MarkerStepConfig, Tag("bio.marker")]
-    | Annotated[RouterStepConfig, Tag("bio.router")]
-    | Annotated[SpecialistStepConfig, Tag("bio.specialist")]
-    | Annotated[OtherStepConfig, Tag("other")],
-    Discriminator(_step_tag),
-]
-"""One serving step's settings, chosen by its ``kind``."""
-
-
-class ServingConfig(ConfigModel):
-    """How the app answers a request: a chain of serving steps, in order
-    (``chain``), each configured under ``[serving.steps.<name>]``, served at
-    ``POST /<endpoint>``."""
-
-    endpoint: str = Field(default="predict", pattern=r"^[a-z][a-z0-9-]*$")
-    description: str = "Make a prediction, with a decision trace."
-    chain: tuple[str, ...] = ()
-    steps: dict[str, ServingStepConfig] = Field(default_factory=dict)
 
 
 _SCHEMA_2_DESCRIPTION = (
@@ -324,36 +259,119 @@ def convert_schema_2(data: dict[str, Any]) -> dict[str, Any]:
     return converted
 
 
+def _pop_path(data: dict[str, Any], path: str) -> Any:
+    """Remove and return the table at a dotted path (``None`` if absent)."""
+    *parents, last = path.split(".")
+    for key in parents:
+        child = data.get(key)
+        if not isinstance(child, dict):
+            return None
+        data = child
+    return data.pop(last, None)
+
+
+def _set_path(data: dict[str, Any], path: str, value: Any) -> None:
+    """Set the table at a dotted path, making the tables above it."""
+    *parents, last = path.split(".")
+    for key in parents:
+        data = data.setdefault(key, {})
+    data[last] = value
+
+
+def convert_schema_3(
+    data: dict[str, Any], found: Declared | None = None
+) -> dict[str, Any]:
+    """Convert a schema 3 config to schema 4.
+
+    The data release (``[data.source] release``) becomes ``[data] release``,
+    and ``models_dir`` moves from ``[data.paths]`` to ``[paths]``. Each
+    section's other schema 3 tables move into it, as its settings declare
+    (for sequence apps, ``[data.source]`` becomes ``[bio.source]``,
+    ``[validation]`` becomes ``[bio.validation]``, and so on).
+    """
+    found = found or declared()
+    converted = {
+        key: value
+        for key, value in data.items()
+        if key not in ("schema", "schema_version")
+    }
+    old = dict(converted.pop("data", None) or {})
+    source = dict(old.pop("source", None) or {})
+    folders = dict(old.pop("paths", None) or {})
+    release = source.pop("release", None)
+    models_dir = folders.pop("models_dir", None)
+    converted["data"] = {**old, **({"release": release} if release else {})}
+    if models_dir is not None:
+        converted["paths"] = {"models_dir": models_dir}
+    rest: dict[str, Any] = {"data": {}}
+    if source:
+        rest["data"]["source"] = source
+    if folders:
+        rest["data"]["paths"] = folders
+    for section in found.sections.values():
+        for table, target in section.schema_3_tables.items():
+            moving = _pop_path(rest, table)
+            if moving is None:
+                moving = _pop_path(converted, table)
+            if moving is not None:
+                _set_path(converted, target, moving)
+    for key, value in (rest.get("data") or {}).items():
+        converted["data"][key] = value  # Not claimed: reported as unknown
+    converted["schema"] = 4
+    return converted
+
+
 def upgrade(data: dict[str, Any]) -> dict[str, Any]:
-    """Convert config data of any older schema to the current one (3)."""
+    """Convert config data of any older schema to the current one (4)."""
     schema = data.get("schema", data.get("schema_version", 1))
     if schema == 1:
         data = convert_schema_1(data)
         schema = 2
     if schema == 2:
         data = convert_schema_2(data)
+        schema = 3
+    if schema == 3:
+        data = convert_schema_3(data)
     return data
 
 
-class AppConfig(ConfigModel):
-    """Top-level configuration for a ProkoptonML application."""
+def _settings_error(where: str, error: ValidationError) -> ValueError:
+    problems = "; ".join(
+        f"{'.'.join(str(part) for part in problem['loc']) or '(table)'}: "
+        f"{problem['msg']}"
+        for problem in error.errors()
+    )
+    return ValueError(f"{where}: {problems}")
 
-    schema_version: Literal[3] = Field(
-        default=3,
+
+class AppConfig(ConfigModel):
+    """Top-level configuration for a ProkoptonML application.
+
+    Top-level tables other than the ones below are sections that installed
+    packages declare (such as ``[bio]``); each is checked against its
+    declared settings.
+    """
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    schema_version: Literal[4] = Field(
+        default=4,
         validation_alias=AliasChoices("schema", "schema_version"),
         serialization_alias="schema",
     )
     name: str = Field(pattern=r"^[a-z][a-z0-9_-]*$")
     title: str
     data: DataConfig
-    validation: ValidationConfig
-    split: SplitConfig = Field(default_factory=SplitConfig)
-    leakage: LeakageConfig = Field(default_factory=LeakageConfig)
-    models: dict[str, ModelConfig] = Field(default_factory=dict)
+    paths: PathsConfig
+    models: dict[str, ModelEntry] = Field(default_factory=dict)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
     stages: dict[str, StageConfig] = Field(default_factory=dict)
     serving: ServingConfig = Field(default_factory=ServingConfig)
     mlflow: MlflowConfig = Field(default_factory=MlflowConfig)
+
+    _models: dict[str, BaseModel] = PrivateAttr(default_factory=dict)
+    _steps: dict[str, BaseModel] = PrivateAttr(default_factory=dict)
+    _sections: dict[str, BaseModel] = PrivateAttr(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -375,72 +393,75 @@ class AppConfig(ConfigModel):
                 msg = f"serving step {name!r} has no [serving.steps.{name}] section"
                 raise ValueError(msg)
         for name, step in self.serving.steps.items():
-            if step.model is None:
-                continue
-            if step.model not in self.models:
+            if step.model is not None and step.model not in self.models:
                 msg = f"serving step {name!r} uses {step.model!r}, which is not a model"
-                raise ValueError(msg)
-            needed = _STEP_MODEL_KINDS.get(step.kind)
-            found = self.models[step.model].kind
-            if needed is not None and found != needed:
-                msg = (
-                    f"serving step {name!r} ({step.kind}) needs a {needed} model, "
-                    f"but {step.model!r} is a {found}"
-                )
                 raise ValueError(msg)
         return self
 
-    def model(self, name: str) -> ClassifierConfig | SpecialistConfig:
-        """Return a model's settings by name.
+    @model_validator(mode="after")
+    def _check_settings(self) -> "AppConfig":
+        found = declared()
+        for name, entry in self.models.items():
+            self._models[name] = self._checked(
+                f"[models.{name}]", entry, found.models.get(entry.kind)
+            )
+        for name, step in self.serving.steps.items():
+            settings = found.steps.get(step.kind)
+            self._steps[name] = self._checked(f"[serving.steps.{name}]", step, settings)
+            needed = settings.needs_model if settings else None
+            if needed and step.model and self.models[step.model].kind != needed:
+                msg = (
+                    f"serving step {name!r} ({step.kind}) needs a {needed} model, "
+                    f"but {step.model!r} is a {self.models[step.model].kind}"
+                )
+                raise ValueError(msg)
+        for key, value in (self.__pydantic_extra__ or {}).items():
+            section = found.sections.get(key)
+            if section is None:
+                msg = f"unknown section [{key}]: no installed package declares it"
+                raise ValueError(msg)
+            try:
+                self._sections[key] = section.model.model_validate(value)
+            except ValidationError as error:
+                raise _settings_error(f"[{key}]", error) from None
+        return self
+
+    @staticmethod
+    def _checked(where: str, entry: BaseModel, settings: Any) -> BaseModel:
+        if settings is None:
+            if entry.__pydantic_extra__:
+                kind = getattr(entry, "kind", "")
+                msg = (
+                    f"{where}: no settings are known for kind {kind!r}; is the "
+                    "package that provides it installed?"
+                )
+                raise ValueError(msg)
+            return entry
+        try:
+            checked: BaseModel = settings.model.model_validate(entry.model_dump())
+        except ValidationError as error:
+            raise _settings_error(where, error) from None
+        return checked
+
+    def model_settings(self, name: str) -> BaseModel:
+        """A model's own settings, as checked against its kind's.
 
         Raises:
             UnknownClassifierError: If the app has no model of that name.
         """
-        if name not in self.models:
+        if name not in self._models:
             msg = f"This app has no {name!r} model configured"
             raise UnknownClassifierError(msg)
-        return self.models[name]
+        return self._models[name]
 
-    def classifier(self, name: str) -> ClassifierConfig:
-        """Return a classifier's settings by name (such as ``router``).
-
-        Raises:
-            UnknownClassifierError: If the app has no classifier of that name.
-        """
-        found = self.models.get(name)
-        if not isinstance(found, ClassifierConfig):
-            msg = f"This app has no {name!r} classifier configured"
-            raise UnknownClassifierError(msg)
-        return found
-
-    def specialist(self, name: str) -> SpecialistConfig:
-        """Return a specialist's settings by name.
+    def step_settings(self, name: str) -> BaseModel:
+        """A serving step's own settings, as checked against its kind's.
 
         Raises:
-            UnknownClassifierError: If the app has no specialist of that name.
+            KeyError: If the app has no serving step of that name.
         """
-        found = self.models.get(name)
-        if not isinstance(found, SpecialistConfig):
-            msg = f"This app has no {name!r} specialist configured"
-            raise UnknownClassifierError(msg)
-        return found
+        return self._steps[name]
 
-    @property
-    def router(self) -> ClassifierConfig:
-        """The router (serving still expects one, named ``router``)."""
-        return self.classifier("router")
-
-    @property
-    def marker(self) -> ClassifierConfig | None:
-        """The marker classifier, if the app has one (named ``marker``)."""
-        found = self.models.get("marker")
-        return found if isinstance(found, ClassifierConfig) else None
-
-    @property
-    def specialists(self) -> dict[str, SpecialistConfig]:
-        """The app's specialists, by name."""
-        return {
-            name: model
-            for name, model in self.models.items()
-            if isinstance(model, SpecialistConfig)
-        }
+    def section(self, name: str) -> BaseModel | None:
+        """An app-wide section's settings (such as ``bio``), if it has one."""
+        return self._sections.get(name)

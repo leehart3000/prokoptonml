@@ -12,6 +12,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from prokopton.ml.bio.config import bio_section, classifier_settings
 from prokopton.ml.bio.pipeline import calibrate, evaluate, sample, train
 from prokopton.ml.bio.pipeline.calibrate import CalibrationReport
 from prokopton.ml.bio.pipeline.evaluate import EvaluationReport, FragmentScore
@@ -97,10 +98,13 @@ def _main_set(reports: _Reports) -> str:
 
 
 def _read(config: AppConfig, model: str) -> _Reports:
-    folder = f"midori2_{config.data.source.release.lower()}"
-    model_dir = config.data.paths.models_dir / model
+    folder = f"midori2_{config.data.release.lower()}"
+    model_dir = config.paths.models_dir / model
     paths = {
-        "sample": config.data.paths.samples_dir / folder / model / sample.REPORT_NAME,
+        "sample": bio_section(config).paths.samples_dir
+        / folder
+        / model
+        / sample.REPORT_NAME,
         "train": model_dir / train.REPORT_NAME,
         "evaluation": model_dir / evaluate.REPORT_NAME,
     }
@@ -202,11 +206,11 @@ def _reliability_chart(reports: _Reports) -> str:
 
 
 def _training_data(config: AppConfig, model: str) -> str:
-    source = config.data.source
-    genes = config.classifier(model).genes
+    source = bio_section(config).source
+    genes = classifier_settings(config, model).genes
     covered = ", ".join(genes) if len(genes) <= 3 else f"{len(genes)} genes"
     link = f"[doi:{source.doi}](https://doi.org/{source.doi})"
-    return f"MIDORI2 {source.release} ({covered}), {link}, {source.licence}"
+    return f"MIDORI2 {config.data.release} ({covered}), {link}, {source.licence}"
 
 
 def _output(reports: _Reports) -> str:
@@ -218,7 +222,7 @@ def _output(reports: _Reports) -> str:
 
 
 def _model_section(config: AppConfig, model_name: str, reports: _Reports) -> str:
-    card = config.classifier(model_name).card
+    card = classifier_settings(config, model_name).card
     train_report = reports.train
     evaluation = reports.evaluation
     kind = {"logistic": "Logistic regression", "naive_bayes": "Naive Bayes"}
@@ -258,7 +262,7 @@ def _model_section(config: AppConfig, model_name: str, reports: _Reports) -> str
 
 
 def _use_section(config: AppConfig, model: str) -> str:
-    classifier = config.classifier(model)
+    classifier = classifier_settings(config, model)
     serving = classifier.serving
     text = classifier.card.intended_use.strip().format(
         min_length=serving.min_length, short_length=serving.short_length
@@ -516,7 +520,7 @@ def _hardest_section(reports: _Reports) -> str:
 
 
 def _limitations_section(config: AppConfig, model: str, reports: _Reports) -> str:
-    classifier = config.classifier(model)
+    classifier = classifier_settings(config, model)
     serving = classifier.serving
     main = _main_set(reports)
     lengths = {p.length: p for p in reports.evaluation.fragments.get(main, [])}
@@ -624,7 +628,7 @@ def build_card(config: AppConfig, model: str = "router") -> CardFiles:
         CardError: If a report is missing, or the reports describe different
             model versions.
     """
-    classifier = config.classifier(model)
+    classifier = classifier_settings(config, model)
     reports = _read(config, model)
     card = classifier.card
     card.output_dir.mkdir(parents=True, exist_ok=True)

@@ -1,8 +1,10 @@
-"""Settings for sequence apps: the MIDORI2 source, validation, splits and
-leakage, the k-mer classifiers, the specialists and the sequence serving
-steps.
+"""Settings for sequence apps: the ``[bio]`` section (the MIDORI2 source, the
+data folders, validation, splits and leakage), the k-mer classifiers, the
+specialists and the sequence serving steps.
 
-These are read from an app's config (``prokopton.ml.config.AppConfig``).
+They are declared to the platform through the ``prokopton.ml.settings`` entry
+point (``bio_settings``), so an app's config is checked against them when it
+is read; the functions here return them, typed, from a config.
 """
 
 from pathlib import Path
@@ -11,9 +13,15 @@ from typing import Literal
 from prokopton.core.config import ConfigModel
 from pydantic import Field, field_validator, model_validator
 
+from prokopton.ml.config import AppConfig, UnknownClassifierError
+from prokopton.ml.settings import Settings
+
 __all__ = [
     "ALLOWED_URL_SCHEMES",
     "DEFAULT_VSEARCH_COMMAND",
+    "SCHEMA_3_TABLES",
+    "BioConfig",
+    "BioPathsConfig",
     "ClassifierCalibrationConfig",
     "ClassifierCardConfig",
     "ClassifierConfig",
@@ -33,6 +41,10 @@ __all__ = [
     "SpecialistStepConfig",
     "SplitConfig",
     "ValidationConfig",
+    "bio_section",
+    "bio_settings",
+    "classifier_settings",
+    "specialist_settings",
 ]
 
 ALLOWED_URL_SCHEMES: tuple[str, ...] = ("https://", "file://")
@@ -50,7 +62,6 @@ class Midori2SourceConfig(ConfigModel):
     """Where to get a MIDORI2 release, and which genes to ingest from it."""
 
     type: Literal["midori2"] = "midori2"
-    release: str = Field(pattern=r"^GB\d+$")
     doi: str
     licence: str
     archive_url: str
@@ -583,3 +594,90 @@ class SpecialistStepConfig(ConfigModel):
     kind: Literal["bio.specialist"]
     model: str
     route_threshold: float = Field(default=0.10, gt=0.0, le=1.0)
+
+
+class BioPathsConfig(ConfigModel):
+    """Local folders for downloaded (raw), converted (interim), validated
+    (processed), split and sampled data, and the leakage reports."""
+
+    raw_dir: Path
+    interim_dir: Path
+    processed_dir: Path
+    splits_dir: Path
+    leakage_dir: Path
+    samples_dir: Path
+
+
+class BioConfig(ConfigModel):
+    """The ``[bio]`` section: settings every sequence stage shares."""
+
+    source: Midori2SourceConfig
+    paths: BioPathsConfig
+    validation: ValidationConfig
+    split: SplitConfig = Field(default_factory=SplitConfig)
+    leakage: LeakageConfig = Field(default_factory=LeakageConfig)
+
+
+SCHEMA_3_TABLES = {
+    "data.source": "bio.source",
+    "data.paths": "bio.paths",
+    "validation": "bio.validation",
+    "split": "bio.split",
+    "leakage": "bio.leakage",
+}
+"""Where schema 3 kept the ``[bio]`` section's tables."""
+
+_CLASSIFIER = "bio.kmer-classifier"
+_SPECIALIST = "bio.specialist"
+
+
+def bio_settings() -> list[Settings]:
+    """The sequence settings (the ``prokopton.ml.settings`` entry point)."""
+    return [
+        Settings("section", "bio", BioConfig, schema_3_tables=SCHEMA_3_TABLES),
+        Settings("model", _CLASSIFIER, ClassifierConfig),
+        Settings("model", _SPECIALIST, SpecialistConfig),
+        Settings("step", "bio.sequence-input", SequenceInputStepConfig, _CLASSIFIER),
+        Settings("step", "bio.marker", MarkerStepConfig, _CLASSIFIER),
+        Settings("step", "bio.router", RouterStepConfig, _CLASSIFIER),
+        Settings("step", "bio.specialist", SpecialistStepConfig, _SPECIALIST),
+    ]
+
+
+def bio_section(config: AppConfig) -> BioConfig:
+    """The app's ``[bio]`` section.
+
+    Raises:
+        ValueError: If the app has none (it is not a sequence app).
+    """
+    found = config.section("bio")
+    if not isinstance(found, BioConfig):
+        msg = f"The {config.name!r} app has no [bio] section"
+        raise ValueError(msg)
+    return found
+
+
+def classifier_settings(config: AppConfig, name: str) -> ClassifierConfig:
+    """A k-mer classifier's settings, by name (such as ``router``).
+
+    Raises:
+        UnknownClassifierError: If the app has no classifier of that name.
+    """
+    found = config.model_settings(name) if name in config.models else None
+    if not isinstance(found, ClassifierConfig):
+        msg = f"This app has no {name!r} classifier configured"
+        raise UnknownClassifierError(msg)
+    return found
+
+
+def specialist_settings(config: AppConfig, name: str) -> SpecialistConfig:
+    """A specialist's settings, by name.
+
+    Raises:
+        UnknownClassifierError: If the app has no specialist of that name.
+    """
+    found = config.model_settings(name) if name in config.models else None
+    if not isinstance(found, SpecialistConfig):
+        msg = f"This app has no {name!r} specialist configured"
+        raise UnknownClassifierError(msg)
+    return found

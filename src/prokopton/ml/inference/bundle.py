@@ -115,7 +115,7 @@ def _installed(names: tuple[str, ...]) -> dict[str, str]:
 
 def bundle_path(config: AppConfig) -> Path:
     """Where an app's serving bundle is written."""
-    return config.data.paths.models_dir / "bundle"
+    return config.paths.models_dir / "bundle"
 
 
 def _sha256(path: Path) -> str:
@@ -175,7 +175,7 @@ def build_bundle(
     }
     manifest = BundleManifest(
         app=config.name,
-        release=config.data.source.release,
+        release=config.data.release,
         prokopton_ml_version=__version__,
         created_at=datetime.now(UTC),
         versions=versions,

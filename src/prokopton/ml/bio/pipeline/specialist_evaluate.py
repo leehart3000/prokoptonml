@@ -41,7 +41,7 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.bio.config import SpecialistConfig
+from prokopton.ml.bio.config import SpecialistConfig, bio_section, specialist_settings
 from prokopton.ml.bio.pipeline.reference import reference_path
 from prokopton.ml.bio.pipeline.split import hash_fraction
 from prokopton.ml.bio.specialists.identify import (
@@ -468,14 +468,17 @@ def evaluate_specialist(
             is missing.
     """
     started_at = datetime.now(UTC)
-    rules = config.specialist(name)
+    rules = specialist_settings(config, name)
     make_tracker = tracker_factory or (lambda c: specialist_tracker(c, name))
-    folder = f"midori2_{config.data.source.release.lower()}"
+    folder = f"midori2_{config.data.release.lower()}"
     records = (
-        config.data.paths.splits_dir / folder / f"gene={rules.gene}" / "records.parquet"
+        bio_section(config).paths.splits_dir
+        / folder
+        / f"gene={rules.gene}"
+        / "records.parquet"
     )
     leakage = (
-        config.data.paths.leakage_dir
+        bio_section(config).paths.leakage_dir
         / folder
         / f"gene={rules.gene}"
         / "near_duplicates.parquet"
@@ -544,7 +547,7 @@ def evaluate_specialist(
     report = SpecialistEvaluationReport(
         app=config.name,
         specialist=name,
-        release=config.data.source.release,
+        release=config.data.release,
         gene=rules.gene,
         prokopton_ml_version=__version__,
         started_at=started_at,

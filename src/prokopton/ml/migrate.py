@@ -1,4 +1,4 @@
-"""Rewrite an older config file as schema 3, keeping its comments.
+"""Rewrite an older config file as schema 4, keeping its comments.
 
 The rewrite is done on the text, so every comment and the order of the file
 stay as they are. From schema 1:
@@ -15,7 +15,16 @@ From schema 2 (and so from 1):
   moves to its step with the comments above it (``route_threshold`` to every
   specialist step).
 
-``schema = 3`` is set before the first setting. The result is checked before
+From schema 3 (and so from 1 and 2):
+
+- ``release`` moves from ``[data.source]`` to a new ``[data]`` table, and
+  ``models_dir`` from ``[data.paths]`` to a new ``[paths]`` table, both
+  before the first table;
+- each section's schema 3 tables are renamed as its settings declare (for
+  sequence apps, ``[data.source]`` becomes ``[bio.source]``, ``[validation]``
+  becomes ``[bio.validation]``, and so on), with their sub-tables.
+
+``schema = 4`` is set before the first setting. The result is checked before
 it is returned: it must give exactly the same settings as the original.
 """
 
@@ -24,6 +33,7 @@ import tomllib
 from typing import Any
 
 from prokopton.ml.config import AppConfig, convert_schema_1, convert_schema_2
+from prokopton.ml.settings import declared
 
 __all__ = [
     "CURRENT_SCHEMA",
@@ -33,7 +43,7 @@ __all__ = [
     "schema_of",
 ]
 
-CURRENT_SCHEMA = 3
+CURRENT_SCHEMA = 4
 
 _HEADER = re.compile(
     r"^(?P<open>\[\[?)\s*(?P<path>[A-Za-z0-9_.-]+)\s*(?P<close>\]\]?)(?P<rest>.*)$"
@@ -219,11 +229,61 @@ def _to_schema_3(text: str, original: dict[str, Any]) -> str:
     return re.sub(r"\n{3,}", "\n\n", result)
 
 
+_MOVED_KEYS = {"data.source": "release", "data.paths": "models_dir"}
+"""Keys that leave their schema 3 table for a new core table."""
+
+
+def _renamed(path: str, tables: dict[str, str]) -> str:
+    for old, new in tables.items():
+        if path == old or path.startswith(old + "."):
+            return new + path[len(old) :]
+    return path
+
+
+def _to_schema_4(text: str) -> str:
+    """Rewrite a schema 3 file's text as schema 4 (see the module docstring)."""
+    tables: dict[str, str] = {}
+    for section in declared().sections.values():
+        tables.update(section.schema_3_tables)
+    lines = text.splitlines()
+    output: list[str] = []
+    taken: dict[str, str] = {}
+    table = ""
+    first_table: int | None = None
+    for line in lines:
+        stripped = line.strip()
+        if re.match(r"^schema\s*=\s*3\s*(#.*)?$", stripped):
+            output.append("schema = 4")
+            continue
+        if match := _HEADER.match(stripped):
+            table = match["path"]
+            if first_table is None:
+                first_table = len(output)
+                while first_table > 0 and output[first_table - 1].startswith("#"):
+                    first_table -= 1  # Comments just above it belong to it
+            path = _renamed(table, tables)
+            output.append(f"{match['open']}{path}{match['close']}{match['rest']}")
+            continue
+        key = _KEY.match(stripped)
+        if key and _MOVED_KEYS.get(table) == key["key"]:
+            taken[table] = stripped
+            continue
+        output.append(line)
+    added: list[str] = []
+    if "data.source" in taken:
+        added += ["[data]", taken["data.source"], ""]
+    if "data.paths" in taken:
+        added += ["[paths]", taken["data.paths"], ""]
+    at = len(output) if first_table is None else first_table
+    output[at:at] = added
+    return "\n".join(output).rstrip("\n") + "\n"
+
+
 def migrate_text(text: str) -> str:
-    """Rewrite a schema 1 or 2 config file's text as schema 3.
+    """Rewrite a schema 1, 2 or 3 config file's text as schema 4.
 
     Raises:
-        MigrationError: If the file is already schema 3, or if the rewritten
+        MigrationError: If the file is already schema 4, or if the rewritten
             file would not give exactly the same settings.
     """
     try:
@@ -241,7 +301,9 @@ def migrate_text(text: str) -> str:
         raise MigrationError(msg) from error
     if is_schema_1(original):
         text = _to_schema_2(text, original)
-    result = _to_schema_3(text, original)
+    if schema_of(original) <= 2:
+        text = _to_schema_3(text, original)
+    result = _to_schema_4(text)
     try:
         after = AppConfig.model_validate(tomllib.loads(result))
     except (tomllib.TOMLDecodeError, ValueError) as error:

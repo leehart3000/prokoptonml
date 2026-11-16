@@ -30,7 +30,7 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.bio.config import LeakageConfig
+from prokopton.ml.bio.config import LeakageConfig, bio_section
 from prokopton.ml.config import AppConfig
 
 __all__ = [
@@ -250,10 +250,10 @@ def leakage(config: AppConfig) -> LeakageReport:
         LeakageStageError: If a gene has not been split yet, or VSEARCH fails.
     """
     started_at = datetime.now(UTC)
-    rules = config.leakage
-    folder = f"midori2_{config.data.source.release.lower()}"
-    input_root = config.data.paths.splits_dir / folder
-    output_root = config.data.paths.leakage_dir / folder
+    rules = bio_section(config).leakage
+    folder = f"midori2_{config.data.release.lower()}"
+    input_root = bio_section(config).paths.splits_dir / folder
+    output_root = bio_section(config).paths.leakage_dir / folder
 
     genes: dict[str, GeneLeakageReport] = {}
     for gene in rules.genes:
@@ -273,7 +273,7 @@ def leakage(config: AppConfig) -> LeakageReport:
 
     result = LeakageReport(
         app=config.name,
-        release=config.data.source.release,
+        release=config.data.release,
         prokopton_ml_version=__version__,
         rules=rules,
         started_at=started_at,

@@ -32,7 +32,11 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.bio.config import ClassifierEvaluationConfig
+from prokopton.ml.bio.config import (
+    ClassifierEvaluationConfig,
+    bio_section,
+    classifier_settings,
+)
 from prokopton.ml.bio.evaluation.scores import (
     AmbiguityBin,
     CalibrationBin,
@@ -248,23 +252,26 @@ def evaluate(
         EvaluationStageError: If the split or leakage data is missing.
     """
     started_at = datetime.now(UTC)
-    classifier = config.classifier(model)
+    classifier = classifier_settings(config, model)
     rules = classifier.evaluation
     training = classifier.training
     make_tracker = tracker_factory or partial(mlflow_tracker, model=model)
-    folder = f"midori2_{config.data.source.release.lower()}"
+    folder = f"midori2_{config.data.release.lower()}"
     split_paths = {
-        gene: config.data.paths.splits_dir / folder / f"gene={gene}" / "records.parquet"
+        gene: bio_section(config).paths.splits_dir
+        / folder
+        / f"gene={gene}"
+        / "records.parquet"
         for gene in classifier.genes
     }
     # Near-copies are only listed for the genes the leakage stage covers
     leakage_paths = {
-        gene: config.data.paths.leakage_dir
+        gene: bio_section(config).paths.leakage_dir
         / folder
         / f"gene={gene}"
         / "near_duplicates.parquet"
         for gene in classifier.genes
-        if rules.novel_splits and gene in config.leakage.genes
+        if rules.novel_splits and gene in bio_section(config).leakage.genes
     }
     needed = [*split_paths.values(), *leakage_paths.values()]
     missing = [str(path) for path in needed if not path.exists()]
@@ -388,7 +395,7 @@ def evaluate(
         tracker.set_tags(
             {
                 "app": config.name,
-                "release": config.data.source.release,
+                "release": config.data.release,
                 "gene": ",".join(classifier.genes),
                 "prokopton_ml_version": __version__,
                 "stage": "evaluate",
@@ -409,7 +416,7 @@ def evaluate(
         report = EvaluationReport(
             app=config.name,
             model=model,
-            release=config.data.source.release,
+            release=config.data.release,
             gene=",".join(classifier.genes),
             prokopton_ml_version=__version__,
             rules=rules,
@@ -437,7 +444,7 @@ def evaluate(
             scores.metrics["macro_f1"],
             scores.metrics["ece"],
         )
-    output = config.data.paths.models_dir / model / REPORT_NAME
+    output = config.paths.models_dir / model / REPORT_NAME
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     logger.info("Wrote %s", output)

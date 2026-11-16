@@ -20,7 +20,11 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.bio.config import ClassifierCalibrationConfig
+from prokopton.ml.bio.config import (
+    ClassifierCalibrationConfig,
+    bio_section,
+    classifier_settings,
+)
 from prokopton.ml.bio.features.fragments import random_fragments
 from prokopton.ml.bio.pipeline.train import read_sample
 from prokopton.ml.bio.training.router import predict_proba
@@ -98,12 +102,12 @@ def calibrate(
         CalibrationStageError: If the validation samples are missing.
     """
     started_at = datetime.now(UTC)
-    classifier = config.classifier(model)
+    classifier = classifier_settings(config, model)
     rules = classifier.calibration
     training = classifier.training
     make_tracker = tracker_factory or partial(mlflow_tracker, model=model)
-    folder = f"midori2_{config.data.source.release.lower()}"
-    sample_root = config.data.paths.samples_dir / folder / model
+    folder = f"midori2_{config.data.release.lower()}"
+    sample_root = bio_section(config).paths.samples_dir / folder / model
     splits = [s for s in _SPLITS if s in classifier.sample.eval_splits]
     paths = {name: sample_root / f"{name}.parquet" for name in splits}
     missing = [str(path) for path in paths.values() if not path.exists()]
@@ -160,7 +164,7 @@ def calibrate(
         tracker.set_tags(
             {
                 "app": config.name,
-                "release": config.data.source.release,
+                "release": config.data.release,
                 "gene": ",".join(classifier.genes),
                 "prokopton_ml_version": __version__,
                 "stage": "calibrate",
@@ -199,7 +203,7 @@ def calibrate(
     report = CalibrationReport(
         app=config.name,
         model=model,
-        release=config.data.source.release,
+        release=config.data.release,
         gene=",".join(classifier.genes),
         prokopton_ml_version=__version__,
         rules=rules,
@@ -217,7 +221,7 @@ def calibrate(
         after=after,
         run_id=run_id,
     )
-    output = config.data.paths.models_dir / model / REPORT_NAME
+    output = config.paths.models_dir / model / REPORT_NAME
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     logger.info("Wrote %s", output)

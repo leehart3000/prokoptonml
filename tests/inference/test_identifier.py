@@ -13,6 +13,7 @@ from inference_world import (
     FakeRouter,
     random_sequence,
 )
+from prokopton.ml.bio.config import specialist_settings
 from prokopton.ml.bio.features.fragments import reverse_complement
 from prokopton.ml.bio.serving import member_name
 from prokopton.ml.bio.serving import specialist_answer as _specialist_answer
@@ -65,7 +66,7 @@ def identifier(router: FakeRouter, app: AppConfig | None = None) -> Identifier:
             reference("b", ALBOPICTUS, "Aedes albopictus"),
             reference("m", MUSCA, "Musca domestica", role="background"),
         ],
-        app.specialist("culicidae"),
+        specialist_settings(app, "culicidae"),
     )
     return Identifier(
         app, {"marker": FakeMarker(), "router": router, "culicidae": specialist}
@@ -263,6 +264,9 @@ def test_finds_a_barcode_at_the_end_of_a_long_sequence() -> None:
 
 
 def test_member_name_comes_from_config_or_the_target() -> None:
-    assert member_name(config().specialist("culicidae")) == "A member of Culicidae"
-    named = config(member_name="A mosquito").specialist("culicidae")
+    assert (
+        member_name(specialist_settings(config(), "culicidae"))
+        == "A member of Culicidae"
+    )
+    named = specialist_settings(config(member_name="A mosquito"), "culicidae")
     assert member_name(named) == "A mosquito"

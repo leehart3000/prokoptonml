@@ -6,6 +6,7 @@ Each wraps the function that does the work, and returns the one-line summary
 that ``prokopton-ml run`` prints.
 """
 
+from prokopton.ml.bio.config import specialist_settings
 from prokopton.ml.bio.data.taxonomy import ReferenceDataError
 from prokopton.ml.bio.pipeline.calibrate import CalibrationStageError, calibrate
 from prokopton.ml.bio.pipeline.evaluate import EvaluationStageError, evaluate
@@ -109,7 +110,7 @@ def _card(context: StageContext) -> str:
 
 def _anchors(context: StageContext) -> str:
     name = _model(context)
-    rules = context.config.specialist(name)
+    rules = specialist_settings(context.config, name)
     if rules.anchors is None or not rules.anchor_taxon:
         msg = f"Set anchors and anchor_taxon for the {name!r} specialist"
         raise AnchorError(msg)
@@ -159,21 +160,21 @@ def bio_kinds() -> list[StageKind]:
             "bio.validate",
             "Check data quality, apply rules and write processed data.",
             _validate,
-            uses=("data", "validation"),
+            uses=("data", "bio.source", "bio.paths", "bio.validation"),
             errors=(DataValidationError, ReferenceDataError),
         ),
         StageKind(
             "bio.split",
             "Assign records to training, validation and test sets.",
             _split,
-            uses=("data", "split"),
+            uses=("data", "bio.source", "bio.paths", "bio.split"),
             errors=(SplitStageError,),
         ),
         StageKind(
             "bio.leakage",
             "List novel-set records with a near-copy in the training set.",
             _leakage,
-            uses=("data", "leakage"),
+            uses=("data", "bio.source", "bio.paths", "bio.leakage"),
             errors=(LeakageStageError,),
         ),
         StageKind(
@@ -188,7 +189,7 @@ def bio_kinds() -> list[StageKind]:
             "Train a classifier's candidates, then track and register the best.",
             _train,
             model_kind=CLASSIFIER,
-            uses=("data", "mlflow"),
+            uses=("data", "paths", "bio.source", "bio.paths", "mlflow"),
             errors=(TrainStageError,),
         ),
         StageKind(
@@ -196,7 +197,7 @@ def bio_kinds() -> list[StageKind]:
             "Calibrate a registered classifier's confidence by length.",
             _calibrate,
             model_kind=CLASSIFIER,
-            uses=("data", "mlflow"),
+            uses=("data", "paths", "bio.source", "bio.paths", "mlflow"),
             errors=(CalibrationStageError,),
         ),
         StageKind(
@@ -204,7 +205,7 @@ def bio_kinds() -> list[StageKind]:
             "Measure a registered classifier on the test sets.",
             _evaluate,
             model_kind=CLASSIFIER,
-            uses=("data", "mlflow"),
+            uses=("data", "paths", "bio.source", "bio.paths", "mlflow"),
             errors=(EvaluationStageError,),
         ),
         StageKind(
@@ -212,7 +213,7 @@ def bio_kinds() -> list[StageKind]:
             "Write a classifier's model card from the pipeline's reports.",
             _card,
             model_kind=CLASSIFIER,
-            uses=("data", "mlflow"),
+            uses=("data", "paths", "bio.source", "bio.paths", "mlflow"),
             errors=(CardError,),
         ),
         StageKind(

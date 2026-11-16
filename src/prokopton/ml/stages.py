@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from importlib.metadata import entry_points
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
@@ -201,17 +202,30 @@ def settings_hash(config: AppConfig, name: str, kind: StageKind) -> str:
     payload = {
         "stage": stage.model_dump(mode="json"),
         "model": (
-            config.models[stage.model].model_dump(mode="json") if stage.model else None
+            config.model_settings(stage.model).model_dump(mode="json")
+            if stage.model
+            else None
         ),
-        "sections": config.model_dump(mode="json", include=set(kind.uses)),
+        "sections": {use: _used(config, use) for use in kind.uses},
     }
     text = json.dumps(payload, sort_keys=True)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _used(config: AppConfig, use: str) -> Any:
+    """The settings a stage uses: a top-level table (``mlflow``), or one
+    table of a section (``bio.validation``)."""
+    section, _, table = use.partition(".")
+    found = config.section(section)
+    if found is None:
+        return config.model_dump(mode="json", include={section}).get(section)
+    dumped = found.model_dump(mode="json")
+    return dumped.get(table) if table else dumped
+
+
 def record_path(config: AppConfig, name: str) -> Path:
     """Where a stage's last run is recorded."""
-    return config.data.paths.models_dir / config.name / "stages" / f"{name}.json"
+    return config.paths.models_dir / config.name / "stages" / f"{name}.json"
 
 
 def read_record(config: AppConfig, name: str) -> StageRecord | None:

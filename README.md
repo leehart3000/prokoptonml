@@ -54,6 +54,14 @@ kind (such as `bio.sequence-input` or `bio.specialist`), and served at
 Packages can add serving step kinds (`prokopton.ml.serving_steps`) and model
 kinds (`prokopton.ml.model_kinds`) in the same way.
 
+The config itself (schema 4) holds only what every app has: its name, data
+release (`[data]`), models folder (`[paths]`), models, pipeline, serving steps
+and MLflow settings. Each kind's own settings, and app-wide sections such as
+`[bio]` for sequence apps, are declared by the package that reads them
+(`prokopton.ml.settings`) and checked when the config is read. Older configs
+are converted when read; `prokopton-ml migrate-config --write` rewrites them,
+keeping their comments.
+
 ```python
 import prokopton.ml
 ```

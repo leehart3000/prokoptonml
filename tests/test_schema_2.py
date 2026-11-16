@@ -1,4 +1,5 @@
-"""Tests for config schema 2: models, the pipeline, and reading schema 1."""
+"""Tests for config schemas 2 and 3 (models, the pipeline, serving steps) and
+reading schema 1, all read as schema 4."""
 
 import json
 import tomllib
@@ -13,10 +14,12 @@ from prokopton.ml.bio.config import (
     MarkerStepConfig,
     SpecialistConfig,
     SpecialistStepConfig,
+    classifier_settings,
+    specialist_settings,
 )
 from prokopton.ml.config import (
     AppConfig,
-    OtherStepConfig,
+    StepEntry,
     UnknownClassifierError,
     convert_schema_1,
     convert_schema_2,
@@ -51,10 +54,10 @@ def minimal(**extra: Any) -> dict[str, Any]:
 def test_schema_1_is_converted_with_every_stage_it_ran() -> None:
     config = AppConfig.model_validate(schema_1())
 
-    assert config.schema_version == 3
+    assert config.schema_version == 4
     assert list(config.models) == ["router", "marker", "culicidae"]
-    assert isinstance(config.models["router"], ClassifierConfig)
-    assert isinstance(config.models["culicidae"], SpecialistConfig)
+    assert isinstance(config.model_settings("router"), ClassifierConfig)
+    assert isinstance(config.model_settings("culicidae"), SpecialistConfig)
     assert config.pipeline.stages == DNABARCODE_STAGES
     assert config.stages["router-train"].kind == "bio.classifier-train"
     assert config.stages["router-train"].model == "router"
@@ -66,24 +69,25 @@ def test_settings_are_unchanged_by_the_conversion() -> None:
     data = schema_1()
     config = AppConfig.model_validate(data)
 
-    assert config.router.training.k_values == tuple(
+    assert classifier_settings(config, "router").training.k_values == tuple(
         data["router"]["training"]["k_values"]
     )
-    assert config.marker is not None
-    assert config.marker.label == data["marker"]["label"]
-    culicidae = config.specialist("culicidae")
+    assert classifier_settings(config, "marker").label == data["marker"]["label"]
+    culicidae = specialist_settings(config, "culicidae")
     assert (
         culicidae.species_identity
         == data["specialists"]["culicidae"]["species_identity"]
     )
-    assert list(config.specialists) == ["culicidae"]
+    assert [n for n, m in config.models.items() if m.kind == "bio.specialist"] == [
+        "culicidae"
+    ]
 
 
 def test_a_dumped_config_reads_back_the_same() -> None:
     config = AppConfig.model_validate(schema_1())
 
     assert AppConfig.model_validate_json(config.model_dump_json()) == config
-    assert json.loads(config.model_dump_json(by_alias=True))["schema"] == 3
+    assert json.loads(config.model_dump_json(by_alias=True))["schema"] == 4
 
 
 def test_a_schema_1_app_without_marker_or_anchors() -> None:
@@ -93,7 +97,7 @@ def test_a_schema_1_app_without_marker_or_anchors() -> None:
 
     config = AppConfig.model_validate(data)
 
-    assert config.marker is None
+    assert "marker" not in config.models
     assert "marker-train" not in config.stages
     assert "culicidae-anchors" not in config.stages
     assert "culicidae-reference" in config.stages
@@ -132,7 +136,8 @@ def test_schema_2_is_read_as_written() -> None:
     )
 
     assert config.pipeline.stages == ("ingest", "router-train")
-    assert config.model("router") is config.router
+    assert config.model_settings("router") is classifier_settings(config, "router")
+    assert isinstance(config.model_settings("router"), ClassifierConfig)
 
 
 def test_a_pipeline_stage_must_be_defined() -> None:
@@ -147,20 +152,23 @@ def test_a_stage_must_act_on_a_model_that_exists() -> None:
         )
 
 
-def test_a_model_needs_a_known_kind() -> None:
-    with pytest.raises(ValidationError):
-        AppConfig.model_validate(minimal(models={"x": {"kind": "bio.unknown"}}))
+def test_a_model_with_settings_needs_a_kind_that_declares_them() -> None:
+    with pytest.raises(ValidationError, match="no settings are known for kind"):
+        AppConfig.model_validate(minimal(models={"x": {"kind": "bio.unknown", "k": 8}}))
+    # A kind without settings is checked when it is used (by its registry)
+    config = AppConfig.model_validate(minimal(models={"x": {"kind": "shop.x"}}))
+    assert config.model_settings("x") is config.models["x"]
 
 
 def test_models_are_found_by_name_and_kind() -> None:
     config = AppConfig.model_validate(schema_1())
 
     with pytest.raises(UnknownClassifierError, match="no 'sharks' model"):
-        config.model("sharks")
+        config.model_settings("sharks")
     with pytest.raises(UnknownClassifierError, match="no 'culicidae' classifier"):
-        config.classifier("culicidae")
+        classifier_settings(config, "culicidae")
     with pytest.raises(UnknownClassifierError, match="no 'router' specialist"):
-        config.specialist("router")
+        specialist_settings(config, "router")
 
 
 def test_inference_settings_move_into_the_serving_steps() -> None:
@@ -171,10 +179,11 @@ def test_inference_settings_move_into_the_serving_steps() -> None:
 
     assert serving.chain == ("input", "marker", "router", "culicidae")
     assert serving.endpoint == "identify"  # What older apps served
-    marker = serving.steps["marker"]
+    config = AppConfig.model_validate(data)
+    marker = config.step_settings("marker")
     assert isinstance(marker, MarkerStepConfig)
     assert marker.unsupported_note == data["inference"]["unsupported_note"]
-    specialist = serving.steps["culicidae"]
+    specialist = config.step_settings("culicidae")
     assert isinstance(specialist, SpecialistStepConfig)
     assert specialist.route_threshold == 0.2
 
@@ -195,9 +204,8 @@ def test_schema_2_without_marker_or_inference_gets_default_steps() -> None:
     assert (empty["chain"], empty["steps"]) == ([], {})
 
 
-def test_upgrade_leaves_schema_3_alone() -> None:
-    data = minimal(serving={"endpoint": "identify"})
-    data["schema"] = 3
+def test_upgrade_leaves_schema_4_alone() -> None:
+    data = {"schema": 4, "name": "x"}
 
     assert upgrade(data) is data
 
@@ -237,7 +245,8 @@ def test_other_packages_steps_are_accepted() -> None:
         )
     )
 
-    assert isinstance(config.serving.steps["x"], OtherStepConfig)
+    assert isinstance(config.serving.steps["x"], StepEntry)
+    assert config.step_settings("x") is config.serving.steps["x"]
 
 
 def test_a_dumped_schema_2_config_is_read() -> None:
@@ -247,5 +256,5 @@ def test_a_dumped_schema_2_config_is_read() -> None:
 
     config = AppConfig.model_validate(data)
 
-    assert config.schema_version == 3
+    assert config.schema_version == 4
     assert config.serving.chain == ("input", "marker", "router", "culicidae")

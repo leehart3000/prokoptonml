@@ -1,4 +1,4 @@
-"""Tests for rewriting a schema 1 config file as schema 2."""
+"""Tests for rewriting a schema 1, 2 or 3 config file as schema 4."""
 
 import tomllib
 from pathlib import Path
@@ -51,9 +51,14 @@ def test_the_dnabarcode_config_keeps_its_settings_and_comments() -> None:
     result = migrate_text(text)
 
     data = tomllib.loads(result)
-    assert data["schema"] == 3
+    assert data["schema"] == 4
     assert not is_schema_1(data)
-    assert {"router", "marker", "specialists"}.isdisjoint(data)
+    assert {"router", "marker", "specialists", "validation"}.isdisjoint(data)
+    assert data["data"] == {"release": "GB273"}
+    assert data["paths"] == {"models_dir": "data/models/dnabarcode"}
+    assert set(data["bio"]) == {"source", "paths", "validation", "split", "leakage"}
+    assert "release" not in data["bio"]["source"]
+    assert "models_dir" not in data["bio"]["paths"]
     assert data["models"]["culicidae"]["kind"] == "bio.specialist"
     assert len(data["pipeline"]["stages"]) == 19
     comments = [line for line in text.splitlines() if line.lstrip().startswith("#")]
@@ -104,9 +109,63 @@ def test_a_config_without_a_router_table_gets_the_default_router() -> None:
     assert data["models"]["router"] == {"kind": "bio.kmer-classifier"}
 
 
-def test_schema_2_is_not_rewritten() -> None:
-    with pytest.raises(MigrationError, match="already schema 3"):
-        migrate_text("schema = 3\n" + HEADER)
+def test_schema_4_is_not_rewritten() -> None:
+    with pytest.raises(MigrationError, match="already schema 4"):
+        migrate_text("schema = 4\n" + HEADER)
+
+
+SCHEMA_3 = """\
+# An app
+schema = 3
+name = "testapp"
+title = "Test app"
+
+# Where the data comes from
+[data.source]
+release = "GB999" # This release
+doi = "10.0000/example"
+licence = "CC-BY-4.0"
+archive_url = "https://example.org/fake.zip"
+checksums_url = "https://example.org/sums.txt"
+archive_name = "fake.zip"
+member_template = "x/{gene}.fasta.gz"
+genes = ["CO1"]
+
+[data.paths]
+raw_dir = "r"
+interim_dir = "i"
+processed_dir = "p"
+splits_dir = "s"
+leakage_dir = "l"
+samples_dir = "a"
+models_dir = "m"
+
+[validation]
+phylum_reference = "tests/fixtures/phylum_lineages_gb273.tsv"
+
+[split]
+salt = "s"
+
+[models.router]
+kind = "bio.kmer-classifier"
+"""
+
+
+def test_schema_3_tables_move_into_the_bio_section() -> None:
+    result = migrate_text(SCHEMA_3)
+
+    data = tomllib.loads(result)
+    assert data["schema"] == 4
+    assert data["data"] == {"release": "GB999"}
+    assert data["paths"] == {"models_dir": "m"}
+    assert data["bio"]["source"]["doi"] == "10.0000/example"
+    assert data["bio"]["paths"]["raw_dir"] == "r"
+    assert data["bio"]["split"] == {"salt": "s"}
+    assert data["models"]["router"] == {"kind": "bio.kmer-classifier"}
+    # The new tables come before the first one, after the comments above it
+    assert result.index("[data]") < result.index("# Where the data comes from")
+    assert 'release = "GB999" # This release' in result
+    assert "\n[bio.source]\n" in result
 
 
 def test_invalid_files_are_refused() -> None:
@@ -139,11 +198,11 @@ def test_the_command_prints_or_writes(
     path.write_text(HEADER, "utf-8")
 
     assert main(["--config", str(path), "migrate-config"]) == 0
-    assert "schema = 3" in capsys.readouterr().out
+    assert "schema = 4" in capsys.readouterr().out
     assert path.read_text("utf-8") == HEADER
 
     assert main(["--config", str(path), "migrate-config", "--write"]) == 0
-    assert "schema = 3" in path.read_text("utf-8")
+    assert "schema = 4" in path.read_text("utf-8")
     assert main(["--config", str(path), "migrate-config"]) == 1
 
 
@@ -218,7 +277,7 @@ def test_inference_settings_move_with_their_comments() -> None:
     assert "# How submissions are checked" in head[head.rindex("[stages.") :]
     assert "# A comment at the end of the table" in head[head.rindex("[stages.") :]
     assert "# The next table's own comment\n[mlflow]" in result
-    assert result.count("schema = 3") == 1
+    assert result.count("schema = 4") == 1
 
 
 def test_schema_numbers_are_read_as_written() -> None:

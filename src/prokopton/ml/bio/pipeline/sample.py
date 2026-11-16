@@ -33,7 +33,11 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.bio.config import ClassifierSampleConfig
+from prokopton.ml.bio.config import (
+    ClassifierSampleConfig,
+    bio_section,
+    classifier_settings,
+)
 from prokopton.ml.bio.pipeline.split import hash_fraction
 from prokopton.ml.config import AppConfig
 
@@ -327,13 +331,16 @@ def sample(config: AppConfig, model: str = "router") -> SampleReport:
         SampleStageError: If the split (or, when needed, leakage) data is missing.
     """
     started_at = datetime.now(UTC)
-    classifier = config.classifier(model)
+    classifier = classifier_settings(config, model)
     rules = classifier.sample
-    folder = f"midori2_{config.data.source.release.lower()}"
+    folder = f"midori2_{config.data.release.lower()}"
     inputs = [
         (
             gene,
-            config.data.paths.splits_dir / folder / f"gene={gene}" / "records.parquet",
+            bio_section(config).paths.splits_dir
+            / folder
+            / f"gene={gene}"
+            / "records.parquet",
         )
         for gene in classifier.genes
     ]
@@ -345,9 +352,11 @@ def sample(config: AppConfig, model: str = "router") -> SampleReport:
     excluded: set[str] = set()
     if rules.exclude_near_duplicates:
         # Near-copies are only searched for in the genes the leakage stage covers
-        for gene in [g for g in classifier.genes if g in config.leakage.genes]:
+        for gene in [
+            g for g in classifier.genes if g in bio_section(config).leakage.genes
+        ]:
             leakage_path = (
-                config.data.paths.leakage_dir
+                bio_section(config).paths.leakage_dir
                 / folder
                 / f"gene={gene}"
                 / "near_duplicates.parquet"
@@ -361,7 +370,7 @@ def sample(config: AppConfig, model: str = "router") -> SampleReport:
                 .to_pylist()
             )
 
-    output_root = config.data.paths.samples_dir / folder / model
+    output_root = bio_section(config).paths.samples_dir / folder / model
     splits: dict[str, SplitSampleReport] = {}
     splits["train"], train_eligible = _sample_split(
         inputs,
@@ -407,7 +416,7 @@ def sample(config: AppConfig, model: str = "router") -> SampleReport:
     result = SampleReport(
         app=config.name,
         model=model,
-        release=config.data.source.release,
+        release=config.data.release,
         gene=",".join(classifier.genes),
         prokopton_ml_version=__version__,
         rules=rules,

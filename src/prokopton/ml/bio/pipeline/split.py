@@ -35,7 +35,7 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.bio.config import SplitConfig
+from prokopton.ml.bio.config import SplitConfig, bio_section
 from prokopton.ml.config import AppConfig
 
 __all__ = [
@@ -286,10 +286,10 @@ def split(config: AppConfig) -> SplitReport:
         SplitStageError: If a gene has not been validated yet.
     """
     started_at = datetime.now(UTC)
-    source = config.data.source
-    folder = f"midori2_{source.release.lower()}"
-    input_root = config.data.paths.processed_dir / folder
-    output_root = config.data.paths.splits_dir / folder
+    source = bio_section(config).source
+    folder = f"midori2_{config.data.release.lower()}"
+    input_root = bio_section(config).paths.processed_dir / folder
+    output_root = bio_section(config).paths.splits_dir / folder
 
     genes: dict[str, GeneSplitReport] = {}
     for gene in source.genes:
@@ -297,7 +297,7 @@ def split(config: AppConfig) -> SplitReport:
         if not input_path.exists():
             msg = f"{input_path} not found; run the validate stage first"
             raise SplitStageError(msg)
-        rules = config.split
+        rules = bio_section(config).split
         if gene not in rules.novel_species_genes:
             rules = rules.model_copy(
                 update={"novel_val_fraction": 0.0, "novel_test_fraction": 0.0}
@@ -311,9 +311,9 @@ def split(config: AppConfig) -> SplitReport:
 
     result = SplitReport(
         app=config.name,
-        release=source.release,
+        release=config.data.release,
         prokopton_ml_version=__version__,
-        rules=config.split,
+        rules=bio_section(config).split,
         started_at=started_at,
         finished_at=datetime.now(UTC),
         genes=genes,

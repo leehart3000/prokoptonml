@@ -21,7 +21,11 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.bio.config import ClassifierTrainingConfig
+from prokopton.ml.bio.config import (
+    ClassifierTrainingConfig,
+    bio_section,
+    classifier_settings,
+)
 from prokopton.ml.bio.pipeline.sample import REPORT_NAME as SAMPLE_REPORT_NAME
 from prokopton.ml.bio.training.router import RouterSample, train_router
 from prokopton.ml.config import AppConfig
@@ -102,12 +106,12 @@ def train(
             effect).
     """
     started_at = datetime.now(UTC)
-    classifier = config.classifier(model)
+    classifier = classifier_settings(config, model)
     rules = classifier.training
     gene = ",".join(classifier.genes)
     make_tracker = tracker_factory or partial(mlflow_tracker, model=model)
-    folder = f"midori2_{config.data.source.release.lower()}"
-    sample_root = config.data.paths.samples_dir / folder / model
+    folder = f"midori2_{config.data.release.lower()}"
+    sample_root = bio_section(config).paths.samples_dir / folder / model
     splits = ("train", *classifier.sample.eval_splits)
     paths = {name: sample_root / f"{name}.parquet" for name in splits}
     missing = [str(path) for path in paths.values() if not path.exists()]
@@ -131,7 +135,7 @@ def train(
         checksums["sample_report"] = sha256_of_file(report_path)
     tags = {
         "app": config.name,
-        "release": config.data.source.release,
+        "release": config.data.release,
         "gene": gene,
         "model_role": model,
         "prokopton_ml_version": __version__,
@@ -155,7 +159,7 @@ def train(
     report = TrainReport(
         app=config.name,
         model=model,
-        release=config.data.source.release,
+        release=config.data.release,
         gene=gene,
         prokopton_ml_version=__version__,
         rules=rules,
@@ -173,7 +177,7 @@ def train(
         alias=rules.alias,
         parent_run_id=result.parent_run_id,
     )
-    output = config.data.paths.models_dir / model / REPORT_NAME
+    output = config.paths.models_dir / model / REPORT_NAME
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     logger.info("Wrote %s", output)

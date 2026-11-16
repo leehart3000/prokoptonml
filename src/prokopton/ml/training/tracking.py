@@ -152,8 +152,16 @@ def mlflow_tracker(config: AppConfig, model: str) -> Tracker:
     return MlflowTracker(
         config.mlflow.tracking_uri,
         config.mlflow.artifact_dir,
-        config.classifier(model).training.experiment,
+        _experiment(config, model),
     )
+
+
+def _experiment(config: AppConfig, model: str) -> str:
+    """A model's MLflow experiment: its ``training.experiment`` setting, if
+    its kind has one, or ``<app>-<model>``."""
+    training = getattr(config.model_settings(model), "training", None)
+    found = getattr(training, "experiment", None)
+    return found if isinstance(found, str) else f"{config.name}-{model}"
 
 
 def specialist_tracker(config: AppConfig, name: str) -> Tracker:
