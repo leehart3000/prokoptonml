@@ -69,7 +69,7 @@ the new version.
 
 A product deploys its API to Google Cloud Run with the reusable workflow
 [`deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml), pinned to a
-platform release tag. It builds the product's image (from
+platform release's commit (`@<commit> # v0.2.0a5`, as for actions). It builds the product's image (from
 [`templates/Dockerfile`](templates/Dockerfile)) with its serving bundle, runs
 the product's known-answer checks against the image with `prokopton-ml check`,
 then pushes and deploys it.

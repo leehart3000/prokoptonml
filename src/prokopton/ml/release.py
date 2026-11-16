@@ -30,6 +30,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from prokopton.ml import __version__
+
 __all__ = [
     "Release",
     "ReleaseError",
@@ -43,6 +45,16 @@ TAG = re.compile(r"v\d+\.\d+\.\d+((a|b|rc)\d+)?")
 
 APPROVABLE = ".[] | select(.current_user_can_approve) | .environment.id"
 """The waiting environments you can approve, from GitHub's pending deployments."""
+
+USER_AGENT = f"prokopton-ml/{__version__} (release check)"
+"""Sent with each web request: some sites (Cloudflare's browser check) refuse
+Python's default user agent."""
+
+RUN_STATE = (
+    '(.status + " " + .conclusion), '
+    '(.jobs[] | select(.status == "completed") | .conclusion + " " + .name)'
+)
+"""The run's state, then each finished job's conclusion and name, one a line."""
 
 FOLLOW_CHECKS = 360
 """How many times to check the run, 10 seconds apart (an hour)."""
@@ -89,8 +101,9 @@ def _run(command: Sequence[str]) -> str:
 
 def _fetch(url: str) -> tuple[int, str]:
     """GET a URL: its HTTP status and text (status 0 if it can't be reached)."""
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(url, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=30) as response:
             return response.status, response.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as error:
         return error.code, ""
@@ -200,20 +213,20 @@ def _follow(spec: Release, run_id: str, tools: Tools) -> None:
     url = tools.run(["gh", "run", "view", run_id, "--json", "url", "--jq", ".url"])
     tools.say(f"Release run {run_id}: {url}")
     offered = spec.pypi is None
+    finished: set[str] = set()
     for _ in range(FOLLOW_CHECKS):
-        state = tools.run(
-            [
-                "gh",
-                "run",
-                "view",
-                run_id,
-                "--json",
-                "status,conclusion",
-                "--jq",
-                '.status + " " + .conclusion',
-            ]
-        )
-        status, _, conclusion = state.partition(" ")
+        view = ["gh", "run", "view", run_id, "--json", "status,conclusion,jobs"]
+        lines = tools.run([*view, "--jq", RUN_STATE]).splitlines()
+        status, _, conclusion = (lines[0] if lines else "").partition(" ")
+        for line in lines[1:]:
+            outcome, _, job = line.partition(" ")
+            if job not in finished:
+                finished.add(job)
+                mark = {"success": "✓", "skipped": "-"}.get(outcome, "✗")
+                tools.say(
+                    f"  {mark} {job}"
+                    + ("" if outcome == "success" else f" ({outcome})")
+                )
         if status == "completed":
             if conclusion != "success":
                 outcome = conclusion or "unknown"
@@ -256,10 +269,10 @@ def pypi_lists(package: str, version: str, tools: Tools) -> bool:
     return False
 
 
-def _live_version(url: str, tools: Tools) -> str:
-    _, page = tools.fetch(url)
+def _live_version(url: str, tools: Tools) -> tuple[int, str]:
+    code, page = tools.fetch(url)
     found = LIVE_VERSION.search(page)
-    return found.group(1) if found else ""
+    return code, found.group(1) if found else ""
 
 
 def release(spec: Release, tools: Tools | None = None) -> str:
@@ -285,15 +298,16 @@ def release(spec: Release, tools: Tools | None = None) -> str:
     if spec.check_url is not None:
         commit = tools.run(["git", "rev-parse", "--short=7", "HEAD"])
         expected = f"{spec.version}/{commit}"
-        live = ""
+        code, live = 0, ""
         for attempt in range(6):
-            live = _live_version(spec.check_url, tools)
+            code, live = _live_version(spec.check_url, tools)
             if live == expected:
                 break
             if attempt < 5:
                 tools.sleep(10)
         if live != expected:
-            msg = f"{spec.check_url} shows {live or 'no version'}, not {expected}"
+            shown = f"shows {live}" if live else f"gave HTTP {code} with no version"
+            msg = f"{spec.check_url} {shown}, not {expected}"
             raise ReleaseError(msg)
         done.append(f"{spec.check_url} shows {live}")
     return "; ".join(done)

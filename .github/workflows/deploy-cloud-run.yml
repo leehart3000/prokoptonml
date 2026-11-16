@@ -2,11 +2,12 @@ name: Deploy to Cloud Run
 
 # A reusable workflow for products: builds the product's API image with its
 # serving bundle, tests it, pushes it and deploys it to Cloud Run. A product
-# calls it from its own workflow, pinned to a platform release tag:
+# calls it from its own workflow, pinned to a platform release's commit (as
+# for actions, so code scanning accepts it), with the tag as a comment:
 #
 #   jobs:
 #     api:
-#       uses: leehart3000/prokoptonml/.github/workflows/deploy-cloud-run.yml@v0.2.0a4
+#       uses: leehart3000/prokoptonml/.github/workflows/deploy-cloud-run.yml@<commit> # v0.2.0a5
 #       with:
 #         settings: infra/deploy/myproduct.env
 #       permissions:
