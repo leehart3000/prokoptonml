@@ -3,13 +3,19 @@
 Each application (for example dnabarcode) is described by one TOML file that is
 validated against ``AppConfig``. Relative paths in the file are resolved from
 the current working directory, normally the repository root.
+
+Schema 2 (``schema = 2``) describes an app's models under ``[models.<name>]``,
+each with a ``kind``, and its pipeline as named stages (``[pipeline]`` and
+``[stages.<name>]``). Schema 1 files, with fixed ``[router]``, ``[marker]``
+and ``[specialists.<name>]`` sections, are converted when they are read (see
+``convert_schema_1``); ``prokopton-ml migrate-config`` rewrites them.
 """
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Any, Literal
 
 from prokopton.core.config import ConfigModel
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 
 __all__ = [
     "ALLOWED_URL_SCHEMES",
@@ -28,11 +34,16 @@ __all__ = [
     "LeakageConfig",
     "Midori2SourceConfig",
     "MlflowConfig",
+    "ModelConfig",
+    "PipelineConfig",
     "SpecialistConfig",
     "SpecialistEvaluationConfig",
     "SplitConfig",
+    "StageConfig",
     "UnknownClassifierError",
     "ValidationConfig",
+    "convert_schema_1",
+    "default_stages",
 ]
 
 ALLOWED_URL_SCHEMES: tuple[str, ...] = ("https://", "file://")
@@ -370,6 +381,7 @@ class ClassifierConfig(ConfigModel):
     from). Records are drawn from the splits of each of ``genes``.
     """
 
+    kind: Literal["bio.kmer-classifier"] = "bio.kmer-classifier"
     label: Literal["group_order", "gene"] = "group_order"
     genes: tuple[str, ...] = Field(default=("CO1",), min_length=1)
     sample: ClassifierSampleConfig = Field(default_factory=ClassifierSampleConfig)
@@ -489,6 +501,7 @@ class SpecialistConfig(ConfigModel):
     nearest neighbour is reported as a closest match, not a species.
     """
 
+    kind: Literal["bio.specialist"] = "bio.specialist"
     gene: str = "CO1"
     target_rank: Literal["order", "family", "genus"] = "family"
     target: str = Field(min_length=1)
@@ -558,7 +571,89 @@ class SpecialistConfig(ConfigModel):
 
 
 class UnknownClassifierError(ValueError):
-    """Raised when an app has no classifier of the name asked for."""
+    """Raised when an app has no model of the name (and kind) asked for."""
+
+
+ModelConfig = Annotated[
+    ClassifierConfig | SpecialistConfig, Field(discriminator="kind")
+]
+"""One of an app's models, chosen by its ``kind``."""
+
+
+class PipelineConfig(ConfigModel):
+    """The app's pipeline: its stages, in the order they run."""
+
+    stages: tuple[str, ...] = ()
+
+
+class StageConfig(ConfigModel):
+    """One stage of the pipeline: what it does (``kind``) and, for stages
+    that act on a model, which one (``model``)."""
+
+    kind: str = Field(min_length=1)
+    model: str | None = None
+
+
+_CLASSIFIER_STAGES = ("sample", "train", "calibrate", "evaluate", "card")
+_SPECIALIST_STAGES = ("reference", "evaluate", "card")
+
+
+def default_stages(models: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """The stages a schema 1 app ran, in order, as schema 2 ``[stages]``.
+
+    ``models`` maps each model's name to its settings (with ``kind``).
+    """
+    stages: dict[str, dict[str, str]] = {
+        name: {"kind": f"bio.{name}"}
+        for name in ("ingest", "validate", "split", "leakage")
+    }
+    for name, settings in models.items():
+        if settings.get("kind") == "bio.kmer-classifier":
+            for step in _CLASSIFIER_STAGES:
+                kind = f"bio.classifier-{step}"
+                stages[f"{name}-{step}"] = {"kind": kind, "model": name}
+    for name, settings in models.items():
+        if settings.get("kind") == "bio.specialist":
+            steps = (
+                ("anchors", *_SPECIALIST_STAGES)
+                if settings.get("anchors")
+                else (_SPECIALIST_STAGES)
+            )
+            for step in steps:
+                kind = f"bio.specialist-{step}"
+                stages[f"{name}-{step}"] = {"kind": kind, "model": name}
+    stages["bundle"] = {"kind": "core.bundle"}
+    return stages
+
+
+def convert_schema_1(data: dict[str, Any]) -> dict[str, Any]:
+    """Convert a schema 1 config (as read from TOML or JSON) to schema 2.
+
+    ``[router]`` and ``[marker]`` become ``[models.router]`` and
+    ``[models.marker]``, each ``[specialists.<name>]`` becomes
+    ``[models.<name>]``, and the pipeline is the stages a schema 1 app ran.
+    """
+    converted = {
+        key: value
+        for key, value in data.items()
+        if key not in ("router", "marker", "specialists")
+    }
+    models: dict[str, Any] = {
+        "router": {"kind": "bio.kmer-classifier", **data.get("router", {})}
+    }
+    if data.get("marker") is not None:
+        models["marker"] = {"kind": "bio.kmer-classifier", **data["marker"]}
+    for name, settings in (data.get("specialists") or {}).items():
+        if not isinstance(settings, dict):
+            msg = f"[specialists.{name}] must be a table of settings"
+            raise ValueError(msg)
+        models[name] = {"kind": "bio.specialist", **settings}
+    stages = default_stages(models)
+    converted["schema"] = 2
+    converted["models"] = models
+    converted["pipeline"] = {"stages": list(stages)}
+    converted["stages"] = stages
+    return converted
 
 
 class InferenceConfig(ConfigModel):
@@ -593,26 +688,61 @@ class InferenceConfig(ConfigModel):
 class AppConfig(ConfigModel):
     """Top-level configuration for a ProkoptonML application."""
 
+    schema_version: Literal[2] = Field(
+        default=2,
+        validation_alias=AliasChoices("schema", "schema_version"),
+        serialization_alias="schema",
+    )
     name: str = Field(pattern=r"^[a-z][a-z0-9_-]*$")
     title: str
     data: DataConfig
     validation: ValidationConfig
     split: SplitConfig = Field(default_factory=SplitConfig)
     leakage: LeakageConfig = Field(default_factory=LeakageConfig)
-    router: ClassifierConfig = Field(default_factory=ClassifierConfig)
-    marker: ClassifierConfig | None = None
-    specialists: dict[str, SpecialistConfig] = Field(default_factory=dict)
+    models: dict[str, ModelConfig] = Field(default_factory=dict)
+    pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    stages: dict[str, StageConfig] = Field(default_factory=dict)
     inference: InferenceConfig = Field(default_factory=InferenceConfig)
     mlflow: MlflowConfig = Field(default_factory=MlflowConfig)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _read_schema_1(cls, data: Any) -> Any:
+        if isinstance(data, dict) and not ({"schema", "schema_version"} & set(data)):
+            return convert_schema_1(data)
+        return data
+
+    @model_validator(mode="after")
+    def _check_pipeline(self) -> "AppConfig":
+        for name in self.pipeline.stages:
+            if name not in self.stages:
+                msg = f"pipeline stage {name!r} has no [stages.{name}] section"
+                raise ValueError(msg)
+        for name, stage in self.stages.items():
+            if stage.model is not None and stage.model not in self.models:
+                msg = f"stage {name!r} acts on {stage.model!r}, which is not a model"
+                raise ValueError(msg)
+        return self
+
+    def model(self, name: str) -> ClassifierConfig | SpecialistConfig:
+        """Return a model's settings by name.
+
+        Raises:
+            UnknownClassifierError: If the app has no model of that name.
+        """
+        if name not in self.models:
+            msg = f"This app has no {name!r} model configured"
+            raise UnknownClassifierError(msg)
+        return self.models[name]
+
     def classifier(self, name: str) -> ClassifierConfig:
-        """Return a classifier's settings by name (``router`` or ``marker``).
+        """Return a classifier's settings by name (such as ``router``).
 
         Raises:
             UnknownClassifierError: If the app has no classifier of that name.
         """
-        found = {"router": self.router, "marker": self.marker}.get(name)
-        if found is None:
+        found = self.models.get(name)
+        if not isinstance(found, ClassifierConfig):
             msg = f"This app has no {name!r} classifier configured"
             raise UnknownClassifierError(msg)
         return found
@@ -623,7 +753,28 @@ class AppConfig(ConfigModel):
         Raises:
             UnknownClassifierError: If the app has no specialist of that name.
         """
-        if name not in self.specialists:
+        found = self.models.get(name)
+        if not isinstance(found, SpecialistConfig):
             msg = f"This app has no {name!r} specialist configured"
             raise UnknownClassifierError(msg)
-        return self.specialists[name]
+        return found
+
+    @property
+    def router(self) -> ClassifierConfig:
+        """The router (serving still expects one, named ``router``)."""
+        return self.classifier("router")
+
+    @property
+    def marker(self) -> ClassifierConfig | None:
+        """The marker classifier, if the app has one (named ``marker``)."""
+        found = self.models.get("marker")
+        return found if isinstance(found, ClassifierConfig) else None
+
+    @property
+    def specialists(self) -> dict[str, SpecialistConfig]:
+        """The app's specialists, by name."""
+        return {
+            name: model
+            for name, model in self.models.items()
+            if isinstance(model, SpecialistConfig)
+        }

@@ -26,6 +26,7 @@ CORE = frozenset(
         "inference",
         "inference.bundle",
         "inference.load",
+        "migrate",
         "pipeline",
         "reporting",
         "reporting.charts",
