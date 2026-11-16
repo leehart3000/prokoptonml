@@ -201,7 +201,9 @@ def write_app_toml(tmp_path: Path) -> Path:
 
 
 def test_cli_evaluate_reports_missing_data(tmp_path: Path) -> None:
-    assert main(["evaluate", str(write_app_toml(tmp_path))]) == 1
+    assert (
+        main(["--config", str(write_app_toml(tmp_path)), "run", "router-evaluate"]) == 1
+    )
 
 
 def test_cli_evaluate_loads_the_registered_model_from_mlflow(tmp_path: Path) -> None:
@@ -216,7 +218,9 @@ def test_cli_evaluate_loads_the_registered_model_from_mlflow(tmp_path: Path) -> 
     with tracker.run("register"):
         tracker.log_model(make_model(), None, "test-router", "candidate")
 
-    assert main(["evaluate", str(write_app_toml(tmp_path))]) == 0
+    assert (
+        main(["--config", str(write_app_toml(tmp_path)), "run", "router-evaluate"]) == 0
+    )
 
     saved = json.loads((tmp_path / "models" / "router" / REPORT_NAME).read_text())
     assert saved["model_version"] == "1"

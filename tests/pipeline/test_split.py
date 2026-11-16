@@ -296,8 +296,8 @@ phylum_reference = "{tmp_path / "phyla.tsv"}"
 def test_cli_split_succeeds(tmp_path: Path) -> None:
     write_processed(tmp_path)
 
-    assert main(["split", str(write_app_toml(tmp_path))]) == 0
+    assert main(["--config", str(write_app_toml(tmp_path)), "run", "split"]) == 0
 
 
 def test_cli_split_reports_missing_data(tmp_path: Path) -> None:
-    assert main(["split", str(write_app_toml(tmp_path))]) == 1
+    assert main(["--config", str(write_app_toml(tmp_path)), "run", "split"]) == 1

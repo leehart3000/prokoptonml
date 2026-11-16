@@ -228,9 +228,9 @@ def test_cli_evaluate_a_specialist(
         specialist_evaluate, "specialist_tracker", lambda *_: FakeTracker()
     )
 
-    assert main(["evaluate", str(config_path), "--specialist", "culicidae"]) == 1
+    assert main(["--config", str(config_path), "run", "culicidae-evaluate"]) == 1
     prepared(tmp_path)
-    assert main(["evaluate", str(config_path), "--specialist", "culicidae"]) == 0
+    assert main(["--config", str(config_path), "run", "culicidae-evaluate"]) == 0
 
 
 def test_specialist_tracker_names_its_experiment(

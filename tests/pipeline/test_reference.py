@@ -238,8 +238,8 @@ def test_cli_reference(tmp_path: Path) -> None:
     write_records(tmp_path)
     config_path = write_app_toml(tmp_path)
 
-    assert main(["reference", str(config_path), "--specialist", "culicidae"]) == 0
-    assert main(["reference", str(config_path), "--specialist", "sharks"]) == 1
+    assert main(["--config", str(config_path), "run", "culicidae-reference"]) == 0
+    assert main(["--config", str(config_path), "run", "sharks-reference"]) == 1
 
 
 def test_reference_writes_in_batches(

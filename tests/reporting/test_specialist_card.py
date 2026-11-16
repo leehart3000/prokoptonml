@@ -127,5 +127,5 @@ def test_cli_writes_a_specialist_card(
     config = tuned(tmp_path)
     monkeypatch.setattr("prokopton.ml.cli.load_config", lambda *_, **__: config)
 
-    assert main(["card", "unused.toml", "--specialist", "culicidae"]) == 0
+    assert main(["--config", "unused.toml", "run", "culicidae-card"]) == 0
     assert (tmp_path / "cards" / "culicidae.md").exists()
