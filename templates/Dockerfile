@@ -13,7 +13,7 @@ FROM python:3.13-slim
 
 # The platform version, pinned exactly (prokopton-ml 0.2.0a4 or later, for
 # the deploy workflow's known-answer checks)
-ARG PROKOPTON_ML_VERSION=0.2.0a7
+ARG PROKOPTON_ML_VERSION=0.2.0
 # The name shown in the API docs
 ARG API_TITLE="My product API"
 
