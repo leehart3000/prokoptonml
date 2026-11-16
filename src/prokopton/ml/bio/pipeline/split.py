@@ -35,7 +35,8 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.config import AppConfig, SplitConfig
+from prokopton.ml.bio.config import SplitConfig
+from prokopton.ml.config import AppConfig
 
 __all__ = [
     "REPORT_NAME",

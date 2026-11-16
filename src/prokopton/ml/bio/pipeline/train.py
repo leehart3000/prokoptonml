@@ -21,9 +21,10 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
+from prokopton.ml.bio.config import ClassifierTrainingConfig
 from prokopton.ml.bio.pipeline.sample import REPORT_NAME as SAMPLE_REPORT_NAME
 from prokopton.ml.bio.training.router import RouterSample, train_router
-from prokopton.ml.config import AppConfig, ClassifierTrainingConfig
+from prokopton.ml.config import AppConfig
 from prokopton.ml.data.checksums import sha256_of_file
 from prokopton.ml.training.tracking import Tracker, mlflow_tracker
 

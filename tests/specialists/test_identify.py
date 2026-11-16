@@ -8,6 +8,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+from prokopton.ml.bio.config import ComplexConfig, SpecialistConfig
 from prokopton.ml.bio.specialists.identify import (
     NEIGHBOURS_NAME,
     Neighbour,
@@ -17,7 +18,6 @@ from prokopton.ml.bio.specialists.identify import (
     canonical_species,
     write_neighbours,
 )
-from prokopton.ml.config import ComplexConfig, SpecialistConfig
 
 rng = np.random.default_rng(7)
 

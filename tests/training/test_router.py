@@ -7,6 +7,7 @@ from scipy import sparse
 from sklearn.naive_bayes import MultinomialNB
 
 from fakes import FakeTracker
+from prokopton.ml.bio.config import ClassifierTrainingConfig
 from prokopton.ml.bio.training import router
 from prokopton.ml.bio.training.router import (
     Candidate,
@@ -19,7 +20,6 @@ from prokopton.ml.bio.training.router import (
     with_fragments,
     with_reverse,
 )
-from prokopton.ml.config import ClassifierTrainingConfig
 
 # Each class is built from its own repeated motif, so k-mers separate them
 MOTIFS = {"Diptera": "ACGTTGCA", "Fungi": "GGGCCCAT", "Lepidoptera": "TTAACCGG"}

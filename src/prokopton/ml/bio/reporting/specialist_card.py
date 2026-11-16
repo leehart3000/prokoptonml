@@ -13,6 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
+from prokopton.ml.bio.config import SpecialistConfig
 from prokopton.ml.bio.pipeline.reference import REPORT_NAME as REFERENCE_REPORT
 from prokopton.ml.bio.pipeline.reference import ReferenceReport, reference_path
 from prokopton.ml.bio.pipeline.specialist_evaluate import (
@@ -22,7 +23,7 @@ from prokopton.ml.bio.pipeline.specialist_evaluate import (
     SetScore,
     SpecialistEvaluationReport,
 )
-from prokopton.ml.config import AppConfig, SpecialistConfig
+from prokopton.ml.config import AppConfig
 from prokopton.ml.reporting.charts import Series, line_chart
 
 __all__ = ["SpecialistCardError", "SpecialistCardFiles", "build_specialist_card"]

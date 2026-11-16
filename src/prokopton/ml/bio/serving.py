@@ -22,17 +22,17 @@ from typing import Any, Literal, Protocol
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from prokopton.ml.bio.features.fragments import reverse_complement
-from prokopton.ml.bio.inference.inputs import InputError, Submission, parse_submission
-from prokopton.ml.bio.specialists.identify import Identification, Specialist
-from prokopton.ml.config import (
-    AppConfig,
+from prokopton.ml.bio.config import (
     MarkerStepConfig,
     RouterStepConfig,
     SequenceInputStepConfig,
     SpecialistConfig,
     SpecialistStepConfig,
 )
+from prokopton.ml.bio.features.fragments import reverse_complement
+from prokopton.ml.bio.inference.inputs import InputError, Submission, parse_submission
+from prokopton.ml.bio.specialists.identify import Identification, Specialist
+from prokopton.ml.config import AppConfig
 from prokopton.ml.inference.chain import (
     FINAL,
     Answer,
