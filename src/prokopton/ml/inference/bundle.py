@@ -14,8 +14,8 @@ Serving should not need MLflow, the split data or minutes of indexing, so
   which files each serving step uses, the SHA-256 of every file, and when
   and with what the bundle was made.
 
-Bundles of format 1 (with ``marker.joblib``, ``router.joblib`` and the
-specialists named in the manifest) are still read, until prokopton-ml 0.2.0.
+Bundles of format 1 (made by prokopton-ml 0.2.0a2 and earlier) are no
+longer read: build them again.
 
 A pickled scikit-learn model is only safe to load with the scikit-learn (and
 NumPy and SciPy) it was saved with, so ``load_bundle`` refuses to load a
@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 MANIFEST_NAME = "manifest.json"
 FORMAT = 2
-"""The bundle format written; formats 1 and 2 are read."""
+"""The bundle format written and read."""
 RUNTIME_PACKAGES = (
     "prokopton",
     "numpy",
@@ -89,14 +89,11 @@ class BundleManifest(BaseModel):
     prokopton_ml_version: str
     created_at: datetime
     versions: dict[str, str]
-    format: int = 1
-    """1 for bundles made before the format was recorded."""
-    models: dict[str, str] = {}
-    """Model -> its kind (format 2)."""
-    steps: dict[str, tuple[str, ...]] = {}
-    """Serving step -> the files of the model it uses (format 2)."""
-    specialists: tuple[str, ...] = ()
-    """The specialists (format 1)."""
+    format: int
+    models: dict[str, str]
+    """Model -> its kind."""
+    steps: dict[str, tuple[str, ...]]
+    """Serving step -> the files of the model it uses."""
     files: dict[str, str]
     """Path within the bundle -> SHA-256."""
     runtime: dict[str, str] = {}
@@ -204,13 +201,15 @@ def load_bundle(folder: Path) -> Loaded:
     if not manifest_path.exists():
         msg = f"{manifest_path} not found; build the bundle first"
         raise BundleError(msg)
-    manifest = BundleManifest.model_validate_json(manifest_path.read_text("utf-8"))
-    if manifest.format not in (1, FORMAT):
+    data = json.loads(manifest_path.read_text("utf-8"))
+    # Format 1 manifests did not record their format
+    if isinstance(data, dict) and data.get("format", 1) != FORMAT:
         msg = (
-            f"{manifest_path} is bundle format {manifest.format}; this version of "
-            f"prokopton-ml reads formats 1 and {FORMAT}"
+            f"{manifest_path} is bundle format {data.get('format', 1)}; this "
+            f"version of prokopton-ml reads format {FORMAT}: build the bundle again"
         )
         raise BundleError(msg)
+    manifest = BundleManifest.model_validate(data)
     for name, expected in manifest.files.items():
         path = folder / name
         if not path.exists() or _sha256(path) != expected:
@@ -229,14 +228,9 @@ def load_bundle(folder: Path) -> Loaded:
     config = AppConfig.model_validate(
         json.loads((folder / "config.json").read_text("utf-8"))
     )
-    stored = manifest.models or {
-        "marker": "bio.kmer-classifier",
-        "router": "bio.kmer-classifier",
-        **dict.fromkeys(manifest.specialists, "bio.specialist"),
-    }
     kinds = model_kinds()
     models = {
         name: kinds[kind].load_bundled(config, name, folder)
-        for name, kind in stored.items()
+        for name, kind in manifest.models.items()
     }
     return Loaded(identifier=Identifier(config, models), versions=manifest.versions)
