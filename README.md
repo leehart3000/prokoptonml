@@ -29,7 +29,7 @@ the [`prokopton`](https://pypi.org/project/prokopton/) core package
 (`prokopton.core`).
 
 ```bash
-pip install "prokopton-ml[serve,bio]==0.2.0a2"
+pip install "prokopton-ml[serve,bio]==0.2.0a3"
 prokopton-ml stages                  # an app's pipeline, and when each stage ran
 prokopton-ml run router-train        # run stages (or --all, or --from STAGE)
 prokopton-ml identify --input x.fa   # identify one sequence
@@ -40,6 +40,12 @@ parent folder): its models, and its pipeline as named stages, each with a
 kind such as `bio.ingest` or `core.bundle`. A package can add stage kinds
 with an entry point in the `prokopton.ml.stages` group: a function that
 returns a list of `prokopton.ml.stages.StageKind`.
+
+Answers are built by the app's serving steps (`[serving]`), each also with a
+kind (such as `bio.sequence-input` or `bio.specialist`), and served at
+`POST /<endpoint>` with the app's own request, result and description.
+Packages can add serving step kinds (`prokopton.ml.serving_steps`) and model
+kinds (`prokopton.ml.model_kinds`) in the same way.
 
 ```python
 import prokopton.ml
