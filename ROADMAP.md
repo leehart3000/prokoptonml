@@ -6,15 +6,14 @@ product's repository (for example
 
 ## A general-purpose platform
 
-- **A `prokopton.ml.bio` module** for the sequence-specific parts (MIDORI2
-  source, k-mer features, the sequence aligner and specialists, RefSeq
-  anchors), so the rest of the platform is general-purpose and non-bio
-  products can use it.
+Done in 0.2.0: the sequence-specific parts are in `prokopton.ml.bio`; stage,
+serving step and model kinds, and their settings, are plug-ins (entry
+points); products deploy with a reusable workflow; a tabular example runs
+without `bio`; and new products can start from a template repository.
+
 - **A generic serving image** (platform plus FastAPI, any bundle), so
-  products only add their bundle.
-- **A reusable deploy workflow** that products call.
-- **Plug-ins for product-specific data sources and rules**, so products do
-  not need platform changes.
+  products only add their bundle instead of building from
+  `templates/Dockerfile`.
 
 ## MLOps
 
