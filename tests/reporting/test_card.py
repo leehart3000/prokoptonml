@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.reporting.card."""
+"""Tests for prokopton.ml.bio.reporting.card."""
 
 import json
 from datetime import UTC, datetime
@@ -7,6 +7,22 @@ from typing import Any
 
 import pytest
 
+from prokopton.ml.bio.evaluation.scores import (
+    AmbiguityBin,
+    CalibrationBin,
+    ClassScore,
+    CoveragePoint,
+    GroupScore,
+)
+from prokopton.ml.bio.pipeline.calibrate import CalibrationReport
+from prokopton.ml.bio.pipeline.evaluate import (
+    EvaluationReport,
+    FragmentScore,
+    SplitScores,
+)
+from prokopton.ml.bio.pipeline.sample import SampleReport, SplitSampleReport
+from prokopton.ml.bio.pipeline.train import TrainReport
+from prokopton.ml.bio.reporting.card import CardError, build_card
 from prokopton.ml.cli import main
 from prokopton.ml.config import (
     AppConfig,
@@ -16,18 +32,6 @@ from prokopton.ml.config import (
     ClassifierTrainingConfig,
     UnknownClassifierError,
 )
-from prokopton.ml.evaluation.scores import (
-    AmbiguityBin,
-    CalibrationBin,
-    ClassScore,
-    CoveragePoint,
-    GroupScore,
-)
-from prokopton.ml.pipeline.calibrate import CalibrationReport
-from prokopton.ml.pipeline.evaluate import EvaluationReport, FragmentScore, SplitScores
-from prokopton.ml.pipeline.sample import SampleReport, SplitSampleReport
-from prokopton.ml.pipeline.train import TrainReport
-from prokopton.ml.reporting.card import CardError, build_card
 
 NOW = datetime(2026, 11, 11, 12, 0, tzinfo=UTC)
 METRICS = {

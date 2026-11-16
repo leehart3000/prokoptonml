@@ -33,8 +33,8 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
+from prokopton.ml.bio.pipeline.split import hash_fraction
 from prokopton.ml.config import AppConfig, ClassifierSampleConfig
-from prokopton.ml.pipeline.split import hash_fraction
 
 __all__ = [
     "REPORT_NAME",

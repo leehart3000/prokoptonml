@@ -42,6 +42,7 @@ from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
 from prokopton.ml.bio.pipeline.reference import reference_path
+from prokopton.ml.bio.pipeline.split import hash_fraction
 from prokopton.ml.bio.specialists.identify import (
     NEIGHBOURS_NAME,
     Identification,
@@ -52,7 +53,6 @@ from prokopton.ml.bio.specialists.identify import (
 )
 from prokopton.ml.config import AppConfig, SpecialistConfig
 from prokopton.ml.data.checksums import sha256_of_file
-from prokopton.ml.pipeline.split import hash_fraction
 from prokopton.ml.training.tracking import Tracker, specialist_tracker
 
 __all__ = [

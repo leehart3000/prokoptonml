@@ -1,4 +1,4 @@
-"""Tests for prokopton.ml.pipeline.split."""
+"""Tests for prokopton.ml.bio.pipeline.split."""
 
 import json
 import random
@@ -9,9 +9,7 @@ import pyarrow.parquet as pq
 import pytest
 from pydantic import ValidationError
 
-from prokopton.ml.cli import main
-from prokopton.ml.config import AppConfig, SplitConfig
-from prokopton.ml.pipeline.split import (
+from prokopton.ml.bio.pipeline.split import (
     REPORT_NAME,
     SPLITS,
     SplitStageError,
@@ -22,6 +20,8 @@ from prokopton.ml.pipeline.split import (
     hash_key,
     split,
 )
+from prokopton.ml.cli import main
+from prokopton.ml.config import AppConfig, SplitConfig
 
 ALL_NOVEL_TEST = SplitConfig(
     novel_val_fraction=0.0, novel_test_fraction=1.0, val_fraction=0.0, test_fraction=0.0

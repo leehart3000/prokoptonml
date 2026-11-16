@@ -1,9 +1,9 @@
-"""Tests for prokopton.ml.evaluation.scores."""
+"""Tests for prokopton.ml.bio.evaluation.scores."""
 
 import numpy as np
 import pytest
 
-from prokopton.ml.evaluation.scores import (
+from prokopton.ml.bio.evaluation.scores import (
     Predictions,
     by_ambiguity,
     by_group,

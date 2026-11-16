@@ -23,7 +23,6 @@ CORE = frozenset(
         "data",
         "data.checksums",
         "data.download",
-        "evaluation",
         "inference",
         "inference.bundle",
         "inference.chain",
@@ -31,7 +30,6 @@ CORE = frozenset(
         "inference.models",
         "migrate",
         "release",
-        "pipeline",
         "reporting",
         "reporting.charts",
         "serving",
@@ -51,15 +49,7 @@ OLD_PATHS = frozenset({"features", "features.kmers"})
 SPLIT = frozenset(
     {
         "config",
-        "evaluation.scores",
         "inference.identify",
-        "pipeline.calibrate",
-        "pipeline.evaluate",
-        "pipeline.sample",
-        "pipeline.split",
-        "pipeline.train",
-        "reporting.card",
-        "training.router",
     }
 )
 """Modules with both kinds of code, to be divided."""

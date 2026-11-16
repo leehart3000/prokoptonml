@@ -32,10 +32,7 @@ import pyarrow.parquet as pq
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.bio.features.fragments import fragment, reverse_complement
-from prokopton.ml.config import AppConfig, ClassifierEvaluationConfig
-from prokopton.ml.data.checksums import sha256_of_file
-from prokopton.ml.evaluation.scores import (
+from prokopton.ml.bio.evaluation.scores import (
     AmbiguityBin,
     CalibrationBin,
     ClassScore,
@@ -48,9 +45,12 @@ from prokopton.ml.evaluation.scores import (
     coverage,
     per_class,
 )
-from prokopton.ml.pipeline.sample import label_for
-from prokopton.ml.pipeline.split import hash_fraction
-from prokopton.ml.training.router import predict_proba
+from prokopton.ml.bio.features.fragments import fragment, reverse_complement
+from prokopton.ml.bio.pipeline.sample import label_for
+from prokopton.ml.bio.pipeline.split import hash_fraction
+from prokopton.ml.bio.training.router import predict_proba
+from prokopton.ml.config import AppConfig, ClassifierEvaluationConfig
+from prokopton.ml.data.checksums import sha256_of_file
 from prokopton.ml.training.tracking import Tracker, mlflow_tracker
 
 __all__ = [
