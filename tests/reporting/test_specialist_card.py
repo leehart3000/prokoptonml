@@ -67,7 +67,7 @@ def test_writes_the_card_and_chart(tmp_path: Path) -> None:
 def test_says_when_a_limit_was_missed(tmp_path: Path) -> None:
     config = tuned(tmp_path)
     data = config.model_dump(mode="json")
-    data["specialists"]["culicidae"]["complexes"] = [
+    data["models"]["culicidae"]["complexes"] = [
         {
             "name": "Aedes test complex",
             "members": ["Aedes aegypti", "Aedes x"],
@@ -100,7 +100,7 @@ def test_says_when_a_limit_was_missed(tmp_path: Path) -> None:
 def test_refuses_thresholds_that_were_not_chosen(tmp_path: Path) -> None:
     config = tuned(tmp_path)
     data = config.model_dump(mode="json")
-    data["specialists"]["culicidae"]["species_identity"] = 0.999
+    data["models"]["culicidae"]["species_identity"] = 0.999
 
     with pytest.raises(SpecialistCardError, match="set the chosen values"):
         build_specialist_card(AppConfig.model_validate(data), "culicidae")

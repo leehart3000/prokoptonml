@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import sys
+import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -33,6 +34,7 @@ from prokopton.ml.inference.bundle import (
     load_bundle,
 )
 from prokopton.ml.inference.load import LoadError, load_identifier
+from prokopton.ml.migrate import MigrationError, is_schema_1, migrate_text
 from prokopton.ml.pipeline.calibrate import CalibrationStageError, calibrate
 from prokopton.ml.pipeline.evaluate import EvaluationStageError, evaluate
 from prokopton.ml.pipeline.sample import SampleStageError, sample
@@ -78,6 +80,10 @@ _COMMANDS = {
         "Identify one sequence with the registered models and print the "
         "result, with its decision trace, as JSON."
     ),
+    "migrate-config": (
+        "Rewrite a schema 1 config file as schema 2, keeping its comments "
+        "(prints it; --write replaces the file)."
+    ),
 }
 _CLASSIFIER_COMMANDS = {"sample", "train", "calibrate", "evaluate", "card"}
 
@@ -110,6 +116,10 @@ def _build_parser() -> argparse.ArgumentParser:
                 type=Path,
                 default=None,
                 help="Use a serving bundle instead of the MLflow registry.",
+            )
+        if name == "migrate-config":
+            command.add_argument(
+                "--write", action="store_true", help="Replace the file."
             )
         if name in ("reference", "evaluate", "card", "anchors"):
             command.add_argument(
@@ -217,6 +227,30 @@ def _run(
     return f"records per split: {totals}"
 
 
+def _migrate(path: Path, write: bool) -> str:
+    """Rewrite a schema 1 config as schema 2: print it, or replace the file."""
+    result = migrate_text(path.read_text("utf-8"))
+    if not write:
+        sys.stdout.write(result)
+        return f"{path} rewritten as schema 2 (printed; --write replaces the file)"
+    path.write_text(result, "utf-8")
+    return f"{path} rewritten as schema 2"
+
+
+def _warn_if_schema_1(path: Path) -> None:
+    try:
+        data = tomllib.loads(path.read_text("utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return  # load_config reports these
+    if is_schema_1(data):
+        logger.warning(
+            "%s is schema 1, read by converting it; this will stop working in "
+            "prokopton-ml 0.2.0. Run: prokopton-ml migrate-config %s --write",
+            path,
+            path,
+        )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line interface and return an exit code."""
     args = _build_parser().parse_args(argv)
@@ -224,6 +258,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     try:
+        if args.command == "migrate-config":
+            logger.info("Done: %s", _migrate(args.config, args.write))
+            return 0
+        _warn_if_schema_1(args.config)
         config = load_config(args.config, AppConfig, env_prefix=ENV_PREFIX)
         summary = _run(
             args.command,
@@ -255,6 +293,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         LoadError,
         BundleError,
         AnchorError,
+        MigrationError,
         OSError,
     ) as error:
         logger.error("%s", error)

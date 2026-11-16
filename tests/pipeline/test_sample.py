@@ -293,7 +293,8 @@ def test_sample_writes_in_batches(
 
 def marker_config(tmp_path: Path, **sample_fields: object) -> AppConfig:
     settings = make_config(tmp_path).model_dump(mode="json")
-    settings["marker"] = {
+    settings["models"]["marker"] = {
+        "kind": "bio.kmer-classifier",
         "label": "gene",
         "genes": ["CO1", "Cytb"],
         "sample": {
