@@ -28,6 +28,17 @@ bio = []
 [project.scripts]
 prokopton-ml = "prokopton.ml.cli:main"
 
+# The platform's own sequence kinds (prokopton.ml.bio) are found the same way
+# as any other package's: through these entry points
+[project.entry-points."prokopton.ml.stages"]
+bio = "prokopton.ml.bio.stages:bio_kinds"
+
+[project.entry-points."prokopton.ml.serving_steps"]
+bio = "prokopton.ml.bio.serving:bio_serving_kinds"
+
+[project.entry-points."prokopton.ml.model_kinds"]
+bio = "prokopton.ml.bio.models:bio_model_kinds"
+
 [project.urls]
 Homepage = "https://prokoptonml.org"
 Repository = "https://github.com/leehart3000/prokoptonml"

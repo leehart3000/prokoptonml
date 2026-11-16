@@ -64,11 +64,7 @@ SPLIT = frozenset(
 )
 """Modules with both kinds of code, to be divided."""
 
-ALLOWED = frozenset(
-    {
-        ("cli", "bio.stages"),
-    }
-)
+ALLOWED: frozenset[tuple[str, str]] = frozenset()
 """Core-to-bio imports that exist today, to be removed as code moves."""
 
 
