@@ -32,6 +32,7 @@ prokopton-ml = "prokopton.ml.cli:main"
 # as any other package's: through these entry points
 [project.entry-points."prokopton.ml.stages"]
 bio = "prokopton.ml.bio.stages:bio_kinds"
+tabular = "prokopton.ml.tabular.stages:tabular_stage_kinds"
 
 [project.entry-points."prokopton.ml.serving_steps"]
 bio = "prokopton.ml.bio.serving:bio_serving_kinds"
@@ -41,6 +42,7 @@ bio = "prokopton.ml.bio.models:bio_model_kinds"
 
 [project.entry-points."prokopton.ml.settings"]
 bio = "prokopton.ml.bio.config:bio_settings"
+tabular = "prokopton.ml.tabular.config:tabular_settings"
 
 [project.urls]
 Homepage = "https://prokoptonml.org"
