@@ -651,7 +651,7 @@ def convert_schema_1(data: dict[str, Any]) -> dict[str, Any]:
     converted = {
         key: value
         for key, value in data.items()
-        if key not in ("router", "marker", "specialists")
+        if key not in ("router", "marker", "specialists", "schema", "schema_version")
     }
     models: dict[str, Any] = {
         "router": {"kind": "bio.kmer-classifier", **data.get("router", {})}
@@ -800,7 +800,12 @@ def convert_schema_2(data: dict[str, Any]) -> dict[str, Any]:
     (with the router's validated range), ``marker`` (if the app has one),
     ``router``, then each specialist with a ``router_label``.
     """
-    converted = {key: value for key, value in data.items() if key != "inference"}
+    # A dumped config says schema_version, a written one schema: keep neither
+    converted = {
+        key: value
+        for key, value in data.items()
+        if key not in ("inference", "schema", "schema_version")
+    }
     inference = data.get("inference") or {}
 
     def take(keys: tuple[str, ...]) -> dict[str, Any]:
