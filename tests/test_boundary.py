@@ -27,6 +27,7 @@ CORE = frozenset(
         "inference.bundle",
         "inference.chain",
         "inference.load",
+        "inference.models",
         "migrate",
         "pipeline",
         "reporting",
@@ -64,10 +65,6 @@ SPLIT = frozenset(
 ALLOWED = frozenset(
     {
         ("cli", "bio.stages"),
-        ("inference.bundle", "bio.pipeline.reference"),
-        ("inference.bundle", "bio.specialists.identify"),
-        ("inference.load", "bio.pipeline.reference"),
-        ("inference.load", "bio.specialists.identify"),
     }
 )
 """Core-to-bio imports that exist today, to be removed as code moves."""

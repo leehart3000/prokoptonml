@@ -1,18 +1,21 @@
-"""A serving bundle: everything needed to identify sequences, in one folder.
+"""A serving bundle: everything needed to answer requests, in one folder.
 
 Serving should not need MLflow, the split data or minutes of indexing, so
 ``build_bundle`` gathers, once:
 
 - ``config.json``: the app's settings;
-- ``marker.joblib`` and ``router.joblib``: the registered models (the
-  versions their training aliases point at);
-- ``specialists/<name>/``: each serving specialist's reference set, drawn
-  from **every** split (more species than the training-only set used to
-  evaluate it), with its barcode-gap table and a pre-built k-mer index;
+- the files of each model the serving steps use, written by its kind (see
+  ``models``; for sequences: ``<name>.joblib`` for a classifier, and
+  ``specialists/<name>/`` for a specialist's reference set, drawn from
+  **every** split, with its barcode-gap table and a pre-built k-mer index);
 - ``requirements.txt``: the exact versions of the packages the models were
   saved with, for the serving image to install;
-- ``manifest.json``: model versions, the SHA-256 of every file, and when
+- ``manifest.json``: the bundle format (2), each model's kind and version,
+  which files each serving step uses, the SHA-256 of every file, and when
   and with what the bundle was made.
+
+Bundles of format 1 (with ``marker.joblib``, ``router.joblib`` and the
+specialists named in the manifest) are still read, until prokopton-ml 0.2.0.
 
 A pickled scikit-learn model is only safe to load with the scikit-learn (and
 NumPy and SciPy) it was saved with, so ``load_bundle`` refuses to load a
@@ -27,25 +30,18 @@ import hashlib
 import json
 import logging
 import shutil
-from collections.abc import Callable
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
 
-import joblib
 from pydantic import BaseModel, ConfigDict
 
 from prokopton.ml import __version__
-from prokopton.ml.bio.pipeline.reference import (
-    REFERENCE_NAME,
-    build_reference,
-    serving_reference_path,
-)
-from prokopton.ml.bio.specialists.identify import NEIGHBOURS_NAME, Specialist
 from prokopton.ml.config import AppConfig
-from prokopton.ml.inference.identify import Identifier
+from prokopton.ml.inference.identify import Identifier, model_kinds
 from prokopton.ml.inference.load import Loaded
-from prokopton.ml.training.tracking import Tracker, mlflow_tracker
+from prokopton.ml.inference.models import TrackerFactory, serving_models
+from prokopton.ml.training.tracking import mlflow_tracker
 
 __all__ = [
     "MANIFEST_NAME",
@@ -59,7 +55,8 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 MANIFEST_NAME = "manifest.json"
-INDEX_NAME = "index.npz"
+FORMAT = 2
+"""The bundle format written; formats 1 and 2 are read."""
 RUNTIME_PACKAGES = (
     "prokopton",
     "numpy",
@@ -92,7 +89,14 @@ class BundleManifest(BaseModel):
     prokopton_ml_version: str
     created_at: datetime
     versions: dict[str, str]
-    specialists: tuple[str, ...]
+    format: int = 1
+    """1 for bundles made before the format was recorded."""
+    models: dict[str, str] = {}
+    """Model -> its kind (format 2)."""
+    steps: dict[str, tuple[str, ...]] = {}
+    """Serving step -> the files of the model it uses (format 2)."""
+    specialists: tuple[str, ...] = ()
+    """The specialists (format 1)."""
     files: dict[str, str]
     """Path within the bundle -> SHA-256."""
     runtime: dict[str, str] = {}
@@ -123,20 +127,19 @@ def _sha256(path: Path) -> str:
 
 
 def build_bundle(
-    config: AppConfig,
-    tracker_factory: Callable[[AppConfig, str], Tracker] = mlflow_tracker,
+    config: AppConfig, tracker_factory: TrackerFactory = mlflow_tracker
 ) -> BundleManifest:
     """Build the serving bundle (see the module docstring).
 
-    Each serving specialist's reference set is rebuilt from every split,
-    which takes a few minutes. The bundle is written beside its final place
-    and moved there at the end, so a failed build leaves the old one.
+    A specialist's reference set is rebuilt from every split, which takes a
+    few minutes. The bundle is written beside its final place and moved
+    there at the end, so a failed build leaves the old one.
 
     Raises:
-        BundleError: If the app has no marker classifier.
+        BundleError: If the app has no serving steps.
     """
-    if config.marker is None:
-        msg = "This app has no marker classifier configured"
+    if not config.serving.chain:
+        msg = f"The {config.name!r} app has no serving steps ([serving] chain)"
         raise BundleError(msg)
     final = bundle_path(config)
     folder = final.with_name(f"{final.name}.part")
@@ -149,29 +152,19 @@ def build_bundle(
         "utf-8",
     )
 
-    versions = {}
-    for name in ("marker", "router"):
-        training = config.classifier(name).training
-        model, versions[name] = tracker_factory(config, name).load_model(
-            training.registered_model, training.alias
+    kinds = model_kinds()
+    versions: dict[str, str] = {}
+    model_files: dict[str, list[str]] = {}
+    for name in serving_models(config):
+        kind = kinds[config.models[name].kind]
+        versions[name], model_files[name] = kind.bundle(
+            config, name, folder, tracker_factory
         )
-        joblib.dump(model, folder / f"{name}.joblib")
-
-    serving = [name for name, rules in config.specialists.items() if rules.router_label]
-    for name in serving:
-        report = build_reference(config, name, serving=True)
-        source = serving_reference_path(config, name).parent
-        target = folder / "specialists" / name
-        target.mkdir(parents=True)
-        for file_name in (REFERENCE_NAME, NEIGHBOURS_NAME):
-            shutil.copy2(source / file_name, target / file_name)
-        specialist = Specialist.from_parquet(
-            target / REFERENCE_NAME, config.specialist(name)
-        )
-        specialist.save_index(target / INDEX_NAME)
-        versions[name] = (
-            f"{config.data.source.release}, {report.target_records} target records"
-        )
+    steps = {
+        name: tuple(model_files[step.model]) if step.model else ()
+        for name, step in config.serving.steps.items()
+        if name in config.serving.chain
+    }
 
     files = {
         str(path.relative_to(folder)): _sha256(path)
@@ -184,7 +177,9 @@ def build_bundle(
         prokopton_ml_version=__version__,
         created_at=datetime.now(UTC),
         versions=versions,
-        specialists=tuple(serving),
+        format=FORMAT,
+        models={name: config.models[name].kind for name in model_files},
+        steps=steps,
         files=files,
         runtime=runtime,
     )
@@ -199,15 +194,21 @@ def load_bundle(folder: Path) -> Loaded:
     """Load a serving bundle, checking every file against its manifest.
 
     Raises:
-        BundleError: If the manifest is missing, a file is missing or does
-            not match its checksum, or NumPy, SciPy or scikit-learn are not
-            the versions the models were saved with.
+        BundleError: If the manifest is missing or of an unknown format, a
+            file is missing or does not match its checksum, or NumPy, SciPy
+            or scikit-learn are not the versions the models were saved with.
     """
     manifest_path = folder / MANIFEST_NAME
     if not manifest_path.exists():
         msg = f"{manifest_path} not found; build the bundle first"
         raise BundleError(msg)
     manifest = BundleManifest.model_validate_json(manifest_path.read_text("utf-8"))
+    if manifest.format not in (1, FORMAT):
+        msg = (
+            f"{manifest_path} is bundle format {manifest.format}; this version of "
+            f"prokopton-ml reads formats 1 and {FORMAT}"
+        )
+        raise BundleError(msg)
     for name, expected in manifest.files.items():
         path = folder / name
         if not path.exists() or _sha256(path) != expected:
@@ -226,15 +227,14 @@ def load_bundle(folder: Path) -> Loaded:
     config = AppConfig.model_validate(
         json.loads((folder / "config.json").read_text("utf-8"))
     )
-    marker = joblib.load(folder / "marker.joblib")
-    router = joblib.load(folder / "router.joblib")
-    specialists = {}
-    for name in manifest.specialists:
-        target = folder / "specialists" / name
-        specialists[name] = Specialist.from_parquet(
-            target / REFERENCE_NAME, config.specialist(name), index=target / INDEX_NAME
-        )
-    return Loaded(
-        identifier=Identifier(config, marker, router, specialists),
-        versions=manifest.versions,
-    )
+    stored = manifest.models or {
+        "marker": "bio.kmer-classifier",
+        "router": "bio.kmer-classifier",
+        **dict.fromkeys(manifest.specialists, "bio.specialist"),
+    }
+    kinds = model_kinds()
+    models = {
+        name: kinds[kind].load_bundled(config, name, folder)
+        for name, kind in stored.items()
+    }
+    return Loaded(identifier=Identifier(config, models), versions=manifest.versions)
