@@ -27,6 +27,7 @@ CORE = frozenset(
         "inference",
         "inference.bundle",
         "inference.chain",
+        "inference.identify",
         "inference.load",
         "inference.models",
         "migrate",
@@ -48,7 +49,7 @@ CORE = frozenset(
 OLD_PATHS = frozenset({"features", "features.kmers"})
 """Old import paths, kept so that models saved before 0.2.0 still load."""
 
-SPLIT = frozenset({"inference.identify"})
+SPLIT: frozenset[str] = frozenset()
 """Modules with both kinds of code, to be divided."""
 
 ALLOWED: frozenset[tuple[str, str]] = frozenset()

@@ -15,7 +15,7 @@ from inference_world import (
 )
 from prokopton.ml.bio.config import specialist_settings
 from prokopton.ml.bio.features.fragments import reverse_complement
-from prokopton.ml.bio.serving import member_name
+from prokopton.ml.bio.serving import SequenceResult, member_name
 from prokopton.ml.bio.serving import specialist_answer as _specialist_answer
 from prokopton.ml.bio.specialists.identify import (
     Identification,
@@ -58,7 +58,17 @@ def config_dict_with_marker() -> dict[str, Any]:
     return data
 
 
-def identifier(router: FakeRouter, app: AppConfig | None = None) -> Identifier:
+class Sequences(Identifier):
+    """An identifier whose results are sequence results (its chain starts
+    with a sequence input step)."""
+
+    def identify(self, text: str) -> SequenceResult:
+        result = super().identify(text)
+        assert isinstance(result, SequenceResult)
+        return result
+
+
+def identifier(router: FakeRouter, app: AppConfig | None = None) -> Sequences:
     app = app or config()
     specialist = Specialist(
         [
@@ -68,7 +78,7 @@ def identifier(router: FakeRouter, app: AppConfig | None = None) -> Identifier:
         ],
         specialist_settings(app, "culicidae"),
     )
-    return Identifier(
+    return Sequences(
         app, {"marker": FakeMarker(), "router": router, "culicidae": specialist}
     )
 

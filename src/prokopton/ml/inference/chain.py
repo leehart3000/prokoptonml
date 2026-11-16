@@ -60,12 +60,11 @@ class Answer(_Model):
     """The answer to show."""
 
     level: str
-    """How specific the answer is (for sequences: species, complex,
-    species_group, genus, family, or the router's group, such as order)."""
+    """How specific the answer is (each kind of step says which levels it
+    gives)."""
     name: str | None
     text: str
     confident: bool
-    species: tuple[str, ...] = ()
 
 
 class Result(_Model):

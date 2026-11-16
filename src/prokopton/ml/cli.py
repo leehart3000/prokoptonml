@@ -102,7 +102,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--input",
         type=Path,
         required=True,
-        help="A file with one sequence (plain or FASTA); '-' for stdin.",
+        help="A file with one submission (for sequence apps, one sequence); "
+        "'-' for stdin.",
     )
     identify.add_argument(
         "--bundle",
