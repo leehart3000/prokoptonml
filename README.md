@@ -58,10 +58,14 @@ kinds (`prokopton.ml.model_kinds`) in the same way.
 import prokopton.ml
 ```
 
-Releases are made with `scripts/release.sh vVERSION`, which checks that the
-version matches `pyproject.toml` and that the commit is new work on `main`,
-then tags it. The Release workflow checks the same, publishes to TestPyPI
-and then, after approval, to PyPI, with Trusted Publishing.
+Releases are made with `pixi run release vVERSION` (`prokopton-ml release`),
+which checks that the version matches `pyproject.toml` and that the commit is
+new work on `main`, then tags it and follows the Release workflow. The
+workflow checks the same and publishes to TestPyPI; when it waits for
+approval to publish to PyPI (with Trusted Publishing), the command offers to
+approve it, then checks that PyPI lists the new version. Products release
+with the same command, with `--check-url` to check that their live page shows
+the new version.
 
 ## Products built with ProkoptonML
 

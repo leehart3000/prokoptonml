@@ -30,6 +30,7 @@ CORE = frozenset(
         "inference.load",
         "inference.models",
         "migrate",
+        "release",
         "pipeline",
         "reporting",
         "reporting.charts",
