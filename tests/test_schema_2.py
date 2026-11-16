@@ -168,7 +168,7 @@ def test_inference_settings_move_into_the_serving_steps() -> None:
     serving = AppConfig.model_validate(data).serving
 
     assert serving.chain == ("input", "marker", "router", "culicidae")
-    assert serving.endpoint == "predict"
+    assert serving.endpoint == "identify"  # What older apps served
     marker = serving.steps["marker"]
     assert isinstance(marker, MarkerStepConfig)
     assert marker.unsupported_note == data["inference"]["unsupported_note"]
@@ -189,7 +189,8 @@ def test_schema_2_without_marker_or_inference_gets_default_steps() -> None:
 
     assert list(steps) == ["input", "router", "culicidae"]
     assert steps["input"] == {"kind": "bio.sequence-input", "model": "router"}
-    assert convert_schema_2({"models": {}})["serving"] == {"chain": [], "steps": {}}
+    empty = convert_schema_2({"models": {}})["serving"]
+    assert (empty["chain"], empty["steps"]) == ([], {})
 
 
 def test_upgrade_leaves_schema_3_alone() -> None:

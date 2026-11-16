@@ -203,6 +203,9 @@ def _to_schema_3(text: str, original: dict[str, Any]) -> str:
         "# How an answer is made: the serving steps, in order.",
         "# Added by prokopton-ml migrate-config.",
         "[serving]",
+        "# POST /identify, as before; the description is shown in the API docs",
+        f"endpoint = {_quote(serving['endpoint'])}",
+        f"description = {_quote(serving['description'])}",
         "chain = [" + ", ".join(_quote(name) for name in serving["chain"]) + "]",
     ]
     for name, step in serving["steps"].items():

@@ -20,6 +20,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Literal, Protocol
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict, Field
 
 from prokopton.ml.bio.features.fragments import reverse_complement
 from prokopton.ml.bio.inference.inputs import InputError, Submission, parse_submission
@@ -36,6 +37,7 @@ from prokopton.ml.inference.chain import (
     FINAL,
     Answer,
     Decline,
+    RequestSpec,
     Result,
     ServingStepKind,
     Step,
@@ -45,8 +47,10 @@ from prokopton.ml.inference.chain import (
 )
 
 __all__ = [
+    "MAX_SEQUENCE_CHARACTERS",
     "Classifier",
     "Region",
+    "SequenceRequest",
     "SequenceResult",
     "bio_serving_kinds",
     "member_name",
@@ -71,6 +75,65 @@ class Region(_Model):
     end: int
     strand: Literal["given", "reverse"]
     probability: float
+
+
+MAX_SEQUENCE_CHARACTERS = 30_000
+"""Longer request bodies are refused before any work (the input step's own
+limit is in bases, after cleaning)."""
+
+
+class SequenceRequest(BaseModel):
+    """One sequence to identify (plain, or one FASTA record)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sequence: str = Field(min_length=1, max_length=MAX_SEQUENCE_CHARACTERS)
+
+
+def _request_model(config: AppConfig, name: str) -> type[BaseModel]:
+    rules = _settings(config, name, SequenceInputStepConfig)
+    examples: list[Any] = [{"sequence": rules.example}] if rules.example else []
+    title = config.serving.endpoint.replace("-", " ").title().replace(" ", "")
+    return type(
+        f"{title}Request",
+        (SequenceRequest,),
+        {
+            "__doc__": SequenceRequest.__doc__,
+            "model_config": ConfigDict(
+                extra="forbid", json_schema_extra={"examples": examples}
+            ),
+        },
+    )
+
+
+def _request_text(request: BaseModel) -> str:
+    assert isinstance(request, SequenceRequest)  # Made by _request_model
+    return request.sequence
+
+
+def _log_input(result: Result) -> dict[str, Any]:
+    return {
+        "length": getattr(result, "length", None),
+        "strand": getattr(result, "strand", None),
+        "long_input": getattr(result, "region", None) is not None,
+    }
+
+
+def _log_router(result: Result) -> dict[str, Any]:
+    router = next((s for s in result.trace if s.name == "router"), None)
+    top = router.details["top"][0] if router else {}
+    return {
+        "router_label": top.get("label"),
+        "router_probability": top.get("probability"),
+    }
+
+
+def _log_specialist(result: Result) -> dict[str, Any]:
+    found = next((s for s in result.trace if s.name.startswith("specialist:")), None)
+    return {
+        "specialist_outcome": found.details["outcome"] if found else None,
+        "identity": found.details["identity"] if found else None,
+    }
 
 
 class SequenceResult(Result):
@@ -398,6 +461,8 @@ def bio_serving_kinds() -> list[ServingStepKind]:
             "Check a submission: one DNA sequence, within the length limits.",
             _build_input,
             result=SequenceResult,
+            request=RequestSpec(_request_model, _request_text),
+            log=_log_input,
         ),
         ServingStepKind(
             "bio.marker",
@@ -408,10 +473,12 @@ def bio_serving_kinds() -> list[ServingStepKind]:
             "bio.router",
             "Predict the broad group: the answer unless a specialist gives one.",
             _build_router,
+            log=_log_router,
         ),
         ServingStepKind(
             "bio.specialist",
             "Identify within a group, when the router gives it enough weight.",
             _build_specialist,
+            log=_log_specialist,
         ),
     ]

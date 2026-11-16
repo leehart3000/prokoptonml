@@ -1,38 +1,47 @@
-"""The HTTP API: identify one sequence per request, from a serving bundle.
+"""The HTTP API: answer one request at a time, from a serving bundle.
 
 Endpoints:
 
 - ``GET /health``: the service is up and its models are loaded.
 - ``GET /version``: the app, data release and model versions.
-- ``POST /identify``: body ``{"sequence": "..."}`` (plain or one FASTA
-  record); returns the result with its decision trace.
+- ``POST /<endpoint>`` (``[serving] endpoint``, such as ``/identify``): the
+  request its first serving step accepts (for sequences,
+  ``{"sequence": "..."}``); returns the result with its decision trace.
+
+The API's title, description and example request come from the app (its
+config, and ``PROKOPTON_API_TITLE``), and its OpenAPI document describes the
+app's own request and result. Errors are "problem details" (RFC 9457,
+``application/problem+json``), with a readable ``detail``. A declined
+request is an answer, not an error.
 
 Settings come from environment variables (see ``Settings.from_env``). If an
-API key is set, ``/identify`` requires it in the ``X-Prokopton-Key``
-header: the public website's Cloudflare Worker adds it (with rate limiting
-and a Turnstile check in front), so the API cannot be used directly.
+API key is set, the endpoint requires it in the ``X-Prokopton-Key`` header:
+the public website's Cloudflare Worker adds it (with rate limiting and a
+Turnstile check in front), so the API cannot be used directly.
 
-Each request is logged as one line of JSON (lengths, outcomes, scores and
-timings, never the sequence), for monitoring. Identical sequences are
-answered from a small in-memory cache.
+Each request is logged as one line of JSON (outcomes, scores and timings,
+never the request itself), for monitoring. Identical requests are answered
+from a small in-memory cache.
 """
 
 import hashlib
 import hmac
+import inspect
 import json
 import logging
 import os
 import threading
 from collections import OrderedDict
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from prokopton.ml import __version__
 from prokopton.ml.inference.bundle import load_bundle
@@ -43,12 +52,8 @@ __all__ = ["Settings", "create_app", "create_app_from_env"]
 
 logger = logging.getLogger("prokopton.ml.serving")
 
-MAX_SEQUENCE_CHARACTERS = 30_000
-"""Longer bodies are refused before any work (the identifier's own limit is
-in bases, after cleaning)."""
-
-
-DEFAULT_TITLE = "ProkoptonML identification API"
+DEFAULT_TITLE = ""
+"""No title: the app's own title is used."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,33 +76,6 @@ class Settings:
             cache_size=int(os.environ.get("PROKOPTON_CACHE_SIZE", "256")),
             title=os.environ.get("PROKOPTON_API_TITLE", DEFAULT_TITLE),
         )
-
-
-EXAMPLE = (
-    ">HQ945416.1 Aedes aegypti COI barcode\n"
-    "AACTTTATATTTCATTTTTGGAGTATGATCCGGAATAGTCGGAACTTCTCTAAGAATTTTAATTCGTGCT"
-    "GAACTTAGCCACCCTGGTATATTTATTGGGAATGACCAAATTTATAATGTAATTGTAACAGCTCATGCAT"
-    "TTATTATAATTTTCTTTATAGTAATACCAATTATAATTGGAGGATTTGGAAATTGATTAGTTCCTTTAAT"
-    "ATTAGGAGCCCCTGATATAGCCTTTCCTCGAATAAATAATATAAGTTTTTGAATACTACCTCCTTCATTG"
-    "ACTCTTCTATTATCAAGCTCAATAGTAGAAAATGGGGCAGGAACTGGGTGAACAGTTTATCCTCCTCTCT"
-    "CTTCAGGAACAGCTCATGCTGGAGCTTCTGTTGATTTAGCTATTTTTTCTCTTCATTTAGCTGGAATTTC"
-    "CTCAATTTTAGGGGCAGTAAATTTTATTACAACTGTAATTAATATACGATCGTCAGGAATTACTTTAGAC"
-    "CGACTACCTTTATTTGTTTGATCTGTAGTTATTACAGCTATCTTATTACTTCTTTCTCTTCCTGTTTTAG"
-    "CTGGAGCTATTACTATGTTATTAACAGACCGAAACTTAAATACATCTTTCTTTGATCCAATCGGAGGAGG"
-    "AGATCCTATTTTATACCAACACTTATTC\n"
-)
-"""A real Aedes aegypti COI barcode (GenBank HQ945416.1), shown in the
-API's interactive docs."""
-
-
-class IdentifyRequest(BaseModel):
-    """One sequence to identify."""
-
-    model_config = ConfigDict(
-        extra="forbid", json_schema_extra={"examples": [{"sequence": EXAMPLE}]}
-    )
-
-    sequence: str = Field(min_length=1, max_length=MAX_SEQUENCE_CHARACTERS)
 
 
 class Version(BaseModel):
@@ -136,55 +114,68 @@ class _Cache:
                 self._items.popitem(last=False)
 
 
-def _log_line(result: Result, cached: bool) -> dict[str, Any]:
-    """What is logged for monitoring: no sequences, only outcomes."""
-    steps = {step.name: step for step in result.trace}
-    router = steps.get("router")
-    top = router.details["top"][0] if router else {}
-    specialist = next(
-        (s for n, s in steps.items() if n.startswith("specialist:")), None
-    )
+def _log_line(loaded: Loaded, result: Result, cached: bool) -> dict[str, Any]:
+    """What is logged for monitoring: no requests, only outcomes."""
     return {
         "event": "identify",
         "status": result.status,
         "reason": result.reason,
-        "length": getattr(result, "length", None),
-        "strand": getattr(result, "strand", None),
-        "long_input": getattr(result, "region", None) is not None,
+        **loaded.identifier.log_fields(result),
         "level": result.answer.level if result.answer else None,
         "confident": result.answer.confident if result.answer else None,
-        "router_label": top.get("label"),
-        "router_probability": top.get("probability"),
-        "specialist_outcome": specialist.details["outcome"] if specialist else None,
-        "identity": specialist.details["identity"] if specialist else None,
         "seconds": result.seconds,
         "cached": cached,
     }
 
 
-def create_app(settings: Settings, loaded: Loaded | None = None) -> FastAPI:
-    """Make the API. The bundle is loaded at start-up unless ``loaded`` is
-    given (for tests)."""
-    state: dict[str, Loaded] = {}
-    cache = _Cache(settings.cache_size)
+def _problem(status: int, detail: str, **extra: Any) -> JSONResponse:
+    """An error as "problem details" (RFC 9457)."""
+    return JSONResponse(
+        {
+            "type": "about:blank",
+            "title": HTTPStatus(status).phrase,
+            "status": status,
+            "detail": detail,
+            **extra,
+        },
+        status_code=status,
+        media_type="application/problem+json",
+        headers={"Cache-Control": "no-store"},
+    )
 
-    @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        state["loaded"] = loaded or load_bundle(settings.bundle)
-        logger.info(
-            json.dumps({"event": "started", "versions": state["loaded"].versions})
-        )
-        yield
+
+def _field(error: dict[str, Any]) -> str:
+    location = [str(part) for part in error.get("loc", ()) if part != "body"]
+    return ".".join(location) or "body"
+
+
+def create_app(settings: Settings, loaded: Loaded | None = None) -> FastAPI:
+    """Make the API for the bundle in ``settings`` (loaded now, so the API
+    can describe the app's own request and result), or for ``loaded``."""
+    found = loaded or load_bundle(settings.bundle)
+    config = found.identifier.config
+    cache = _Cache(settings.cache_size)
+    request_model = found.identifier.request_model()
+    logger.info(json.dumps({"event": "started", "versions": found.versions}))
 
     app = FastAPI(
-        title=settings.title,
+        title=settings.title or f"{config.title} API",
         version=__version__,
-        description=(
-            "Identify a DNA barcode. Answers describe the reference data and "
-            "marker behind them, with a decision trace."
-        ),
-        lifespan=lifespan,
+        description=config.serving.description,
     )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(_: Request, error: StarletteHTTPException) -> JSONResponse:
+        return _problem(error.status_code, str(error.detail))
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid(_: Request, error: RequestValidationError) -> JSONResponse:
+        errors = [
+            {"field": _field(e), "message": str(e.get("msg", ""))}
+            for e in error.errors()
+        ]
+        detail = "; ".join(f"{e['field']}: {e['message']}" for e in errors)
+        return _problem(422, f"The request is not valid ({detail}).", errors=errors)
 
     def check_key(
         x_prokopton_key: Annotated[str | None, Header()] = None,
@@ -202,25 +193,41 @@ def create_app(settings: Settings, loaded: Loaded | None = None) -> FastAPI:
 
     @app.get("/version")
     def version() -> Version:
-        found = state["loaded"]
         return Version(
-            app=found.identifier.config.name,
-            prokopton_ml=__version__,
-            versions=found.versions,
+            app=config.name, prokopton_ml=__version__, versions=found.versions
         )
 
-    @app.post("/identify", dependencies=[Depends(check_key)], response_model=None)
-    def identify(body: IdentifyRequest) -> JSONResponse:
-        key = hashlib.sha256(body.sequence.encode("utf-8")).hexdigest()
+    def answer(body: BaseModel) -> Result:
+        text = found.identifier.text_of(body)
+        key = hashlib.sha256(text.encode("utf-8")).hexdigest()
         result = cache.get(key)
         cached = result is not None
         if result is None:
-            result = state["loaded"].identifier.identify(body.sequence)
+            result = found.identifier.identify(text)
             cache.put(key, result)
-        logger.info(json.dumps(_log_line(result, cached)))
-        # The result's own type (with its kind's fields), not the base Result
-        return JSONResponse(result.model_dump(mode="json"))
+        logger.info(json.dumps(_log_line(found, result, cached)))
+        return result
 
+    # The request type is the app's, so the signature is set here
+    answer.__signature__ = inspect.Signature(  # type: ignore[attr-defined]
+        [
+            inspect.Parameter(
+                "body",
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                annotation=request_model,
+            )
+        ],
+        return_annotation=found.identifier.result_type,
+    )
+    app.add_api_route(
+        f"/{config.serving.endpoint}",
+        answer,
+        methods=["POST"],
+        dependencies=[Depends(check_key)],
+        response_model=found.identifier.result_type,
+        summary=config.serving.description.split(". ")[0],
+        operation_id=config.serving.endpoint.replace("-", "_"),
+    )
     return app
 
 

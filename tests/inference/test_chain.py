@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from typing import Any, Literal
 
 import pytest
+from pydantic import BaseModel
 
 from prokopton.ml.config import AppConfig
 from prokopton.ml.inference import chain
@@ -13,6 +14,7 @@ from prokopton.ml.inference.chain import (
     Answer,
     Chain,
     Decline,
+    RequestSpec,
     Result,
     ServingKinds,
     ServingStepKind,
@@ -140,3 +142,30 @@ def test_a_steps_model_must_be_loaded() -> None:
 
     with pytest.raises(ValueError, match="uses the 'router' model, which is not"):
         Chain(app, KINDS, {})
+
+
+class Text(BaseModel):
+    text: str
+
+
+def test_the_first_step_says_what_requests_it_takes() -> None:
+    with pytest.raises(ValueError, match="'first', does not take requests"):
+        Chain(config("first"), KINDS, {}).request_model()
+
+    spec = RequestSpec(lambda app, name: Text, lambda body: f"[{body.text}]")  # type: ignore[attr-defined]
+    kinds = ServingKinds(
+        [
+            ServingStepKind("test.asks", "Takes text.", answers("asks"), request=spec),
+            ServingStepKind(
+                "test.first",
+                "Logs.",
+                answers("first"),
+                log=lambda r: {"n": len(r.notes)},
+            ),
+        ]
+    )
+    built = Chain(config("asks", "first", "first"), kinds, {})
+
+    assert built.request_model() is Text
+    assert built.text_of(Text(text="x")) == "[x]"
+    assert built.log_fields(built.identify("x")) == {"n": 3}

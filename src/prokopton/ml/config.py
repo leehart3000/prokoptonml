@@ -781,6 +781,10 @@ class ServingConfig(ConfigModel):
     steps: dict[str, ServingStepConfig] = Field(default_factory=dict)
 
 
+_SCHEMA_2_DESCRIPTION = (
+    "Identify a DNA barcode. Answers describe the reference data and marker "
+    "behind them, with a decision trace."
+)
 _INPUT_KEYS = ("max_length", "max_ambiguous_fraction")
 _MARKER_KEYS = (
     "barcode_gene",
@@ -834,7 +838,13 @@ def convert_schema_2(data: dict[str, Any]) -> dict[str, Any]:
                 **take(_SPECIALIST_KEYS),
             }
     converted["schema"] = 3
-    converted["serving"] = {"chain": list(steps), "steps": steps}
+    converted["serving"] = {
+        # What schema 1 and 2 apps served
+        "endpoint": "identify",
+        "description": _SCHEMA_2_DESCRIPTION,
+        "chain": list(steps),
+        "steps": steps,
+    }
     return converted
 
 
