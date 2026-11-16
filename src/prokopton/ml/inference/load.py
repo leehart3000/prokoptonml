@@ -1,25 +1,20 @@
-"""Load an app's models and specialists, ready to identify sequences.
+"""Load an app's models, ready to identify sequences.
 
-The marker classifier and the router are loaded from the MLflow registry
-(the version each one's training alias points at); each specialist that is
-consulted at serving (it has a ``router_label``) is loaded from its
-reference set.
+Each model a serving step uses is loaded from where the pipeline keeps it
+(see ``models``): for sequences, the classifiers from the MLflow registry
+(the version each one's training alias points at), and the specialists from
+their reference sets.
 """
 
-from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
-from prokopton.ml.bio.pipeline.reference import reference_path
-from prokopton.ml.bio.specialists.identify import Specialist
 from prokopton.ml.config import AppConfig
-from prokopton.ml.inference.identify import Identifier
-from prokopton.ml.training.tracking import Tracker, mlflow_tracker
+from prokopton.ml.inference.identify import Identifier, model_kinds
+from prokopton.ml.inference.models import LoadError, TrackerFactory, serving_models
+from prokopton.ml.training.tracking import mlflow_tracker
 
 __all__ = ["LoadError", "Loaded", "load_identifier"]
-
-
-class LoadError(RuntimeError):
-    """Raised when a model or reference set is not available."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,35 +26,18 @@ class Loaded:
 
 
 def load_identifier(
-    config: AppConfig,
-    tracker_factory: Callable[[AppConfig, str], Tracker] = mlflow_tracker,
+    config: AppConfig, tracker_factory: TrackerFactory = mlflow_tracker
 ) -> Loaded:
-    """Load the marker classifier, router and specialists.
+    """Load the models the app's serving steps use.
 
     Raises:
-        LoadError: If the app has no marker classifier, or a specialist's
-            reference set has not been built.
+        LoadError: If a model is not available (for example, a specialist's
+            reference set has not been built).
     """
-    if config.marker is None:
-        msg = "This app has no marker classifier configured"
-        raise LoadError(msg)
-    models = {}
-    versions = {}
-    for name in ("marker", "router"):
-        training = config.classifier(name).training
-        tracker = tracker_factory(config, name)
-        models[name], versions[name] = tracker.load_model(
-            training.registered_model, training.alias
-        )
-    specialists = {}
-    for name, rules in config.specialists.items():
-        if not rules.router_label:
-            continue
-        path = reference_path(config, name)
-        if not path.exists():
-            msg = f"{path} not found; run the reference stage for {name!r} first"
-            raise LoadError(msg)
-        specialists[name] = Specialist.from_parquet(path, rules)
-        versions[name] = f"reference {config.data.source.release}"
-    identifier = Identifier(config, models["marker"], models["router"], specialists)
-    return Loaded(identifier=identifier, versions=versions)
+    kinds = model_kinds()
+    models: dict[str, Any] = {}
+    versions: dict[str, str] = {}
+    for name in serving_models(config):
+        kind = kinds[config.models[name].kind]
+        models[name], versions[name] = kind.load_current(config, name, tracker_factory)
+    return Loaded(identifier=Identifier(config, models), versions=versions)

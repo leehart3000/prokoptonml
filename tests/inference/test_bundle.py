@@ -65,7 +65,18 @@ def test_builds_a_bundle_with_checksums(tmp_path: Path) -> None:
     }
     assert manifest.versions["marker"] == "6"
     assert manifest.versions["culicidae"].startswith("GB999, ")
-    assert manifest.specialists == ("culicidae",)
+    assert manifest.format == 2
+    assert manifest.models == {
+        "router": "bio.kmer-classifier",
+        "marker": "bio.kmer-classifier",
+        "culicidae": "bio.specialist",
+    }
+    assert manifest.steps["input"] == ("router.joblib",)
+    assert manifest.steps["culicidae"] == (
+        "specialists/culicidae/reference.parquet",
+        "specialists/culicidae/neighbours.json",
+        "specialists/culicidae/index.npz",
+    )
     assert not bundle_path(config).with_name("bundle.part").exists()
     assert manifest.runtime["numpy"] == np.__version__
     requirements = (bundle_path(config) / "requirements.txt").read_text()
@@ -110,9 +121,37 @@ def test_refuses_a_missing_or_altered_bundle(tmp_path: Path) -> None:
         load_bundle(folder)
 
 
-def test_needs_a_marker_classifier(tmp_path: Path) -> None:
-    with pytest.raises(BundleError, match="no marker classifier"):
-        build_bundle(AppConfig.model_validate(config_dict(tmp_path)), factory())
+def test_needs_serving_steps(tmp_path: Path) -> None:
+    data = AppConfig.model_validate(config_dict(tmp_path)).model_dump(mode="json")
+    data["serving"] = {"chain": [], "steps": {}}
+
+    with pytest.raises(BundleError, match="no serving steps"):
+        build_bundle(AppConfig.model_validate(data), factory())
+
+
+def test_reads_format_1_bundles(tmp_path: Path) -> None:
+    _, folder = built(tmp_path)
+    manifest = json.loads((folder / MANIFEST_NAME).read_text())
+    for key in ("format", "models", "steps"):
+        del manifest[key]
+    manifest["specialists"] = ["culicidae"]
+    (folder / MANIFEST_NAME).write_text(json.dumps(manifest))
+
+    loaded = load_bundle(folder)
+
+    result = loaded.identifier.identify(AEGYPTI)
+    assert result.answer is not None
+    assert result.answer.name == "Aedes aegypti"
+
+
+def test_refuses_unknown_formats(tmp_path: Path) -> None:
+    _, folder = built(tmp_path)
+    manifest = json.loads((folder / MANIFEST_NAME).read_text())
+    manifest["format"] = 99
+    (folder / MANIFEST_NAME).write_text(json.dumps(manifest))
+
+    with pytest.raises(BundleError, match="bundle format 99"):
+        load_bundle(folder)
 
 
 def test_cli_builds_and_uses_a_bundle(

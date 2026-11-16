@@ -37,7 +37,7 @@ def fake_loaded(tmp_path: Path) -> Loaded:
     del data["serving"]["steps"]["culicidae"]
     config = AppConfig.model_validate(data)
     identifier = Identifier(
-        config, FakeMarker(), FakeRouter(Diptera=0.2, Other=0.8), {}
+        config, {"marker": FakeMarker(), "router": FakeRouter(Diptera=0.2, Other=0.8)}
     )
     return Loaded(identifier=identifier, versions={"router": "5"})
 

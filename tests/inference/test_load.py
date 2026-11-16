@@ -55,11 +55,16 @@ def test_skips_specialists_not_used_at_serving(tmp_path: Path) -> None:
     assert loaded.identifier.specialists == {}
 
 
-def test_needs_a_marker_classifier_and_reference_sets(tmp_path: Path) -> None:
-    data = config_dict(tmp_path)
-    with pytest.raises(LoadError, match="no marker classifier"):
-        load_identifier(AppConfig.model_validate(data), factory(models()))
+def test_loads_only_what_the_serving_steps_use(tmp_path: Path) -> None:
+    config = AppConfig.model_validate(config_dict(tmp_path))  # No marker
 
+    loaded = load_identifier(config, factory(models()))
+
+    assert "marker" not in loaded.identifier.models
+    assert "router" in loaded.versions
+
+
+def test_needs_reference_sets(tmp_path: Path) -> None:
     with pytest.raises(LoadError, match="run the reference stage"):
         load_identifier(app(tmp_path), factory(models()))
 

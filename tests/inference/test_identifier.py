@@ -67,7 +67,9 @@ def identifier(router: FakeRouter, app: AppConfig | None = None) -> Identifier:
         ],
         app.specialist("culicidae"),
     )
-    return Identifier(app, FakeMarker(), router, {"culicidae": specialist})
+    return Identifier(
+        app, {"marker": FakeMarker(), "router": router, "culicidae": specialist}
+    )
 
 
 DIPTERA = FakeRouter(Diptera=0.95, Lepidoptera=0.05)

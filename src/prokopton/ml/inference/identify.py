@@ -1,14 +1,16 @@
 """Identify a submission with an app's serving steps (see ``chain``).
 
 ``Identifier`` builds the app's serving chain from its loaded models. The
-steps for DNA sequences are in ``prokopton.ml.bio.serving``; other packages
-can add serving step kinds through the ``prokopton.ml.serving_steps`` entry
-point group.
+steps and model kinds for DNA sequences are in ``prokopton.ml.bio``; other
+packages can add serving step kinds and model kinds through the
+``prokopton.ml.serving_steps`` and ``prokopton.ml.model_kinds`` entry point
+groups.
 """
 
 from collections.abc import Mapping
 from typing import Any
 
+from prokopton.ml.bio.models import bio_model_kinds
 from prokopton.ml.bio.serving import (
     Classifier,
     Region,
@@ -26,6 +28,7 @@ from prokopton.ml.inference.chain import (
     Step,
     serving_entry_point_kinds,
 )
+from prokopton.ml.inference.models import ModelKinds, model_entry_point_kinds
 
 __all__ = [
     "Answer",
@@ -36,8 +39,14 @@ __all__ = [
     "SequenceResult",
     "Step",
     "member_name",
+    "model_kinds",
     "serving_kinds",
 ]
+
+
+def model_kinds() -> ModelKinds:
+    """Every model kind available: the platform's and installed packages'."""
+    return ModelKinds([*bio_model_kinds(), *model_entry_point_kinds()])
 
 
 def serving_kinds() -> ServingKinds:
@@ -47,21 +56,16 @@ def serving_kinds() -> ServingKinds:
 
 
 class Identifier(Chain):
-    """An app's serving chain, with its marker classifier, router and
-    specialists (already loaded)."""
+    """An app's serving chain, with its models (already loaded, by name)."""
 
-    def __init__(
-        self,
-        config: AppConfig,
-        marker: Classifier,
-        router: Classifier,
-        specialists: Mapping[str, Specialist],
-    ) -> None:
-        self.marker = marker
-        self.router = router
-        self.specialists = dict(specialists)
-        models: dict[str, Any] = {"marker": marker, "router": router, **specialists}
+    def __init__(self, config: AppConfig, models: Mapping[str, Any]) -> None:
+        self.models = dict(models)
         super().__init__(config, serving_kinds(), models)
+
+    @property
+    def specialists(self) -> dict[str, Specialist]:
+        """The loaded specialists, by name."""
+        return {n: m for n, m in self.models.items() if isinstance(m, Specialist)}
 
     def identify(self, text: str) -> SequenceResult:
         """Identify one submission."""
