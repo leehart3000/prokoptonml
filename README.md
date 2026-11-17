@@ -29,7 +29,7 @@ the [`prokopton`](https://pypi.org/project/prokopton/) core package
 (`prokopton.core`).
 
 ```bash
-pip install "prokopton-ml[serve,bio]==0.2.0"
+pip install "prokopton-ml[serve,bio]==0.2.1"
 prokopton-ml stages                  # an app's pipeline, and when each stage ran
 prokopton-ml run router-train        # run stages (or --all, or --from STAGE)
 prokopton-ml identify --input x.fa   # identify one sequence
