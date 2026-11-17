@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 from bio_app import CLASSIFIER, app_config
 from fakes import FakeTracker
@@ -16,6 +17,7 @@ from prokopton.ml.inference import bundle
 from prokopton.ml.inference.bundle import (
     MANIFEST_NAME,
     BundleError,
+    BundleManifest,
     build_bundle,
     bundle_path,
     load_bundle,
@@ -182,3 +184,34 @@ def test_cli_builds_and_uses_a_bundle(
 
     (bundle_path(config) / MANIFEST_NAME).unlink()
     assert cli.main(["identify", "--input", str(query), "--bundle", folder]) == 1
+
+
+def manifest_of_0_2_0a7() -> dict[str, Any]:
+    """A format 2 manifest as prokopton-ml 0.2.0a3 to 0.2.0a7 wrote it."""
+    return {
+        "app": "testapp",
+        "release": "GB999",
+        "prokopton_ml_version": "0.2.0a7",
+        "created_at": "2026-11-16T12:00:00Z",
+        "versions": {"router": "5"},
+        "format": 2,
+        "models": {"router": "bio.kmer-classifier"},
+        "steps": {"router": ["router.joblib"]},
+        "specialists": [],
+        "files": {"router.joblib": "0" * 64},
+        "runtime": {"numpy": "2.3.0"},
+    }
+
+
+def test_reads_manifests_of_earlier_format_2_bundles() -> None:
+    manifest = BundleManifest.model_validate_json(json.dumps(manifest_of_0_2_0a7()))
+
+    assert manifest.models == {"router": "bio.kmer-classifier"}
+    assert "specialists" not in manifest.model_dump()
+
+
+def test_a_format_2_manifest_cannot_list_specialists() -> None:
+    data = {**manifest_of_0_2_0a7(), "specialists": ["culicidae"]}
+
+    with pytest.raises(ValidationError, match="specialists"):
+        BundleManifest.model_validate(data)

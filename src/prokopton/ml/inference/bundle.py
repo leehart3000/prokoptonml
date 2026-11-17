@@ -33,8 +33,9 @@ import shutil
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from prokopton.ml import __version__
 from prokopton.ml.config import AppConfig
@@ -98,6 +99,15 @@ class BundleManifest(BaseModel):
     """Path within the bundle -> SHA-256."""
     runtime: dict[str, str] = {}
     """Package -> the version installed when the bundle was built."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _without_empty_specialists(cls, data: Any) -> Any:
+        # Format 2 manifests made by prokopton-ml 0.2.0a3 to 0.2.0a7 also
+        # hold format 1's list of specialists, always empty
+        if isinstance(data, dict) and data.get("specialists") == []:
+            data = {key: value for key, value in data.items() if key != "specialists"}
+        return data
 
 
 def _installed(names: tuple[str, ...]) -> dict[str, str]:
